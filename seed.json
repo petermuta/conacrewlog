@@ -1,0 +1,678 @@
+{
+  "dieselDefaultUgx": 5200,
+  "users": [
+    {
+      "id": "u-admin",
+      "name": "Peter M",
+      "phone": "0700000001",
+      "pin": "admin123",
+      "role": "admin",
+      "active": true
+    },
+    {
+      "id": "u-driver-musa",
+      "name": "Meddy",
+      "phone": "0700000002",
+      "pin": "drive123",
+      "role": "driver",
+      "driverId": "d-musa",
+      "active": true
+    },
+    {
+      "id": "u-driver-ali",
+      "name": "Paul",
+      "phone": "0700000005",
+      "pin": "drive123",
+      "role": "driver",
+      "driverId": "d-ali",
+      "active": true
+    },
+    {
+      "id": "u-cane",
+      "name": "Sarah Namutebi",
+      "phone": "0700000003",
+      "pin": "cane123",
+      "role": "cane_manager",
+      "active": true
+    },
+    {
+      "id": "u-passion",
+      "name": "John Ssebunya",
+      "phone": "0700000004",
+      "pin": "fruit123",
+      "role": "passion_manager",
+      "active": true
+    }
+  ],
+  "trucks": [
+    {
+      "id": "t-001",
+      "plate": "UA 687BH",
+      "model": "Sinotruk HOWO 6x4",
+      "year": 2021,
+      "odometerKm": 186400,
+      "kmPerLitre": 2.9,
+      "status": "idle",
+      "nextServiceKm": 190000,
+      "insuranceExpiry": "2026-11-12",
+      "roadLicenceExpiry": "2026-10-30",
+      "assignedDriverId": "d-musa",
+      "hp": 370
+    },
+    {
+      "id": "t-002",
+      "plate": "UA 764AN",
+      "model": "Sinotruk HOWO 6x4",
+      "year": 2023,
+      "odometerKm": 94210,
+      "kmPerLitre": 2.8,
+      "status": "idle",
+      "nextServiceKm": 100000,
+      "insuranceExpiry": "2027-02-04",
+      "roadLicenceExpiry": "2026-12-18",
+      "assignedDriverId": "d-ali",
+      "hp": 420
+    }
+  ],
+  "drivers": [
+    {
+      "id": "d-musa",
+      "userId": "u-driver-musa",
+      "name": "Meddy",
+      "phone": "0700000002",
+      "licenceClass": "CM",
+      "licenceExpiry": "2027-03-14",
+      "assignedTruckId": "t-001",
+      "advanceUgx": 150000
+    },
+    {
+      "id": "d-ali",
+      "userId": "u-driver-ali",
+      "name": "Paul",
+      "phone": "0700000005",
+      "licenceClass": "CM",
+      "licenceExpiry": "2026-10-08",
+      "assignedTruckId": "t-002",
+      "advanceUgx": 0
+    }
+  ],
+  "contractors": [
+    {
+      "id": "c-1",
+      "name": "Nile Grain Traders",
+      "phone": "0772114455",
+      "notes": "Maize and posho bags",
+      "outstandingUgx": 1800000
+    },
+    {
+      "id": "c-2",
+      "name": "Kibuli Hardware Co.",
+      "phone": "0755001122",
+      "notes": "Cement and iron sheets",
+      "outstandingUgx": 0
+    },
+    {
+      "id": "c-3",
+      "name": "West Nile Distributors",
+      "phone": "0782330099",
+      "notes": "FMCG to Arua",
+      "outstandingUgx": 650000
+    }
+  ],
+  "jobs": [
+    {
+      "id": "j-101",
+      "contractorId": "c-1",
+      "cargo": "400 bags of maize",
+      "origin": "Kampala (Nakawa)",
+      "destination": "Mbale",
+      "km": 245,
+      "rateUgx": 950000,
+      "driverId": "d-musa",
+      "truckId": "t-001",
+      "status": "en_route",
+      "startDate": "2026-09-27",
+      "notes": "Leave by 5am"
+    },
+    {
+      "id": "j-102",
+      "contractorId": "c-2",
+      "cargo": "Cement \u2014 200 bags",
+      "origin": "Hima",
+      "destination": "Kampala Industrial Area",
+      "km": 310,
+      "rateUgx": 1200000,
+      "driverId": "d-ali",
+      "truckId": "t-002",
+      "status": "booked",
+      "startDate": "2026-09-28",
+      "notes": ""
+    },
+    {
+      "id": "j-100",
+      "contractorId": "c-3",
+      "cargo": "Assorted FMCG",
+      "origin": "Kampala",
+      "destination": "Arua",
+      "km": 480,
+      "rateUgx": 1750000,
+      "driverId": "d-musa",
+      "truckId": "t-001",
+      "status": "paid",
+      "startDate": "2026-09-22",
+      "notes": ""
+    }
+  ],
+  "fuelLogs": [
+    {
+      "id": "f-1",
+      "truckId": "t-001",
+      "driverId": "d-musa",
+      "litres": 180,
+      "amountUgx": 936000,
+      "odometerKm": 186250,
+      "station": "Total Nakawa",
+      "date": "2026-09-27"
+    }
+  ],
+  "sellers": [
+    {
+      "id": "s-1",
+      "name": "Charles Wafula",
+      "phone": "0771988111",
+      "village": "Bugembe",
+      "district": "Jinja",
+      "momo": "0771988111"
+    },
+    {
+      "id": "s-2",
+      "name": "Aisha Nabirye",
+      "phone": "0752447788",
+      "village": "Namasagali",
+      "district": "Kamuli",
+      "momo": "0752447788"
+    },
+    {
+      "id": "s-3",
+      "name": "Peter Balikoowa",
+      "phone": "0783556677",
+      "village": "Iganga Town",
+      "district": "Iganga"
+    }
+  ],
+  "mills": [
+    {
+      "id": "m-kakira",
+      "name": "Kakira Sugar Works",
+      "location": "Kakira, Jinja",
+      "priceUgxPerTonne": 145000
+    },
+    {
+      "id": "m-gm",
+      "name": "GM Sugar",
+      "location": "Njeru",
+      "priceUgxPerTonne": 140000
+    },
+    {
+      "id": "m-mayuge",
+      "name": "Mayuge Sugar",
+      "location": "Mayuge",
+      "priceUgxPerTonne": 138000
+    }
+  ],
+  "caneBuys": [
+    {
+      "id": "cb-1",
+      "type": "acre",
+      "sellerId": "s-1",
+      "location": "Bugembe, Jinja",
+      "acres": 4,
+      "expectedTonnes": 128,
+      "expectedTonnesPerAcre": 32,
+      "buyPriceUgx": 12800000,
+      "buyPriceBasis": "per_acre",
+      "status": "in_transit",
+      "cuttingDate": "2026-09-26",
+      "cuttingCostUgx": 2560000,
+      "loadingCostUgx": 1280000,
+      "transportKm": 28,
+      "kmPerLitre": 3.1,
+      "dieselUgxPerLitre": 5200,
+      "fuelLitres": 9,
+      "fuelUgx": 46800,
+      "hiredTruckNote": "Hired Tata 10t \u00d7 4 trips",
+      "millId": "m-kakira",
+      "sellerPaid": false,
+      "millPaid": false,
+      "createdAt": "2026-09-24"
+    },
+    {
+      "id": "cb-2",
+      "type": "trip",
+      "sellerId": "s-2",
+      "location": "Namasagali, Kamuli",
+      "tripsAgreed": 6,
+      "expectedTonnes": 60,
+      "expectedTonnesPerTrip": 10,
+      "buyPriceUgx": 4200000,
+      "buyPriceBasis": "per_trip",
+      "status": "booked",
+      "cuttingCostUgx": 0,
+      "loadingCostUgx": 0,
+      "transportKm": 62,
+      "kmPerLitre": 3.1,
+      "dieselUgxPerLitre": 5200,
+      "fuelLitres": 20,
+      "fuelUgx": 104000,
+      "hiredTruckNote": "10t lorry",
+      "millId": "m-gm",
+      "sellerPaid": false,
+      "millPaid": false,
+      "createdAt": "2026-09-27"
+    },
+    {
+      "id": "cb-3",
+      "type": "acre",
+      "sellerId": "s-3",
+      "location": "Iganga",
+      "acres": 2,
+      "expectedTonnes": 70,
+      "expectedTonnesPerAcre": 35,
+      "buyPriceUgx": 7000000,
+      "buyPriceBasis": "per_acre",
+      "status": "settled",
+      "cuttingDate": "2026-09-18",
+      "cuttingCostUgx": 1400000,
+      "loadingCostUgx": 700000,
+      "transportKm": 40,
+      "kmPerLitre": 3.1,
+      "dieselUgxPerLitre": 5100,
+      "fuelLitres": 12.9,
+      "fuelUgx": 65790,
+      "hiredTruckNote": "3 trips",
+      "millId": "m-mayuge",
+      "millTonnes": 68.4,
+      "millPriceUgx": 138000,
+      "millSaleUgx": 9439200,
+      "sellerPaid": true,
+      "millPaid": true,
+      "payMethod": "mtn_momo",
+      "createdAt": "2026-09-16"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "B1",
+      "name": "Block B1",
+      "acres": 1.5,
+      "variety": "Passion fruit",
+      "plantDate": "2025-08-12",
+      "plantCount": 980,
+      "status": "Producing"
+    },
+    {
+      "id": "B2",
+      "name": "Block B2",
+      "acres": 2,
+      "variety": "Passion fruit",
+      "plantDate": "2025-10-03",
+      "plantCount": 1280,
+      "status": "Producing"
+    },
+    {
+      "id": "B3",
+      "name": "Block B3",
+      "acres": 1.2,
+      "variety": "Passion fruit",
+      "plantDate": "2026-02-20",
+      "plantCount": 760,
+      "status": "Producing"
+    },
+    {
+      "id": "B4",
+      "name": "Block B4",
+      "acres": 1.8,
+      "variety": "Passion fruit",
+      "plantDate": "2025-06-01",
+      "plantCount": 1100,
+      "status": "Producing"
+    }
+  ],
+  "fieldLogs": [
+    {
+      "id": "fl-1",
+      "blockId": "B2",
+      "date": "2026-09-25",
+      "note": "Red spider mites on the lower wires near the ditch.",
+      "tag": "mites",
+      "by": "John Ssebunya"
+    },
+    {
+      "id": "fl-2",
+      "blockId": "B1",
+      "date": "2026-09-26",
+      "note": "Irrigation 3 hours. Soil still moist at 15cm.",
+      "tag": "irrigation",
+      "by": "John Ssebunya"
+    }
+  ],
+  "harvests": [
+    {
+      "id": "h-1",
+      "blockId": "B1",
+      "date": "2026-09-26",
+      "kg": 186,
+      "crates": 8,
+      "grade": "fresh",
+      "pickers": ""
+    },
+    {
+      "id": "h-2",
+      "blockId": "B4",
+      "date": "2026-09-26",
+      "kg": 142,
+      "crates": 6,
+      "grade": "fresh",
+      "pickers": ""
+    },
+    {
+      "id": "h-3",
+      "blockId": "B2",
+      "date": "2026-09-22",
+      "kg": 210,
+      "crates": 9,
+      "grade": "fresh",
+      "pickers": ""
+    }
+  ],
+  "fruitSales": [
+    {
+      "id": "fs-1",
+      "date": "2026-09-26",
+      "buyer": "Owino stall",
+      "kg": 186,
+      "amountUgx": 744000,
+      "paidUgx": 744000,
+      "expenseUgx": 15000,
+      "expenseNote": "Boda to market",
+      "payMethod": "cash"
+    }
+  ],
+  "farmInputs": [
+    {
+      "id": "i-1",
+      "name": "CAN fertiliser",
+      "unit": "bags",
+      "qty": 6,
+      "lastCostUgx": 98000
+    },
+    {
+      "id": "i-2",
+      "name": "Crates",
+      "unit": "pcs",
+      "qty": 40,
+      "lastCostUgx": 12000
+    },
+    {
+      "id": "i-3",
+      "name": "Mite spray",
+      "unit": "litres",
+      "qty": 4,
+      "lastCostUgx": 35000
+    }
+  ],
+  "cash": [
+    {
+      "id": "k-1",
+      "date": "2026-09-22",
+      "direction": "in",
+      "amountUgx": 1750000,
+      "tag": "trucking",
+      "method": "bank",
+      "note": "West Nile job j-100 paid",
+      "refId": "j-100"
+    },
+    {
+      "id": "k-2",
+      "date": "2026-09-26",
+      "direction": "in",
+      "amountUgx": 744000,
+      "tag": "passion",
+      "method": "cash",
+      "note": "Owino stall \u2014 B1 fruit",
+      "refId": "fs-1"
+    },
+    {
+      "id": "k-3",
+      "date": "2026-09-18",
+      "direction": "in",
+      "amountUgx": 9439200,
+      "tag": "sugarcane",
+      "method": "bank",
+      "note": "Mayuge mill \u2014 cb-3",
+      "refId": "cb-3"
+    },
+    {
+      "id": "k-4",
+      "date": "2026-09-19",
+      "direction": "out",
+      "amountUgx": 7000000,
+      "tag": "sugarcane",
+      "method": "mtn_momo",
+      "note": "Paid Balikoowa for 2 acres",
+      "refId": "cb-3"
+    },
+    {
+      "id": "k-5",
+      "date": "2026-09-27",
+      "direction": "out",
+      "amountUgx": 936000,
+      "tag": "trucking",
+      "method": "cash",
+      "note": "Fuel UBA 410Z",
+      "refId": "f-1"
+    }
+  ],
+  "fleetTasks": [
+    {
+      "id": "ft-1",
+      "truckId": "t-001",
+      "driverId": "d-musa",
+      "kind": "pre_trip",
+      "title": "Do a full pre-trip before leaving Nakawa",
+      "note": "Check brakes, lights, tyres and fire extinguisher. Photo the defects if any.",
+      "dueDate": "2026-09-27",
+      "priority": "urgent",
+      "status": "open",
+      "createdBy": "Peter M",
+      "createdAt": "2026-09-27",
+      "seenAt": "",
+      "doneAt": "",
+      "driverNote": ""
+    },
+    {
+      "id": "ft-2",
+      "truckId": "t-002",
+      "driverId": "d-ali",
+      "kind": "papers",
+      "title": "Take road licence copy to the office",
+      "note": "UAX 882C papers stay in the door pocket. Bring a photocopy.",
+      "dueDate": "2026-09-28",
+      "priority": "normal",
+      "status": "open",
+      "createdBy": "Peter M",
+      "createdAt": "2026-09-27",
+      "seenAt": "",
+      "doneAt": "",
+      "driverNote": ""
+    },
+    {
+      "id": "ft-3",
+      "truckId": "t-003",
+      "driverId": "",
+      "kind": "service",
+      "title": "Workshop: clutch and rear hub",
+      "note": "UAY 221F stays in the yard until the garage releases it.",
+      "dueDate": "2026-09-30",
+      "priority": "urgent",
+      "status": "open",
+      "createdBy": "Peter M",
+      "createdAt": "2026-09-26",
+      "seenAt": "",
+      "doneAt": "",
+      "driverNote": ""
+    }
+  ],
+  "notifications": [
+    {
+      "id": "n-1",
+      "toDriverId": "d-musa",
+      "truckId": "t-001",
+      "taskId": "ft-1",
+      "type": "task",
+      "title": "Urgent from owner",
+      "body": "UBA 410Z \u2014 Do a full pre-trip before leaving Nakawa",
+      "status": "unread",
+      "createdAt": "2026-09-27T07:10:00"
+    },
+    {
+      "id": "n-2",
+      "toDriverId": "d-ali",
+      "truckId": "t-002",
+      "taskId": "ft-2",
+      "type": "task",
+      "title": "New work from owner",
+      "body": "UAX 882C \u2014 Take road licence copy to the office",
+      "status": "unread",
+      "createdAt": "2026-09-27T07:12:00"
+    }
+  ],
+  "issues": [
+    {
+      "id": "is-drv-1",
+      "truckId": "t-001",
+      "driverId": "d-musa",
+      "title": "Rear brake noise",
+      "note": "Squeal when going downhill into Jinja.",
+      "severity": "normal",
+      "status": "open",
+      "date": "2026-09-27",
+      "by": "Musa Okello",
+      "photos": [],
+      "voice": "",
+      "voiceSec": 0,
+      "replies": []
+    },
+    {
+      "id": "is-1",
+      "truckId": "t-003",
+      "driverId": "",
+      "title": "Clutch slipping under load",
+      "note": "Reported from last Kampala run.",
+      "severity": "urgent",
+      "status": "open",
+      "date": "2026-09-25",
+      "by": "Peter M"
+    }
+  ],
+  "services": [
+    {
+      "id": "sv-1",
+      "truckId": "t-001",
+      "date": "2026-08-12",
+      "kind": "service",
+      "odometerKm": 176000,
+      "costUgx": 1850000,
+      "note": "Oil, filters, grease",
+      "garage": "Sinotruk Kampala"
+    }
+  ],
+  "farmWorks": [
+    {
+      "id": "fw-1",
+      "blockId": "B1",
+      "kind": "harvest",
+      "date": "2026-09-26",
+      "costUgx": 80000,
+      "kg": 186,
+      "note": "",
+      "by": "John Ssebunya"
+    },
+    {
+      "id": "fw-2",
+      "blockId": "B4",
+      "kind": "harvest",
+      "date": "2026-09-26",
+      "costUgx": 60000,
+      "kg": 142,
+      "note": "",
+      "by": "John Ssebunya"
+    },
+    {
+      "id": "fw-3",
+      "blockId": "B2",
+      "kind": "harvest",
+      "date": "2026-09-22",
+      "costUgx": 90000,
+      "kg": 210,
+      "note": "",
+      "by": "John Ssebunya"
+    },
+    {
+      "id": "fw-4",
+      "blockId": "B2",
+      "kind": "spray",
+      "date": "2026-09-25",
+      "costUgx": 35000,
+      "kg": 0,
+      "note": "",
+      "by": "John Ssebunya"
+    },
+    {
+      "id": "fw-5",
+      "blockId": "B3",
+      "kind": "prune",
+      "date": "2026-09-20",
+      "costUgx": 45000,
+      "kg": 0,
+      "note": "",
+      "by": "John Ssebunya"
+    },
+    {
+      "id": "fw-6",
+      "blockId": "B1",
+      "kind": "weed",
+      "date": "2026-09-18",
+      "costUgx": 25000,
+      "kg": 0,
+      "note": "",
+      "by": "John Ssebunya"
+    },
+    {
+      "id": "fw-7",
+      "blockId": "B4",
+      "kind": "fertilize",
+      "date": "2026-09-15",
+      "costUgx": 98000,
+      "kg": 0,
+      "note": "",
+      "by": "John Ssebunya"
+    }
+  ],
+  "receivables": [],
+  "disbursements": [
+    {
+      "id": "fl-1",
+      "tag": "trucking",
+      "activity": "to_driver",
+      "amountUgx": 250000,
+      "toDriverId": "d-musa",
+      "truckId": "t-001",
+      "jobId": "j-100",
+      "note": "Jinja run float",
+      "status": "sent",
+      "date": "2026-09-27",
+      "usages": []
+    }
+  ]
+}

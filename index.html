@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conacrew Logistics</title>
+  <link rel="icon" href="./logo-mark.png" />
+  <link rel="stylesheet" href="./styles.css?v=60" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-brand">
+      <img class="logo-full" src="./logo.png" alt="Conacrew Logistics" />
+      <h1>Conacrew</h1>
+    </div>
+    <div class="login-panel">
+      <form class="card" id="login" style="padding:22px;width:min(420px,100%)">
+        <h2>Sign in</h2>
+        <p class="muted" style="margin:6px 0 16px">Phone + PIN</p>
+        <label class="label">Phone</label>
+        <input class="field" name="phone" value="0700000001" />
+        <div style="height:10px"></div>
+        <label class="label">PIN</label>
+        <input class="field" name="pin" type="password" value="admin123" />
+        <p class="err" id="err" style="margin:10px 0 0"></p>
+        <button class="btn btn-primary wide" style="margin-top:14px">Enter Conacrew</button>
+        <p class="eyebrow" style="margin:18px 0 8px">Demo people</p>
+        <div class="list" id="demos"></div>
+        <button type="button" class="btn btn-ghost wide" id="reset" style="margin-top:12px">Reset demo data</button>
+      </form>
+    </div>
+  </div>
+  <script src="./store.js?v=60"></script>
+  <script>
+    const demos = [
+      ["Owner", "Peter M", "0700000001", "admin123"],
+      ["Driver", "Meddy", "0700000002", "drive123"],
+      ["Driver", "Paul", "0700000005", "drive123"],
+      ["Cane manager", "Sarah Namutebi", "0700000003", "cane123"],
+      ["Farm manager", "John Ssebunya", "0700000004", "fruit123"],
+    ];
+    document.getElementById("demos").innerHTML = demos.map(d =>
+      `<button type="button" class="demo" data-p="${d[2]}" data-pin="${d[3]}"><span><b>${d[1]}</b> · ${d[0]}</span><span class="muted">${d[2]} · PIN ${d[3]}</span></button>`
+    ).join("");
+    document.getElementById("demos").addEventListener("click", e => {
+      const b = e.target.closest(".demo");
+      if (!b) return;
+      document.querySelector("[name=phone]").value = b.dataset.p;
+      document.querySelector("[name=pin]").value = b.dataset.pin;
+      document.getElementById("login").requestSubmit();
+    });
+    Conacrew.init().then(() => {
+      if (Conacrew.user()) location.href = ({
+        admin: "app.html#home",
+        driver: "app.html#drive",
+        cane_manager: "app.html#cane",
+        passion_manager: "app.html#passion"
+      })[Conacrew.user().role];
+    });
+    document.getElementById("login").addEventListener("submit", async e => {
+      e.preventDefault();
+      await Conacrew.init();
+      const fd = new FormData(e.target);
+      try {
+        const json = Conacrew.login(fd.get("phone"), fd.get("pin"));
+        location.href = json.home;
+      } catch (err) {
+        document.getElementById("err").textContent = err.message;
+      }
+    });
+    document.getElementById("reset").onclick = async () => {
+      await Conacrew.init();
+      Conacrew.reset();
+      document.getElementById("err").textContent = "";
+      alert("Demo data reset. Sign in again.");
+    };
+  </script>
+</body>
+</html>
