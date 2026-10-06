@@ -300,7 +300,11 @@ function route() {
     "money-pay": "money",
   }[r.name] || "home";
   document.body.dataset.page = theme;
-  $("#app").innerHTML = view ? view() : "<p>Not found</p>";
+  const app = $("#app");
+  app.innerHTML = view ? view() : "<p>Not found</p>";
+  app.style.animation = "none";
+  void app.offsetWidth;
+  app.style.animation = "pageIn .38s ease";
   bind();
 }
 

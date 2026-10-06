@@ -1,4 +1,4 @@
-const CACHE = "conacrew-v61";
+const CACHE = "conacrew-v62";
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["./index.html", "./app.html", "./styles.css", "./logo-mark.png"])));
