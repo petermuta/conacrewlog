@@ -1,3 +1,7 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+  command = "echo 'Conacrew: static app, nothing to build'"
+
+[functions]
+  node_bundler = "esbuild"

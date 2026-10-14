@@ -1,4 +1,4 @@
-const KEY_DB = "conacrew.db.v1";
+const KEY_DB = "conacrew.db.v2";
 const KEY_USER = "conacrew.user.v2";
 
 
@@ -9,73 +9,124 @@ function phoneKey(v) {
   return p;
 }
 function ensureDriverLogins(db) {
-  const pairs = [
-    { name: "Meddy", phone: "0700000002", pin: "drive123", driverId: "d-musa", userId: "u-driver-musa", truckId: "t-001" },
-    { name: "Paul", phone: "0700000005", pin: "drive123", driverId: "d-ali", userId: "u-driver-ali", truckId: "t-002" },
-  ];
   if (!db.users) db.users = [];
   if (!db.drivers) db.drivers = [];
-  pairs.forEach((p) => {
-    let d = db.drivers.find((x) => x.name === p.name) || db.drivers.find((x) => x.id === p.driverId);
-    if (!d) {
-      d = { id: p.driverId, userId: p.userId, name: p.name, phone: p.phone, licenceClass: "CM", licenceExpiry: "", assignedTruckId: p.truckId, advanceUgx: 0, payType: "trip", monthRateUgx: 0 };
-      db.drivers.push(d);
-    }
-    d.userId = p.userId;
-    d.phone = p.phone;
-    if (!d.assignedTruckId) d.assignedTruckId = p.truckId;
-    let u = db.users.find((x) => x.id === p.userId) || db.users.find((x) => x.role === "driver" && x.name === p.name);
+  db.drivers.forEach((d) => {
+    let u = d.userId && db.users.find((x) => x.id === d.userId);
+    if (!u) u = db.users.find((x) => x.role === "driver" && x.driverId === d.id);
     if (!u) {
-      u = { id: p.userId, name: p.name, phone: p.phone, pin: p.pin, role: "driver", driverId: d.id, active: true };
+      u = { id: "u-" + d.id, name: d.name, phone: d.phone || "", pin: "", role: "driver", driverId: d.id, active: true };
       db.users.push(u);
     }
-    u.id = p.userId;
-    u.name = p.name;
-    u.phone = p.phone;
-    u.pin = u.pin || p.pin;
-    u.role = "driver";
+    d.userId = u.id;
     u.driverId = d.id;
-    u.active = true;
-    const truck = (db.trucks || []).find((t) => t.id === d.assignedTruckId);
-    if (truck) truck.assignedDriverId = d.id;
+    if (u.role !== "driver") u.role = "driver";
   });
   return db;
 }
-function pruneFleet(db) {
-  const keep = [
-    { id: "t-001", plate: "UA 687BH", driverId: "d-musa", driver: "Meddy", phone: "0700000002", hp: 370 },
-    { id: "t-002", plate: "UA 764AN", driverId: "d-ali", driver: "Paul", phone: "0700000005", hp: 420 },
-  ];
-  if (!db.trucks) db.trucks = [];
-  if (!db.drivers) db.drivers = [];
-  keep.forEach((k) => {
-    if (!db.trucks.some((t) => t.plate === k.plate || t.id === k.id)) {
-      db.trucks.push({ id: k.id, plate: k.plate, model: "Sinotruk HOWO 6x4", year: 2021, odometerKm: 0, kmPerLitre: 2.2, status: "idle", nextServiceKm: 5000, assignedDriverId: k.driverId, hp: k.hp });
+const plateKey = (p) => String(p || "").replace(/\s+/g, "").toUpperCase();
+// One-time setup of the current fleet: Paul drives UA 764AN, Meddy drives UA 687BH.
+function ensureRoster(db) {
+  if (db.rosterV1) return false;
+  const pairs = [["Paul", "UA 764AN"], ["Meddy", "UA 687BH"]];
+  pairs.forEach(([first, plate]) => {
+    let d = db.drivers.find((x) => new RegExp("^\\s*" + first + "\\b", "i").test(x.name || ""));
+    if (!d) {
+      d = { id: "d-" + first.toLowerCase(), name: first, phone: "", licenceClass: "CM", licenceExpiry: "", assignedTruckId: "", advanceUgx: 0, payType: "trip", monthRateUgx: 0 };
+      db.drivers.push(d);
     }
-    if (!db.drivers.some((d) => d.name === k.driver || d.id === k.driverId)) {
-      db.drivers.push({ id: k.driverId, name: k.driver, phone: k.phone, assignedTruckId: k.id, payType: "trip", monthRateUgx: 0 });
+    let t = db.trucks.find((x) => plateKey(x.plate) === plateKey(plate));
+    if (!t) {
+      t = { id: "t-" + plateKey(plate).toLowerCase(), plate, model: "Sinotruk HOWO", year: 2021, odometerKm: 0, kmPerLitre: 2.9, hp: 370, status: "idle", nextServiceKm: 0, insuranceExpiry: "", roadLicenceExpiry: "", assignedDriverId: "" };
+      db.trucks.push(t);
     }
+    db.trucks.forEach((x) => { if (x.assignedDriverId === d.id && x.id !== t.id) x.assignedDriverId = ""; });
+    d.assignedTruckId = t.id;
+    t.assignedDriverId = d.id;
   });
-  const keepPlates = keep.map((k) => k.plate);
-  const keepNames = keep.map((k) => k.driver);
-  db.trucks = db.trucks.filter((t) => keepPlates.includes((t.plate || "").replace(/\s+/g, " ").trim()));
-  db.drivers = db.drivers.filter((d) => keepNames.includes(d.name));
-  const keepTruck = new Set(db.trucks.map((t) => t.id));
-  const keepDrv = new Set(db.drivers.map((d) => d.id));
-  db.users = (db.users || []).filter((u) => u.role !== "driver" || keepNames.includes(u.name));
-  db.jobs = (db.jobs || []).filter((j) => keepTruck.has(j.truckId) || keepDrv.has(j.driverId));
-  db.jobsTrash = (db.jobsTrash || []).filter((j) => keepTruck.has(j.truckId) || keepDrv.has(j.driverId));
-  db.fuelLogs = (db.fuelLogs || []).filter((f) => keepTruck.has(f.truckId) || keepDrv.has(f.driverId));
-  db.fleetTasks = (db.fleetTasks || []).filter((t) => keepTruck.has(t.truckId) || keepDrv.has(t.driverId));
-  db.inspections = (db.inspections || []).filter((t) => keepTruck.has(t.truckId) || keepDrv.has(t.driverId));
-  db.issues = (db.issues || []).filter((t) => keepTruck.has(t.truckId) || keepDrv.has(t.driverId));
-  db.services = (db.services || []).filter((t) => keepTruck.has(t.truckId));
-  db.disbursements = (db.disbursements || []).filter((t) => !t.toDriverId || keepDrv.has(t.toDriverId));
+  ensureDriverLogins(db);
+  db.rosterV1 = 1;
+  return true;
+}
+// ---- dates: every record keeps the date it happened (default today, never in the future) ----
+function todayStr() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function dayOf(body, key) {
+  const v = String((body && body[key || "date"]) || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return todayStr();
+  return v > todayStr() ? todayStr() : v;
+}
+// One load = one income line, whichever button recorded it
+function recordJobIncome(db, job, amount, date, method) {
+  if (!amount) return null;
+  if ((db.cash || []).some((c) => c.direction === "in" && (c.refId === job.id || c.jobId === job.id) && c.category !== "advance_return")) return null;
+  const c = (db.contractors || []).find((x) => x.id === job.contractorId);
+  const row = { id: uid("k"), date: date || todayStr(), direction: "in", amountUgx: amount, tag: "trucking", category: "load_income", method: method || "invoice", note: "Load " + (job.code || job.id) + (job.cargo ? " · " + job.cargo : ""), refId: job.id, jobId: job.id, truckId: job.truckId, payeeName: c ? c.name : "" };
+  db.cash.unshift(row);
+  return row;
+}
+
+// ---- sign-in security ----
+const SESSION_HOURS = 24;
+const MAX_TRIES = 5;
+const isMainAdmin = (u) => !!u && u.role === "admin" && !u.assistant;
+function deviceId() {
+  let id = "";
+  try { id = localStorage.getItem("conacrew.device") || ""; } catch (e) {}
+  if (!id) {
+    id = "dev-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    try { localStorage.setItem("conacrew.device", id); } catch (e) {}
+  }
+  return id;
+}
+function deviceLabel() {
+  const ua = navigator.userAgent || "";
+  const m = ua.match(/Android [\d.]+; ([^;)]+)/);
+  const kind = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : m ? m[1].replace(/ Build.*/, "").trim() : /Android/.test(ua) ? "Android phone" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows PC" : /Linux|CrOS/.test(ua) ? "Computer" : "Phone";
+  const br = /CriOS|Chrome/.test(ua) ? "Chrome" : /Safari/.test(ua) ? "Safari" : /Firefox/.test(ua) ? "Firefox" : "Browser";
+  return kind + " · " + br;
+}
+function deviceOk(db, user, dev) {
+  return (user.devices || []).some((d) => d.id === dev) || (db.trustedDevices || []).some((d) => d.id === dev);
+}
+function logSignIn(db, user, result, extra) {
+  if (!db.loginLog) db.loginLog = [];
+  db.loginLog.unshift({ at: new Date().toISOString(), userId: user ? user.id : "", name: user ? user.name : extra && extra.phone || "", result, device: deviceLabel(), deviceId: deviceId(), ...(extra || {}) });
+  if (db.loginLog.length > 300) db.loginLog.length = 300;
+}
+// ---- phone storage: photos and voice notes are big; free space from old finished items if full ----
+function stripMedia(db, olderThanDays) {
+  const cut = new Date(Date.now() - olderThanDays * 864e5).toISOString().slice(0, 10);
+  let n = 0;
+  const strip = (o) => { if (!o) return; if (o.photos && Object.keys(o.photos).length) { o.photos = {}; n++; } if (o.voice) { o.voice = ""; n++; } if (o.photo) { o.photo = ""; n++; } o.mediaRemoved = true; };
+  (db.fleetTasks || []).forEach((t) => { if (t.status === "closed" && String(t.closedAt || t.doneAt || "") < cut) { strip(t.reply); (t.history || []).forEach((h) => strip(h.reply)); } });
+  (db.inspections || []).forEach((r) => { if (String(r.date || "") < cut) strip(r); });
+  (db.issues || []).forEach((i) => { if (i.status !== "open" && String(i.date || i.createdAt || "") < cut) strip(i); });
+  (db.disbursements || []).forEach((f) => { if (f.status === "closed" && String(f.closedAt || "") < cut) (f.usages || []).forEach(strip); });
+  (db.fuelLogs || []).forEach((l) => { if (String(l.date || "") < cut) strip(l); });
+  return n;
+}
+function storeBook(db) {
+  const text = JSON.stringify(db);
+  try { localStorage.setItem(KEY_DB, text); return db; } catch (e) {}
+  for (const days of [60, 30, 14, 7, 0]) {
+    if (!stripMedia(db, days)) continue;
+    try { db.mediaTrimmedAt = new Date().toISOString(); localStorage.setItem(KEY_DB, JSON.stringify(db)); return db; } catch (e) {}
+  }
+  throw new Error("This phone's storage for Conacrew is full. Photos and voice notes from old finished items were removed but it is still full — ask the admin.");
+}
+const hasAdmin = (db) => !!(db && (db.users || []).some((u) => u.role === "admin"));
+function pruneFleet(db) {
+  ["users", "trucks", "drivers", "jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "contractors", "sellers", "mills", "caneBuys", "caneSales", "caneExpenses", "blocks", "farmWorks", "fruitSales", "cash", "payStubs", "notifications", "moneyRequests", "receivables", "harvests", "fieldLogs", "farmInputs", "docs"].forEach((k) => {
+    if (!db[k]) db[k] = [];
+  });
+  if (!db.blocks.length) {
+    db.blocks = ["B1", "B2", "B3", "B4"].map((id) => ({ id, name: "Block " + id, acres: 0, status: "Producing" }));
+  }
   ensureDriverLogins(db);
   return db;
 }
 function nextLoadCode(db, date, plate) {
-  const day = date || new Date().toISOString().slice(0, 10);
+  const day = date || todayStr();
   const md = day.slice(5, 7) + day.slice(8, 10);
   const mark = (String(plate || "").replace(/[^A-Za-z]/g, "").slice(-2) || "XX").toUpperCase();
   const prefix = mark + md + "_";
@@ -103,11 +154,53 @@ function estimateTripFuel(deadKm, haulKm, hp, dieselUgx) {
 }
 
 function weekStart() {
-  return new Date("2026-09-22T00:00:00");
+  // Monday 00:00 of the current week
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+function daysFromToday(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  const pad = (x) => String(x).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 }
 
+const PAY_FIELDS = ["payPlan", "tripAllowanceUgx", "monthRateUgx", "perTripUgx", "perSaleUgx", "perSalePct", "payMethod", "payPhone", "bankName", "bankAccount", "accountName"];
+function payProfile(rec) {
+  const out = {};
+  PAY_FIELDS.forEach((k) => { if (rec && rec[k] !== undefined && rec[k] !== "") out[k] = rec[k]; });
+  return out;
+}
 function publicUser(user) {
-  return { id: user.id, name: user.name, phone: user.phone, role: user.role, driverId: user.driverId };
+  return { id: user.id, name: user.name, phone: user.phone, role: user.role, driverId: user.driverId, active: user.active, hasPin: !!user.pin, assistant: !!user.assistant, ...payProfile(user) };
+}
+// Who was paid and how. Mobile money needs a number, bank needs an account.
+const METHOD_NAMES = { cash: "Cash", mtn_momo: "MTN MoMo", airtel_money: "Airtel Money", bank: "Bank transfer", mobile_money: "Mobile money" };
+function payeeFrom(body, required) {
+  const p = {
+    payeeName: String(body.payeeName || "").trim(),
+    method: body.method || "cash",
+    payeePhone: String(body.payeePhone || "").trim(),
+    bankName: String(body.bankName || "").trim(),
+    bankAccount: String(body.bankAccount || "").trim(),
+    reference: String(body.reference || "").trim(),
+  };
+  if (required) {
+    if (!p.payeeName) throw new Error("Enter the name of the person paid");
+    if ((p.method === "mtn_momo" || p.method === "airtel_money") && !p.payeePhone) throw new Error("Enter the mobile money number");
+    if (p.method === "bank" && (!p.bankName || !p.bankAccount)) throw new Error("Enter the bank and account number");
+  }
+  if (p.method !== "bank") { p.bankName = ""; p.bankAccount = ""; }
+  if (p.method === "bank" || p.method === "cash") p.payeePhone = p.method === "cash" ? p.payeePhone : "";
+  return p;
+}
+function weekStartOf(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
 }
 
 function homeFor(role) {
@@ -181,6 +274,7 @@ function passionKpis(db) {
 
 function buildAlerts(db) {
   const alerts = [];
+  const dueBy = daysFromToday(30); // warn 30 days ahead
   for (const t of db.trucks) {
     if (t.odometerKm >= t.nextServiceKm - 4000) {
       alerts.push({ id: "svc-" + t.id, tone: "warn", text: t.plate + " is near service", href: "#trucks" });
@@ -199,10 +293,10 @@ function buildAlerts(db) {
   const mites = db.fieldLogs.find((f) => f.tag === "mites");
   if (mites) alerts.push({ id: "mites", tone: "warn", text: mites.blockId + " has a mite note", href: "#passion" });
   for (const t of db.trucks) {
-    if (t.insuranceExpiry && t.insuranceExpiry <= "2026-10-15") {
+    if (t.insuranceExpiry && t.insuranceExpiry <= dueBy) {
       alerts.push({ id: "ins-" + t.id, tone: "warn", text: t.plate + " insurance due " + t.insuranceExpiry, href: "#trucks" });
     }
-    if (t.roadLicenceExpiry && t.roadLicenceExpiry <= "2026-10-15") {
+    if (t.roadLicenceExpiry && t.roadLicenceExpiry <= dueBy) {
       alerts.push({ id: "lic-" + t.id, tone: "bad", text: t.plate + " road licence due " + t.roadLicenceExpiry, href: "#trucks" });
     }
   }
@@ -215,7 +309,12 @@ function buildAlerts(db) {
       href: "#trucks",
     });
   }
-  return alerts.slice(0, 8);
+  const soon = todayStr().slice(0, 10);
+  const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  (db.docs || []).filter((x) => x.expiry && x.expiry <= in30).forEach((x) => {
+    alerts.push({ id: "doc-" + x.id, tone: x.expiry < soon ? "bad" : "warn", text: x.title + (x.expiry < soon ? " expired " : " expires ") + x.expiry, href: { trucking: "#trucks-docs", sugarcane: "#cane-docs", passion: "#passion-docs" }[x.tag] });
+  });
+  return alerts.slice(0, 12);
 }
 
 function statement(db) {
@@ -240,6 +339,10 @@ function scopedDb(db, user) {
     return {
       role: user.role,
       me: publicUser(user),
+      users: (db.users || []).map((u) => (user.assistant ? publicUser(u) : { ...publicUser(u), pinLen: String(u.pin || "").length, devices: u.devices || [], pendingDevices: u.pendingDevices || [], locked: !!u.lockedAt, failCount: u.failCount || 0 })),
+      loginLog: user.assistant ? [] : (db.loginLog || []).slice(0, 60),
+      trustedDevices: user.assistant ? [] : db.trustedDevices || [],
+      docs: db.docs || [],
       dieselDefaultUgx: db.dieselDefaultUgx,
       trucks: db.trucks,
       drivers: db.drivers,
@@ -306,6 +409,7 @@ function scopedDb(db, user) {
         advanceUgx: myDriver.advanceUgx,
         payType: myDriver.payType || "trip",
         monthRateUgx: myDriver.monthRateUgx || 0,
+        ...payProfile(myDriver),
       },
       truck,
       jobs,
@@ -318,6 +422,7 @@ function scopedDb(db, user) {
       issues: (db.issues || []).filter((i) => i.driverId === myId),
       notifications: (db.notifications || []).filter((n) => n.toDriverId === myId && n.status !== "cleared"),
       disbursements: (db.disbursements || []).filter((x) => x.toDriverId === myId),
+      moneyRequests: (db.moneyRequests || []).filter((r) => r.driverId === myId),
       payStubs: (db.payStubs || []).filter((x) => x.personId === myId),
     };
   }
@@ -331,7 +436,10 @@ function scopedDb(db, user) {
       caneBuys: db.caneBuys,
       caneSales: db.caneSales || [],
       caneExpenses: db.caneExpenses || [],
-      moneyRequests: (db.moneyRequests || []).filter((r) => r.tag === "sugarcane"),
+      moneyRequests: (db.moneyRequests || []).filter((r) => r.tag === "sugarcane" && (!r.userId || r.userId === user.id)),
+      disbursements: (db.disbursements || []).filter((x) => x.tag === "sugarcane" && x.toUserId === user.id),
+      docs: (db.docs || []).filter((x) => x.tag === "sugarcane"),
+      jobs: [],
       kpis: caneKpis(db),
       payStubs: (db.payStubs || []).filter((x) => x.role === "cane_manager"),
     };
@@ -348,17 +456,69 @@ function scopedDb(db, user) {
     stockKg: fruitStock(db),
     kpis: passionKpis(db),
     payStubs: (db.payStubs || []).filter((x) => x.role === "passion_manager"),
+    moneyRequests: (db.moneyRequests || []).filter((r) => r.tag === "passion" && r.userId === user.id),
+    disbursements: (db.disbursements || []).filter((x) => x.tag === "passion" && x.toUserId === user.id),
+    docs: (db.docs || []).filter((x) => x.tag === "passion"),
+    jobs: [],
   };
 }
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
-    driver: ["submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
-    cane_manager: ["request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
-    passion_manager: ["request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
+    admin: ["trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    driver: ["request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
+    cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
+    passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
   };
   return (map[role] || []).includes(action);
+}
+
+const TAG_OF_ROLE = { driver: "trucking", cane_manager: "sugarcane", passion_manager: "passion" };
+function ownsFloat(fl, user) {
+  if (user.role === "admin") return true;
+  if (user.role === "driver") return fl.toDriverId === user.driverId;
+  return fl.toUserId === user.id && fl.tag === TAG_OF_ROLE[user.role];
+}
+// Manager spending: from an advance (breakdown only) or from cash on hand such as sale money (counted as money out).
+function spendFromAdvanceOrCash(db, user, body, tag, refs) {
+  if (body.floatId) {
+    const fl = (db.disbursements || []).find((x) => x.id === body.floatId);
+    if (!fl || !ownsFloat(fl, user)) throw new Error("Advance not found");
+    return { use: addFloatUse(db, fl, body, user) };
+  }
+  const amount = Number(body.amountUgx) || 0;
+  if (amount <= 0) throw new Error("Enter the amount");
+  const payee = payeeFrom({ ...body, method: body.method || "cash" }, !!body.payeeName || user.role !== "admin");
+  const row = { id: uid("k"), date: dayOf(body), direction: "out", amountUgx: amount, tag, category: body.category || "other", note: String(body.note || "").trim(), source: user.role === "admin" ? "office" : "cash_on_hand", by: user.name, ...payee, ...(refs || {}) };
+  db.cash.unshift(row);
+  return { cash: row };
+}
+
+// Spending recorded against an advance. It explains where the advance went; the money
+// already left the business when the advance was sent, so no new cash line is added.
+function addFloatUse(db, fl, body, user) {
+  if (fl.status === "sent") throw new Error("Confirm you received this advance first");
+  if (fl.status === "closed") throw new Error("This advance is closed");
+  const amount = Number(body.amountUgx) || 0;
+  if (amount <= 0) throw new Error("Enter the amount spent");
+  const usedSoFar = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
+  const left = fl.amountUgx - usedSoFar;
+  if (amount > left + 0.5) throw new Error("Only UGX " + left.toLocaleString("en-UG") + " left on this advance");
+  const payee = payeeFrom({ ...body, method: body.method || "cash" }, true);
+  const use = {
+    id: uid("fu"), amountUgx: amount, category: body.category || "other",
+    note: String(body.note || "").trim(), date: dayOf(body),
+    photo: body.photo || "", litres: Number(body.litres) || 0, ...payee,
+  };
+  fl.usages = fl.usages || [];
+  fl.usages.unshift(use);
+  fl.status = usedSoFar + amount >= fl.amountUgx ? "spent" : "received";
+  if (use.category === "diesel" && use.litres > 0) {
+    db.fuelLogs.unshift({ id: uid("f"), truckId: fl.truckId, driverId: fl.toDriverId, litres: use.litres, amountUgx: amount, odometerKm: Number(body.odometerKm) || 0, station: payee.payeeName, date: use.date, floatId: fl.id });
+    const truck = db.trucks.find((t) => t.id === fl.truckId);
+    if (truck && Number(body.odometerKm) > (truck.odometerKm || 0)) truck.odometerKm = Number(body.odometerKm);
+  }
+  return use;
 }
 
 function applyAction(db, user, body) {
@@ -395,7 +555,7 @@ function applyAction(db, user, body) {
     if (action === "trash_job") {
       const job = db.jobs.find((j) => j.id === body.id);
       if (!job || job.driverId !== user.driverId) throw new Error("No access");
-      if (job.paid || job.incomeUgx) throw new Error("Paid load stays. Ask the owner.");
+      if (job.paid || job.incomeUgx) throw new Error("Paid load stays. Ask the admin.");
     }
     if (body.driverId && body.driverId !== user.driverId) throw new Error("No access");
   }
@@ -430,9 +590,9 @@ function applyAction(db, user, body) {
     } else {
       d.name = body.name || d.name;
       if (body.phone) d.phone = body.phone;
+      if (body.licenseId) d.licenseId = body.licenseId;
+      if (body.licensePhoto) d.licensePhoto = body.licensePhoto;
       if (body.assignedTruckId !== undefined) d.assignedTruckId = body.assignedTruckId;
-      if (body.payType) d.payType = body.payType;
-      if (body.monthRateUgx !== undefined && body.monthRateUgx !== "") d.monthRateUgx = Number(body.monthRateUgx);
       const u = db.users.find((x) => x.id === d.userId);
       if (u) { u.name = d.name; if (body.phone) u.phone = body.phone; }
     }
@@ -473,7 +633,7 @@ function applyAction(db, user, body) {
       const name = body.cargoOther.trim();
       if (!db.cargoTypes.some((x) => x.toLowerCase() === name.toLowerCase())) db.cargoTypes.unshift(name);
     }
-    const startDate = body.startDate || new Date().toISOString().slice(0, 10);
+    const startDate = body.startDate || todayStr();
     let truckId = body.truckId || "";
     let driverId = body.driverId || "";
     if (user.role === "driver") {
@@ -504,7 +664,7 @@ function applyAction(db, user, body) {
       startDate,
       notes: body.notes || "",
       loggedBy: user.name,
-      source: user.role === "driver" ? "driver" : "owner",
+      source: user.role === "driver" ? "driver" : "admin",
       tonnesDelivered: Number(body.tonnes) || 0,
       fuelLitres: Number(body.fuelLitres) || 0,
       fuelCostUgx: Number(body.fuelCostUgx) || 0,
@@ -541,10 +701,10 @@ function applyAction(db, user, body) {
     if (i < 0) throw new Error("Load not found");
     const job = db.jobs[i];
     if (user.role === "driver" && (job.paid || job.incomeUgx || job.status === "paid")) {
-      throw new Error("Paid load stays. Ask the owner.");
+      throw new Error("Paid load stays. Ask the admin.");
     }
     db.jobs.splice(i, 1);
-    db.jobsTrash.unshift({ ...job, deletedAt: new Date().toISOString().slice(0, 10), deletedBy: user.name });
+    db.jobsTrash.unshift({ ...job, deletedAt: todayStr(), deletedBy: user.name });
   }
 
   if (action === "restore_job") {
@@ -577,7 +737,7 @@ function applyAction(db, user, body) {
       refLabel: body.refLabel || "",
       amountUgx: Number(body.amountUgx) || 0,
       status: "pending",
-      requestedAt: new Date().toISOString().slice(0, 10),
+      requestedAt: todayStr(),
       paidAt: "",
       year,
     };
@@ -625,29 +785,55 @@ function applyAction(db, user, body) {
         refLabel: "Month " + (body.month || ""),
         amountUgx: Number(body.amountUgx) || 0,
         status: body.status || "paid",
-        requestedAt: new Date().toISOString().slice(0, 10),
-        paidAt: body.status === "pending" ? "" : new Date().toISOString().slice(0, 10),
+        requestedAt: todayStr(),
+        paidAt: body.status === "pending" ? "" : todayStr(),
         year: new Date().getFullYear(),
       });
     } else {
-      const st = db.payStubs.find((x) => x.id === body.id);
-      if (!st) throw new Error("Stub not found");
-      st.status = body.status || "paid";
-      if (st.status === "paid") {
-        st.paidAt = new Date().toISOString().slice(0, 10);
-        const drv = db.drivers.find((d) => d.id === st.personId);
-        const phone = (drv && drv.phone) || st.phone || "";
-        if (!db.notifications) db.notifications = [];
-        db.notifications.unshift({
-          id: uid("n"),
-          toDriverId: st.personId,
-          type: "pay",
-          title: "Payment sent",
-          body: "Payment for load " + (st.refLabel || st.refId) + " has been paid" + (phone ? " to " + phone : "") + ".",
-          status: "unread",
-          createdAt: new Date().toISOString(),
-        });
-      }
+      const st = db.payStubs.find((x) => x.id === body.id) || db.payStubs.find((x) => x.refId === body.id);
+      const job = db.jobs.find((j) => j.id === (body.jobId || body.id) || (st && j.id === st.refId));
+      const sale = (db.caneSales || []).find((s) => s.id === body.id || (st && s.id === st.refId));
+      const drv = db.drivers.find((d) => d.id === (body.personId || (st && st.personId) || (job && job.driverId)));
+      const mgr = (db.users || []).find((u) => u.role === "cane_manager");
+      if (!st && !job && !sale) throw new Error("Load not found");
+      const phone = (body.phone || (drv && drv.phone) || (mgr && mgr.phone) || (st && st.phone) || "").trim();
+      if (drv && phone) drv.phone = phone;
+      if (mgr && sale && phone) mgr.phone = phone;
+      const amount = Number(body.amountUgx) || (st && st.amountUgx) || 0;
+      if (!amount) throw new Error("Enter the pay amount");
+      const row = st || { id: uid("ps"), role: sale ? "cane_manager" : "driver", personId: (drv && drv.id) || (mgr && mgr.id), personName: (drv && drv.name) || (mgr && mgr.name), kind: sale ? "sale" : "trip", refId: (job && job.id) || (sale && sale.id), year: new Date().getFullYear() };
+      if (!st) db.payStubs.unshift(row);
+      row.phone = phone;
+      row.method = "mobile_money";
+      row.amountUgx = amount;
+      row.loadId = (job && job.code) || (sale && sale.tonnes + " t") || row.loadId || row.refLabel;
+      row.refLabel = row.loadId;
+      row.drop = (job && job.destination) || row.drop || "";
+      row.status = "paid";
+      row.paidAt = todayStr();
+      if (!db.cash) db.cash = [];
+      db.cash.unshift({
+        id: uid("k"),
+        date: row.paidAt,
+        direction: "out",
+        amountUgx: amount,
+        tag: row.role === "cane_manager" ? "sugarcane" : "trucking",
+        method: "mobile_money",
+        category: "employee_pay",
+        note: "Employee pay " + (row.personName || "") + " · " + (row.loadId || ""),
+        refId: row.id,
+        truckId: job && job.truckId,
+      });
+      if (!db.notifications) db.notifications = [];
+      db.notifications.unshift({
+        id: uid("n"),
+        toDriverId: row.personId,
+        type: "pay",
+        title: "Payment sent",
+        body: "Load " + (row.loadId || "") + " paid by mobile money to " + phone + ".",
+        status: "unread",
+        createdAt: new Date().toISOString(),
+      });
     }
   }
 
@@ -660,7 +846,7 @@ function applyAction(db, user, body) {
     if (!body.scaleTicket) throw new Error("Add the scale ticket");
     job.tonnesDelivered = tonnes;
     job.scaleTicket = body.scaleTicket;
-    job.scaledAt = new Date().toISOString().slice(0, 10);
+    job.scaledAt = todayStr();
     if (job.payBasis === "tonne" && job.payPerTonne) job.rateUgx = Math.round(tonnes * job.payPerTonne);
     job.incomeUgx = job.rateUgx || 0;
     if (!db.notifications) db.notifications = [];
@@ -677,13 +863,13 @@ function applyAction(db, user, body) {
     job.invoice = body.invoice;
     job.rateUgx = amount;
     job.incomeUgx = amount;
-    job.invoicedAt = new Date().toISOString().slice(0, 10);
+    job.invoicedAt = todayStr();
     if (body.paidNow === "1" || body.paidNow === true) {
       job.paid = true;
       job.status = "paid";
       job.paidAt = job.invoicedAt;
       job.paidUgx = amount;
-      db.cash.unshift({ id: uid("k"), date: job.paidAt, direction: "in", amountUgx: amount, tag: "trucking", method: "invoice", note: "Load " + (job.code || job.id), refId: job.id, truckId: job.truckId });
+      recordJobIncome(db, job, amount, job.paidAt, "invoice");
     }
     if (!db.notifications) db.notifications = [];
     db.notifications.unshift({ id: uid("n"), toRole: "admin", type: "invoice", title: job.paid ? "Load paid" : "Invoice in", body: (job.code || job.id) + " · UGX " + amount.toLocaleString("en-UG"), status: "unread", createdAt: new Date().toISOString() });
@@ -694,11 +880,10 @@ function applyAction(db, user, body) {
     if (!job) throw new Error("Load not found");
     job.paid = true;
     job.status = "paid";
-    job.paidAt = body.paidAt || new Date().toISOString().slice(0, 10);
+    job.paidAt = dayOf(body, body.paidAt ? "paidAt" : "date");
     job.paidUgx = Number(body.paidUgx) || job.rateUgx || job.incomeUgx || 0;
-    if (job.paidUgx && !(db.cash || []).some((c) => c.refId === job.id && c.direction === "in")) {
-      db.cash.unshift({ id: uid("k"), date: job.paidAt, direction: "in", amountUgx: job.paidUgx, tag: "trucking", method: "invoice", note: "Load " + (job.code || job.id), refId: job.id, truckId: job.truckId });
-    }
+    // Customer payment only. Driver trip allowance is paid separately on Money › Pay.
+    recordJobIncome(db, job, job.paidUgx, job.paidAt, body.method || "invoice");
   }
 
   if (action === "add_cargo_type") {
@@ -719,6 +904,7 @@ function applyAction(db, user, body) {
       else if (["delivered", "invoiced", "paid"].includes(body.status)) truck.status = "idle";
     }
     if (body.status === "delivered") {
+      job.deliveredAt = job.deliveredAt || todayStr();
       if (!db.payStubs) db.payStubs = [];
       const drv = db.drivers.find((d) => d.id === job.driverId);
       if (drv && (drv.payType || "trip") === "trip" && !db.payStubs.some((x) => x.refId === job.id)) {
@@ -730,30 +916,29 @@ function applyAction(db, user, body) {
           phone: drv.phone || "",
           kind: "trip",
           refId: job.id,
-          refLabel: (job.code || job.id) + " · " + (job.cargo || "Load"),
-          amountUgx: job.rateUgx || job.paidUgx || job.incomeUgx || 0,
+          refLabel: job.code || job.id,
+          loadId: job.code || job.id,
+          drop: job.destination || "",
+          tripIncome: job.rateUgx || job.incomeUgx || 0,
+          amountUgx: 0,
           status: "pending",
-          requestedAt: new Date().toISOString().slice(0, 10),
+          requestedAt: todayStr(),
           paidAt: "",
           year: new Date().getFullYear(),
         });
       }
     }
     if (body.status === "paid") {
-      db.cash.unshift({
-        id: uid("k"),
-        date: new Date().toISOString().slice(0, 10),
-        direction: "in",
-        amountUgx: job.rateUgx,
-        tag: "trucking",
-        method: body.method || "cash",
-        note: "Job " + job.id + " paid",
-        refId: job.id,
-      });
+      job.paid = true; job.paidAt = job.paidAt || dayOf(body); job.paidUgx = job.paidUgx || job.rateUgx || job.incomeUgx || 0;
+      recordJobIncome(db, job, job.paidUgx, job.paidAt, body.method || "cash");
     }
   }
 
-  if (action === "log_fuel") {
+  if (action === "log_fuel" && user.role === "driver" && body.floatId) {
+    const fl = (db.disbursements || []).find((x) => x.id === body.floatId && x.toDriverId === user.driverId);
+    if (!fl) throw new Error("Advance not found");
+    addFloatUse(db, fl, { ...body, category: "diesel", payeeName: body.station || "Fuel station" }, user);
+  } else if (action === "log_fuel") {
     const driverId = user.role === "driver" ? user.driverId : body.driverId;
     const log = {
       id: uid("f"),
@@ -763,21 +948,17 @@ function applyAction(db, user, body) {
       amountUgx: Number(body.amountUgx) || 0,
       odometerKm: Number(body.odometerKm) || 0,
       station: body.station || "",
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
+      photo: body.photo || "",
     };
     db.fuelLogs.unshift(log);
     const truck = db.trucks.find((t) => t.id === log.truckId);
     if (truck && log.odometerKm > truck.odometerKm) truck.odometerKm = log.odometerKm;
-    db.cash.unshift({
-      id: uid("k"),
-      date: log.date,
-      direction: "out",
-      amountUgx: log.amountUgx,
-      tag: "trucking",
-      method: "cash",
-      note: "Fuel " + (truck?.plate || log.truckId),
-      refId: log.id,
-    });
+    if (user.role === "driver") {
+      log.notFromAdvance = true; // driver used money that didn't come through an advance: flag it, don't count it twice
+    } else {
+      db.cash.unshift({ id: uid("k"), date: log.date, direction: "out", amountUgx: log.amountUgx, tag: "trucking", method: body.method || "cash", category: "diesel", note: "Fuel " + (truck?.plate || log.truckId), refId: log.id, truckId: log.truckId, payeeName: log.station });
+    }
   }
 
   if (action === "create_cane_buy") {
@@ -788,10 +969,24 @@ function applyAction(db, user, body) {
     const fuel = estimateFuel(transportKm, kmPerLitre, diesel);
     const acres = type === "acre" ? Number(body.acres) || 0 : undefined;
     const trips = type === "trip" ? Number(body.tripsAgreed) || 0 : undefined;
+    if (!db.sellers) db.sellers = [];
+    let sellerId = body.sellerId || "";
+    const newName = (body.sellerName || "").trim();
+    if (newName) {
+      let s = db.sellers.find((x) => x.name.toLowerCase() === newName.toLowerCase());
+      if (!s) {
+        s = { id: uid("s"), name: newName, phone: body.sellerPhone || "", location: body.location || "" };
+        db.sellers.unshift(s);
+      }
+      sellerId = s.id;
+    }
+    const seller = db.sellers.find((x) => x.id === sellerId);
+    if (seller && body.sellerPhone) seller.phone = body.sellerPhone;
     db.caneBuys.unshift({
       id: uid("cb"),
+      date: dayOf(body),
       type,
-      sellerId: body.sellerId,
+      sellerId,
       location: body.location || "",
       acres,
       tripsAgreed: trips,
@@ -806,7 +1001,7 @@ function applyAction(db, user, body) {
       fuelUgx: 0,
       sellerPaid: false,
       millPaid: false,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: todayStr(),
     });
   }
 
@@ -837,19 +1032,15 @@ function applyAction(db, user, body) {
   if (action === "pay_seller") {
     const buy = db.caneBuys.find((b) => b.id === body.id);
     if (!buy) throw new Error("Buy not found");
+    if (buy.sellerPaid) throw new Error("Seller already paid");
+    const seller = (db.sellers || []).find((x) => x.id === buy.sellerId);
+    const sp = { amountUgx: buy.buyPriceUgx, category: "buy", payeeName: (seller && seller.name) || "Seller", method: body.method || (seller && seller.phone ? "mtn_momo" : "cash"), payeePhone: (seller && seller.phone) || "", note: "Paid seller · " + (buy.location || buy.id), floatId: body.floatId || "" };
+    const done = spendFromAdvanceOrCash(db, user, sp, "sugarcane", { caneBuyId: buy.id, refId: buy.id });
     buy.sellerPaid = true;
-    buy.payMethod = body.method || "mtn_momo";
+    buy.payMethod = sp.method;
+    buy.paidFromFloat = body.floatId || "";
     buy.status = buy.millPaid ? "settled" : "seller_paid";
-    db.cash.unshift({
-      id: uid("k"),
-      date: new Date().toISOString().slice(0, 10),
-      direction: "out",
-      amountUgx: buy.buyPriceUgx,
-      tag: "sugarcane",
-      method: buy.payMethod,
-      note: "Paid seller for " + buy.id,
-      refId: buy.id,
-    });
+    if (done.cash) done.cash.note = "Paid seller · " + (seller ? seller.name : buy.id);
   }
 
   if (action === "create_cane_sale") {
@@ -859,7 +1050,7 @@ function applyAction(db, user, body) {
     if (tonnes <= 0 || price <= 0) throw new Error("Enter tonnes and price");
     const sale = {
       id: uid("cs"),
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
       millId: body.millId || "",
       buyId: body.buyId || "",
       tonnes,
@@ -868,11 +1059,35 @@ function applyAction(db, user, body) {
       method: body.method || "cash",
       note: body.note || "",
       by: user.name,
+      byUserId: user.role === "cane_manager" ? user.id : "",
       cuttingCostUgx: Number(body.cuttingCostUgx) || 0,
       loadingCostUgx: Number(body.loadingCostUgx) || 0,
       transportUgx: Number(body.transportUgx) || 0,
     };
     db.caneSales.unshift(sale);
+    const forBuy = sale.buyId && db.caneBuys.find((b) => b.id === sale.buyId);
+    if (forBuy) { forBuy.millPaid = true; forBuy.millSaleUgx = forBuy.millSaleUgx || sale.amountUgx; if (forBuy.sellerPaid) forBuy.status = "settled"; }
+    if (!db.payStubs) db.payStubs = [];
+    const mgr = (db.users || []).find((u) => u.role === "cane_manager" && u.active);
+    if (mgr && !db.payStubs.some((x) => x.refId === sale.id)) {
+      db.payStubs.unshift({
+        id: uid("ps"),
+        role: "cane_manager",
+        personId: mgr.id,
+        personName: mgr.name,
+        phone: mgr.phone || "",
+        kind: "sale",
+        refId: sale.id,
+        refLabel: sale.tonnes + " t",
+        drop: sale.note || "",
+        tripIncome: sale.amountUgx,
+        amountUgx: 0,
+        status: "pending",
+        requestedAt: sale.date,
+        paidAt: "",
+        year: new Date().getFullYear(),
+      });
+    }
     if (sale.buyId) {
       const buy = db.caneBuys.find((b) => b.id === sale.buyId);
       if (buy) {
@@ -905,7 +1120,7 @@ function applyAction(db, user, body) {
     if (amount <= 0) throw new Error("Enter amount");
     const row = {
       id: uid("ce"),
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
       category: body.category || "other",
       amountUgx: amount,
       note: body.note || "",
@@ -941,7 +1156,7 @@ function applyAction(db, user, body) {
     const req = {
       id: uid("mr"),
       tag: body.tag || "sugarcane",
-      date: new Date().toISOString().slice(0, 10),
+      date: todayStr(),
       lines,
       totalUgx: total,
       note: body.note || "",
@@ -965,7 +1180,7 @@ function applyAction(db, user, body) {
     const req = (db.moneyRequests || []).find((r) => r.id === body.id);
     if (!req) throw new Error("Request not found");
     req.status = body.status === "rejected" ? "rejected" : "approved";
-    req.decidedAt = new Date().toISOString().slice(0, 10);
+    req.decidedAt = todayStr();
     if (req.status === "approved") {
       db.cash.unshift({
         id: uid("k"),
@@ -997,14 +1212,21 @@ function applyAction(db, user, body) {
       id: uid("fw"),
       blockId: body.blockId,
       kind,
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
       costUgx: Number(body.costUgx) || 0,
       kg,
       note: body.note || "",
       by: user.name,
     };
+    if (rec.costUgx > 0 && body.floatId) {
+      // Labour/inputs paid from the manager's advance: part of that advance, not new money out.
+      const fl = (db.disbursements || []).find((x) => x.id === body.floatId);
+      if (!fl || !ownsFloat(fl, user)) throw new Error("Advance not found");
+      addFloatUse(db, fl, { amountUgx: rec.costUgx, category: kind, payeeName: body.payeeName || "Farm workers", method: body.method || "cash", payeePhone: body.payeePhone || "", note: (rec.note || kind) + " · Block " + (rec.blockId || ""), photo: body.photo || "" }, user);
+      rec.floatId = fl.id;
+    }
     db.farmWorks.unshift(rec);
-    if (rec.costUgx > 0) {
+    if (rec.costUgx > 0 && !body.floatId) {
       db.cash.unshift({
         id: uid("k"),
         date: rec.date,
@@ -1012,8 +1234,12 @@ function applyAction(db, user, body) {
         amountUgx: rec.costUgx,
         tag: "passion",
         method: body.method || "cash",
+        category: kind,
         note: rec.kind + " " + rec.blockId,
         refId: rec.id,
+        blockId: rec.blockId,
+        source: user.role === "admin" ? "office" : "cash_on_hand",
+        payeeName: body.payeeName || "",
       });
     }
   }
@@ -1025,7 +1251,7 @@ function applyAction(db, user, body) {
     if (kg > fruitStock(db)) throw new Error("Only " + fruitStock(db) + " kg in stock");
     const sale = {
       id: uid("fs"),
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
       buyer: body.buyer || "Buyer",
       kg,
       amountUgx: Number(body.amountUgx) || 0,
@@ -1069,7 +1295,7 @@ function applyAction(db, user, body) {
     if (extra > 0) {
       db.cash.unshift({
         id: uid("k"),
-        date: new Date().toISOString().slice(0, 10),
+        date: todayStr(),
         direction: "in",
         amountUgx: extra,
         tag: "passion",
@@ -1089,7 +1315,7 @@ function applyAction(db, user, body) {
     if (extra > 0) {
       db.cash.unshift({
         id: uid("k"),
-        date: new Date().toISOString().slice(0, 10),
+        date: todayStr(),
         direction: "out",
         amountUgx: extra,
         tag: "passion",
@@ -1104,18 +1330,34 @@ function applyAction(db, user, body) {
     const truck = db.trucks.find((t) => t.id === body.truckId);
     if (!truck) throw new Error("Truck not found");
     const driverId = body.driverId || truck.assignedDriverId || "";
+    let parts = body.parts;
+    if (typeof parts === "string") parts = parts.split(",");
+    parts = (parts || []).map((p) => String(p).trim()).filter(Boolean);
+    if (!parts.length && body.part) parts = [body.part];
+    const partNames = body.partNames && typeof body.partNames === "object" ? body.partNames : {};
+    const instructions = String(body.instructions || body.note || "").trim();
+    const kindName = { inspect: "Inspect", service: "Service", repair: "Repair", tyres: "Check tyres", fuel: "Fuel", wash: "Wash", papers: "Papers / licence", other: "Task" }[body.kind] || "Task";
+    const title = String(body.title || "").trim() || (parts.length ? kindName + ": " + parts.map((p) => partNames[p] || p).join(", ") : kindName);
+    if (!instructions && !parts.length) throw new Error("Write what the driver must do");
     const task = {
       id: uid("ft"),
       truckId: truck.id,
       driverId,
       kind: body.kind || "other",
-      note: body.note || "",
-      part: body.part || "",
+      title,
+      instructions,
+      note: instructions,
+      parts,
+      partNames,
+      part: parts[0] || "",
+      needPhoto: body.needPhoto === "1" || body.needPhoto === true,
+      needVoice: body.needVoice === "1" || body.needVoice === true,
+      history: [],
       dueDate: body.dueDate || "",
       priority: body.priority === "urgent" ? "urgent" : "normal",
       status: "open",
       createdBy: user.name,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: todayStr(),
       seenAt: "",
       doneAt: "",
       driverNote: "",
@@ -1128,7 +1370,8 @@ function applyAction(db, user, body) {
         truckId: truck.id,
         taskId: task.id,
         type: "task",
-        title: task.priority === "urgent" ? "Urgent from owner" : "New work from owner",
+        title: task.priority === "urgent" ? "Urgent from admin" : "New work from admin",
+        text: (task.priority === "urgent" ? "URGENT · " : "") + truck.plate + " — " + task.title + (task.instructions ? ": " + task.instructions : ""),
         body: truck.plate + " — " + task.title,
         status: "unread",
         createdAt: new Date().toISOString(),
@@ -1148,7 +1391,7 @@ function applyAction(db, user, body) {
     const task = db.fleetTasks.find((t) => t.id === body.id);
     if (!task) throw new Error("Task not found");
     task.status = "seen";
-    task.seenAt = new Date().toISOString().slice(0, 10);
+    task.seenAt = todayStr();
     db.notifications.forEach((n) => {
       if (n.taskId === task.id && n.toDriverId === user.driverId) n.status = "read";
     });
@@ -1170,7 +1413,7 @@ function applyAction(db, user, body) {
       truckId,
       driverId,
       by: user.name,
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
       odometerKm: Number(body.odometerKm) || 0,
       items,
       photos: body.photos || {},
@@ -1197,9 +1440,33 @@ function applyAction(db, user, body) {
   if (action === "complete_fleet_task") {
     const task = db.fleetTasks.find((t) => t.id === body.id);
     if (!task) throw new Error("Task not found");
+    if (user.role === "driver" && task.driverId && task.driverId !== user.driverId) throw new Error("No access");
+    const items = body.items && typeof body.items === "object" ? body.items : {};
+    const photos = body.photos && typeof body.photos === "object" ? body.photos : {};
+    const parts = task.parts || [];
+    for (const p of parts) if (!items[p]) throw new Error("Mark every part: OK, needs attention, or not OK");
+    if (task.needPhoto) {
+      if (parts.length) { for (const p of parts) if (!photos[p]) throw new Error("Add a photo for " + ((task.partNames || {})[p] || p)); }
+      else if (!photos.work) throw new Error("Add a photo of the work");
+    }
+    if (task.needVoice && !body.voice) throw new Error("Record a voice note");
+    const now = new Date().toISOString();
+    const reply = { at: now, by: user.name, items, photos, voice: body.voice || "", voiceSec: Number(body.voiceSec) || 0, note: String(body.driverNote || body.note || "").trim(), odometerKm: Number(body.odometerKm) || 0 };
+    task.reply = reply;
+    task.history = (task.history || []).concat([{ at: now, by: user.name, what: "replied" }]);
     task.status = "done";
-    task.doneAt = new Date().toISOString().slice(0, 10);
-    task.driverNote = body.driverNote || body.note || "";
+    task.doneAt = todayStr();
+    task.driverNote = reply.note;
+    if (parts.length) {
+      // keep the truck's inspection history complete too
+      if (!db.inspections) db.inspections = [];
+      const fails = parts.filter((p) => items[p] === "fail"), warns = parts.filter((p) => items[p] === "warn");
+      const insp = { id: uid("in"), truckId: task.truckId, driverId: task.driverId || user.driverId, by: user.name, date: todayStr(), odometerKm: reply.odometerKm, items, photos, voice: reply.voice, failCount: fails.length, warnCount: warns.length, note: reply.note, status: fails.length ? "fail" : warns.length ? "warn" : "pass", taskId: task.id, partial: true };
+      db.inspections.unshift(insp);
+      task.inspectionId = insp.id;
+      const truck = db.trucks.find((t) => t.id === task.truckId);
+      if (truck && reply.odometerKm > (truck.odometerKm || 0)) truck.odometerKm = reply.odometerKm;
+    }
     db.notifications.forEach((n) => {
       if (n.taskId === task.id && n.toDriverId === user.driverId) n.status = "cleared";
     });
@@ -1210,11 +1477,55 @@ function applyAction(db, user, body) {
       truckId: task.truckId,
       taskId: task.id,
       type: "done",
-      title: "Driver finished a truck task",
+      title: "Driver replied to a task",
       body: task.title + (task.driverNote ? " — " + task.driverNote : ""),
       status: "unread",
       createdAt: new Date().toISOString(),
     });
+  }
+
+  if (action === "save_doc") {
+    if (!db.docs) db.docs = [];
+    const tag = user.role === "admin" ? body.tag : TAG_OF_ROLE[user.role];
+    if (!["trucking", "sugarcane", "passion"].includes(tag)) throw new Error("Choose the business");
+    const title = String(body.title || "").trim();
+    if (!title) throw new Error("Give the document a name");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.date || ""))) throw new Error("Enter the document date");
+    if (!body.file) throw new Error("Attach a photo or PDF of the document");
+    if (String(body.file).length > 1600000) throw new Error("That file is too big. Use a photo, or a PDF under 1 MB.");
+    const doc = {
+      id: uid("doc"), tag, type: body.type || "other", title, date: dayOf(body), amountUgx: Number(body.amountUgx) || 0,
+      party: String(body.party || "").trim(), number: String(body.number || "").trim(),
+      expiry: /^\d{4}-\d{2}-\d{2}$/.test(String(body.expiry || "")) ? body.expiry : "",
+      truckId: body.truckId || "", jobId: body.jobId || "", caneBuyId: body.caneBuyId || "", blockId: body.blockId || "",
+      file: body.file, fileName: String(body.fileName || "").slice(0, 80), mime: String(body.mime || ""),
+      note: String(body.note || "").trim(), by: user.name, byId: user.id, addedAt: new Date().toISOString(),
+    };
+    db.docs.unshift(doc);
+  }
+
+  if (action === "delete_doc") {
+    const doc = (db.docs || []).find((x) => x.id === body.id);
+    if (!doc) throw new Error("Document not found");
+    if (user.role !== "admin" && doc.byId !== user.id) throw new Error("Only the admin or the person who added it can remove it");
+    db.docs = db.docs.filter((x) => x.id !== doc.id);
+  }
+
+  if (action === "review_fleet_task") {
+    const task = db.fleetTasks.find((t) => t.id === body.id);
+    if (!task) throw new Error("Task not found");
+    const now = new Date().toISOString();
+    body.decision = body.decision || body.status;
+    if (body.decision === "accept") {
+      task.status = "closed"; task.closedAt = todayStr();
+      task.history = (task.history || []).concat([{ at: now, by: user.name, what: "accepted" }]);
+    } else if (body.decision === "back") {
+      const why = String(body.reason || "").trim();
+      if (!why) throw new Error("Say what still needs doing");
+      task.history = (task.history || []).concat([{ at: now, by: user.name, what: "sent back", reason: why, reply: task.reply }]);
+      task.status = "open"; task.reply = null; task.doneAt = ""; task.sentBack = why;
+      if (task.driverId) db.notifications.unshift({ id: uid("n"), toDriverId: task.driverId, truckId: task.truckId, taskId: task.id, type: "task", title: "Task sent back", text: "Sent back: " + task.title + " — " + why, status: "unread", createdAt: now });
+    } else throw new Error("Choose accept or send back");
   }
 
   if (action === "log_service") {
@@ -1223,7 +1534,7 @@ function applyAction(db, user, body) {
     const rec = {
       id: uid("sv"),
       truckId: truck.id,
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
       kind: body.kind || "service",
       odometerKm: Number(body.odometerKm) || truck.odometerKm,
       costUgx: Number(body.costUgx) || 0,
@@ -1261,7 +1572,7 @@ function applyAction(db, user, body) {
       note: body.note || "",
       severity: body.severity || "normal",
       status: "open",
-      date: new Date().toISOString().slice(0, 10),
+      date: todayStr(),
       by: user.name,
       photos: Array.isArray(body.photos) ? body.photos.slice(0, 4) : [],
       voice: body.voice || "",
@@ -1287,7 +1598,7 @@ function applyAction(db, user, body) {
         toDriverId: issue.driverId,
         truckId: truck.id,
         type: "issue",
-        title: "Owner flagged a truck issue",
+        title: "Admin flagged a truck issue",
         body: truck.plate + " — " + issue.title,
         status: "unread",
         createdAt: new Date().toISOString(),
@@ -1303,7 +1614,7 @@ function applyAction(db, user, body) {
       id: uid("rp"),
       by: user.name,
       text: body.text || body.nextStep || "",
-      date: new Date().toISOString().slice(0, 10),
+      date: todayStr(),
     });
     issue.status = body.close ? "closed" : "replied";
     if (issue.driverId) {
@@ -1312,7 +1623,7 @@ function applyAction(db, user, body) {
         toDriverId: issue.driverId,
         truckId: issue.truckId,
         type: "reply",
-        title: "Owner reply",
+        title: "Admin reply",
         body: issue.replies[0].text,
         status: "unread",
         createdAt: new Date().toISOString(),
@@ -1324,7 +1635,7 @@ function applyAction(db, user, body) {
     if (!db.receivables) db.receivables = [];
     const row = {
       id: uid("k"),
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
       direction: body.direction || "out",
       amountUgx: Number(body.amountUgx) || 0,
       tag: body.tag || "overhead",
@@ -1335,7 +1646,12 @@ function applyAction(db, user, body) {
       caneBuyId: body.caneBuyId || "",
       jobId: body.jobId || "",
       blockId: body.blockId || "",
+      driverId: body.driverId || "",
     };
+    if (row.direction === "out") {
+      if (row.amountUgx <= 0) throw new Error("Enter the amount");
+      Object.assign(row, payeeFrom(body, body.payee === "1"));
+    }
     db.cash.unshift(row);
     if (row.direction === "out" && (body.awaitPay === true || body.awaitPay === "1" || body.awaitPay === "on")) {
       db.receivables.unshift({
@@ -1353,78 +1669,291 @@ function applyAction(db, user, body) {
     }
   }
 
+  if (action === "trust_device" || action === "untrust_device") {
+    if (!isMainAdmin(user)) throw new Error("Only the main admin can trust a computer");
+    db.trustedDevices = (db.trustedDevices || []).filter((d) => d.id !== body.deviceId);
+    if (action === "trust_device") {
+      db.trustedDevices.push({ id: body.deviceId, label: String(body.label || "Computer").slice(0, 60), addedAt: new Date().toISOString(), by: user.name });
+      // anyone waiting on this computer is let in too
+      (db.users || []).forEach((u) => { u.pendingDevices = (u.pendingDevices || []).filter((d) => d.id !== body.deviceId); });
+    }
+    logSignIn(db, user, action === "trust_device" ? "computer_trusted" : "computer_untrusted", { by: user.name });
+  }
+
+  if (["save_login", "approve_device", "reject_device", "remove_device", "unlock_login"].includes(action) && user.assistant) throw new Error("Only the main admin manages logins");
+
+  if (action === "save_login") {
+    const name = String(body.name || "").trim();
+    const phone = phoneKey(body.phone);
+    const pin = String(body.pin || "").trim();
+    let u = body.id ? db.users.find((x) => x.id === body.id) : null;
+    const wantAssistant = !u && body.role === "admin2";
+    const role = u ? u.role : wantAssistant ? "admin" : body.role;
+    if (!["driver", "cane_manager", "passion_manager", "admin"].includes(role)) throw new Error("Choose a role");
+    if (!u && role === "admin" && !wantAssistant) throw new Error("Only one main admin login");
+    // Admin II manages drivers and managers, but only the main admin can add or change admin logins
+    if (user.assistant && (wantAssistant || (u && u.role === "admin" && u.id !== user.id))) throw new Error("Only the main admin can add or change admin logins");
+    if (!name && !u) throw new Error("Enter the name");
+    if (!phone) throw new Error("Enter the phone number they will sign in with");
+    if (db.users.some((x) => x !== u && phoneKey(x.phone) === phone && x.active !== false)) throw new Error("Another login already uses " + phone);
+    if (pin && !/^\d{6}$/.test(pin)) throw new Error("PIN must be exactly 6 digits");
+    if (!u && !pin) throw new Error("Set a PIN for the new login");
+    if (!u) { u = { id: uid("u"), role, active: true, pin: "" }; if (wantAssistant) u.assistant = true; db.users.push(u); }
+    if (name) u.name = name;
+    u.phone = phone;
+    if (pin) { u.pin = pin; u.failCount = 0; u.lockedAt = ""; }
+    if (body.active !== undefined && (u.role !== "admin" || (u.assistant && !user.assistant))) u.active = body.active === "1" || body.active === true;
+    if (role === "driver") {
+      let d = db.drivers.find((x) => x.id === u.driverId);
+      if (!d) {
+        d = { id: uid("d"), userId: u.id, name: u.name, phone, licenceClass: "CM", licenceExpiry: "", assignedTruckId: "", advanceUgx: 0, payType: "trip", monthRateUgx: 0 };
+        db.drivers.unshift(d);
+        u.driverId = d.id;
+      }
+      d.name = u.name; d.phone = phone; d.userId = u.id;
+      if (body.truckId !== undefined) {
+        db.trucks.forEach((t) => { if (t.assignedDriverId === d.id) t.assignedDriverId = ""; });
+        d.assignedTruckId = body.truckId || "";
+        const t = db.trucks.find((x) => x.id === body.truckId);
+        if (t) {
+          db.drivers.forEach((o) => { if (o !== d && o.assignedTruckId === t.id) o.assignedTruckId = ""; });
+          t.assignedDriverId = d.id;
+        }
+      }
+    }
+  }
+
+  if (["approve_device", "reject_device", "remove_device", "unlock_login"].includes(action)) {
+    const u = (db.users || []).find((x) => x.id === body.userId);
+    if (!u) throw new Error("Login not found");
+    if (user.assistant && u.role === "admin" && u.id !== user.id) throw new Error("Only the main admin can change admin logins");
+    u.devices = u.devices || []; u.pendingDevices = u.pendingDevices || [];
+    if (action === "approve_device") {
+      const d = u.pendingDevices.find((x) => x.id === body.deviceId);
+      if (!d) throw new Error("Phone request not found");
+      u.pendingDevices = u.pendingDevices.filter((x) => x.id !== d.id);
+      u.devices.push({ ...d, approvedAt: new Date().toISOString(), approvedBy: user.name });
+      logSignIn(db, u, "phone_approved", { by: user.name, device: d.label, deviceId: d.id });
+    }
+    if (action === "reject_device") u.pendingDevices = u.pendingDevices.filter((x) => x.id !== body.deviceId);
+    if (action === "remove_device") { u.devices = u.devices.filter((x) => x.id !== body.deviceId); logSignIn(db, u, "phone_removed", { by: user.name }); }
+    if (action === "unlock_login") { u.failCount = 0; u.lockedAt = ""; logSignIn(db, u, "unlocked", { by: user.name }); }
+  }
+
+  if (action === "save_pay_profile") {
+    const rec = body.who === "driver" ? db.drivers.find((d) => d.id === body.id) : (db.users || []).find((u) => u.id === body.id);
+    if (!rec) throw new Error("Worker not found");
+    ["payPlan", "payMethod", "payPhone", "bankName", "bankAccount", "accountName"].forEach((k) => { if (body[k] !== undefined) rec[k] = String(body[k]).trim(); });
+    ["tripAllowanceUgx", "monthRateUgx", "perTripUgx", "perSaleUgx", "perSalePct"].forEach((k) => { if (body[k] !== undefined) rec[k] = Number(body[k]) || 0; });
+    if (body.who === "driver" && body.payPlan) rec.payType = body.payPlan === "month" ? "month" : "trip";
+  }
+
+  if (action === "pay_worker") {
+    if (!db.payStubs) db.payStubs = [];
+    const kind = body.kind; // trip | month | cane_trip | sale
+    const amount = Number(body.amountUgx) || 0;
+    if (amount <= 0) throw new Error("Enter the amount to pay");
+    const payee = payeeFrom(body, true);
+    const today = dayOf(body);
+    let role, person, refId = body.refId || "", loadId = "", refLabel = "", drop = "", tag, tripIncome = 0, truckId = "", jobId = "";
+    if (kind === "trip" || kind === "month") {
+      role = "driver";
+      person = db.drivers.find((d) => d.id === body.personId);
+      if (!person) throw new Error("Driver not found");
+      tag = "trucking";
+      if (kind === "trip") {
+        const job = db.jobs.find((j) => j.id === refId);
+        if (!job || job.driverId !== person.id) throw new Error("Load not found for this driver");
+        if (!(["delivered", "invoiced", "paid"].includes(job.status) || job.paid)) throw new Error("Only delivered loads can be paid");
+        loadId = job.code || job.id; refLabel = "Trip allowance · Load " + loadId;
+        drop = (job.origin || "") + " → " + (job.destination || ""); tripIncome = job.paidUgx || job.rateUgx || job.incomeUgx || 0;
+        truckId = job.truckId || ""; jobId = job.id;
+      } else {
+        if (!/^\d{4}-\d{2}$/.test(refId)) throw new Error("Choose the month");
+        refLabel = "Monthly salary · " + new Date(refId + "-15").toLocaleString("en-UG", { month: "long", year: "numeric" });
+      }
+    } else if (kind === "cane_trip") {
+      role = "cane_manager"; tag = "sugarcane";
+      person = (db.users || []).find((u) => u.id === body.personId && u.role === "cane_manager");
+      const sale = (db.caneSales || []).find((x) => x.id === refId);
+      if (!person || !sale) throw new Error("Trip not found");
+      refLabel = "Delivered trip · " + (sale.tonnes || 0) + " t · " + sale.date; tripIncome = sale.amountUgx || 0;
+    } else if (kind === "sale") {
+      role = "passion_manager"; tag = "passion";
+      person = (db.users || []).find((u) => u.id === body.personId && u.role === "passion_manager");
+      const sale = (db.fruitSales || []).find((x) => x.id === refId);
+      if (!person || !sale) throw new Error("Sale not found");
+      refLabel = "Fruit sale · " + (sale.kg || 0) + " kg · " + (sale.buyer || "") + " · " + sale.date; tripIncome = sale.amountUgx || 0;
+    } else throw new Error("Unknown payment");
+    const same = (x) => x.personId === person.id && x.refId === refId && (x.kind === kind || (kind === "cane_trip" && x.role === "cane_manager") || (kind === "sale" && x.role === "passion_manager") || (kind === "trip" && x.kind === "trip"));
+    if (db.payStubs.some((x) => same(x) && x.status === "paid" && (x.method || x.paidVia))) throw new Error("This was already paid");
+    let stub = db.payStubs.find((x) => same(x) && x.status !== "paid");
+    if (!stub) { stub = { id: uid("ps"), requestedAt: today }; db.payStubs.unshift(stub); }
+    Object.assign(stub, {
+      role, personId: person.id, personName: person.name, kind, refId, refLabel, loadId, drop, tripIncome,
+      amountUgx: amount, status: "paid", paidAt: today, year: new Date().getFullYear(), paidVia: "payroll",
+      phone: payee.payeePhone, note: body.note || "", ...payee,
+    });
+    db.cash.unshift({
+      id: uid("k"), date: today, direction: "out", amountUgx: amount, tag, category: "employee_pay",
+      note: refLabel + " · " + person.name, refId: stub.id, truckId, jobId, driverId: role === "driver" ? person.id : "", ...payee,
+    });
+    if (body.remember === "1") {
+      person.payMethod = payee.method;
+      if (payee.payeePhone) person.payPhone = payee.payeePhone;
+      if (payee.method === "bank") { person.bankName = payee.bankName; person.bankAccount = payee.bankAccount; }
+      person.accountName = payee.payeeName;
+    }
+    if (role === "driver") {
+      const how = (METHOD_NAMES[payee.method] || payee.method) + (payee.payeePhone ? " " + payee.payeePhone : payee.bankAccount ? " · " + payee.bankName + " " + payee.bankAccount : "");
+      db.notifications.unshift({ id: uid("n"), toDriverId: person.id, type: "pay", title: "Payment sent", text: refLabel + " · UGX " + amount.toLocaleString("en-UG") + " · " + how, body: refLabel, status: "unread", createdAt: new Date().toISOString() });
+    }
+  }
+
   if (action === "send_float") {
+    // Admin sends trip money to a driver. This is the ONLY place the money is counted as going out.
     if (!db.disbursements) db.disbursements = [];
     const amount = Number(body.amountUgx) || 0;
-    if (amount <= 0) throw new Error("Enter amount");
+    if (amount <= 0) throw new Error("Enter the amount");
+    const tag = ["trucking", "sugarcane", "passion"].includes(body.tag) ? body.tag : "trucking";
+    const reqPre = body.requestId ? (db.moneyRequests || []).find((r) => r.id === body.requestId) : null;
+    const mgrRole = { sugarcane: "cane_manager", passion: "passion_manager" }[tag];
+    const drv = tag === "trucking"
+      ? db.drivers.find((d) => d.id === (body.toDriverId || body.driverId))
+      : (db.users || []).find((u) => u.id === (body.toUserId || (reqPre && reqPre.userId)) && u.role === mgrRole)
+        || (!body.toUserId && (db.users || []).find((u) => u.role === mgrRole && u.active !== false));
+    if (!drv) throw new Error(tag === "trucking" ? "Choose the driver" : "Choose who receives the money");
+    const method = body.method || "mtn_momo";
+    const phone = String(body.payeePhone || "").trim();
+    if ((method === "mtn_momo" || method === "airtel_money") && !phone) throw new Error("Enter the driver's mobile money number");
+    if (method === "bank" && (!String(body.bankName || "").trim() || !String(body.bankAccount || "").trim())) throw new Error("Enter the bank and account number");
+    const req = body.requestId ? (db.moneyRequests || []).find((r) => r.id === body.requestId && (r.status === "open" || r.status === "partial")) : null;
+    if (body.requestId && !req) throw new Error("This request is already settled");
+    const asked = req ? Number(req.amountUgx || req.totalUgx) || 0 : 0;
+    const sentBefore = req ? Number(req.sentUgx) || 0 : 0;
+    if (req && amount > asked - sentBefore + 0.5) throw new Error("Only UGX " + (asked - sentBefore).toLocaleString("en-UG") + " is still requested. Send extra money without a request.");
     const fl = {
       id: uid("fl"),
-      tag: body.tag || "trucking",
-      activity: body.activity || "to_driver",
+      tag,
+      activity: body.activity || (req && (req.activity || (req.lines && req.lines[0] && req.lines[0].activity))) || "other",
       amountUgx: amount,
-      toDriverId: body.toDriverId || body.driverId || "",
-      truckId: body.truckId || "",
-      jobId: body.jobId || "",
-      note: body.note || "",
+      toDriverId: tag === "trucking" ? drv.id : "",
+      toUserId: tag === "trucking" ? "" : drv.id,
+      truckId: tag === "trucking" ? body.truckId || drv.assignedTruckId || "" : "",
+      jobId: body.jobId || (req && req.jobId) || "",
+      caneBuyId: body.caneBuyId || (req && req.caneBuyId) || "",
+      blockId: body.blockId || (req && req.blockId) || "",
+      note: body.note || (req && req.note) || "",
       status: "sent",
-      date: body.date || new Date().toISOString().slice(0, 10),
+      date: dayOf(body),
       usages: [],
+      requestId: req ? req.id : "",
+      payeeName: drv.name,
+      method,
+      payeePhone: method === "mtn_momo" || method === "airtel_money" ? phone : "",
+      bankName: method === "bank" ? String(body.bankName).trim() : "",
+      bankAccount: method === "bank" ? String(body.bankAccount).trim() : "",
+      reference: String(body.reference || "").trim(),
     };
+    if (body.saveNumber === "1" && fl.payeePhone) { drv.payPhone = fl.payeePhone; drv.payMethod = method; }
+    if (req) {
+      req.sentUgx = sentBefore + amount;
+      req.floatIds = (req.floatIds || []).concat(fl.id);
+      req.floatId = fl.id;
+      req.decidedAt = fl.date;
+      const short = req.sentUgx < asked;
+      req.status = !short ? "sent" : body.final === "1" ? "final" : "partial";
+      fl.requestedUgx = asked;
+      fl.part = short && body.final !== "1" ? "partial" : short ? "final" : "full";
+    }
     db.disbursements.unshift(fl);
     db.cash.unshift({
-      id: uid("k"),
-      date: fl.date,
-      direction: "out",
-      amountUgx: amount,
-      tag: fl.tag,
-      method: body.method || "cash",
-      note: fl.note || ("Sent to driver"),
-      category: fl.activity,
-      truckId: fl.truckId,
-      jobId: fl.jobId,
-      refId: fl.id,
+      id: uid("k"), date: fl.date, direction: "out", amountUgx: amount, tag,
+      category: fl.activity, note: "Advance to " + drv.name + (fl.note ? " · " + fl.note : ""),
+      truckId: fl.truckId, jobId: fl.jobId, caneBuyId: fl.caneBuyId, blockId: fl.blockId, driverId: fl.toDriverId, userId: fl.toUserId, refId: fl.id,
+      payeeName: fl.payeeName, method: fl.method, payeePhone: fl.payeePhone, bankName: fl.bankName, bankAccount: fl.bankAccount, reference: fl.reference,
     });
-    if (fl.toDriverId) {
-      db.notifications.unshift({
-        id: uid("n"),
-        toDriverId: fl.toDriverId,
-        truckId: fl.truckId,
-        type: "float",
-        title: "Money sent",
-        body: "UGX " + amount.toLocaleString("en-UG"),
-        status: "unread",
-        createdAt: new Date().toISOString(),
-      });
+    const how = (METHOD_NAMES[method] || method) + (fl.payeePhone ? " " + fl.payeePhone : "");
+    if (tag === "trucking") db.notifications.unshift({
+      id: uid("n"), toDriverId: drv.id, truckId: fl.truckId, type: "float", title: "Money sent",
+      text: "Advance UGX " + amount.toLocaleString("en-UG") + " sent by " + how + (req ? (req.status === "partial" ? " (part of your UGX " + asked.toLocaleString("en-UG") + " request, rest to follow)" : req.status === "final" ? " (final for your UGX " + asked.toLocaleString("en-UG") + " request)" : "") : "") + ". Confirm it on Advance.",
+      body: "UGX " + amount.toLocaleString("en-UG"), status: "unread", createdAt: new Date().toISOString(),
+    });
+  }
+
+  if (action === "request_advance") {
+    const amount = Number(body.amountUgx) || 0;
+    if (amount <= 0) throw new Error("Enter how much you need");
+    const tag = TAG_OF_ROLE[user.role];
+    if (!tag) throw new Error("No access");
+    const drv = user.role === "driver" ? db.drivers.find((d) => d.id === user.driverId) : null;
+    if (!db.moneyRequests) db.moneyRequests = [];
+    const req = {
+      id: uid("mr"), tag, date: todayStr(),
+      driverId: user.role === "driver" ? user.driverId : "", userId: user.role === "driver" ? "" : user.id,
+      truckId: (drv && drv.assignedTruckId) || "", jobId: body.jobId || "", caneBuyId: body.caneBuyId || "", blockId: body.blockId || "",
+      activity: body.activity || "other", amountUgx: amount, totalUgx: amount,
+      lines: [{ activity: body.activity || "other", amountUgx: amount }],
+      note: String(body.note || "").trim(), status: "open", by: user.name, byRole: user.role,
+      neededBy: /^\d{4}-\d{2}-\d{2}$/.test(String(body.neededBy || "")) ? body.neededBy : "", requestedAt: new Date().toISOString(),
+    };
+    db.moneyRequests.unshift(req);
+    db.notifications.unshift({ id: uid("n"), toRole: "admin", type: "money_request", title: "Money request", body: user.name + " · UGX " + amount.toLocaleString("en-UG"), status: "unread", createdAt: new Date().toISOString() });
+  }
+
+  if (action === "decline_advance") {
+    const req = (db.moneyRequests || []).find((r) => r.id === body.id && r.status === "open");
+    if (!req) throw new Error("Request not found");
+    req.status = "rejected";
+    req.decidedAt = todayStr();
+    req.reason = String(body.reason || "").trim();
+    if (req.driverId) db.notifications.unshift({ id: uid("n"), toDriverId: req.driverId, type: "float", title: "Request declined", text: "Your request for UGX " + (req.amountUgx || req.totalUgx || 0).toLocaleString("en-UG") + " was declined" + (req.reason ? ": " + req.reason : "."), status: "unread", createdAt: new Date().toISOString() });
+  }
+
+  if (action === "log_direct_spend") {
+    const tag = user.role === "admin" ? (body.tag || "overhead") : TAG_OF_ROLE[user.role];
+    spendFromAdvanceOrCash(db, user, { ...body, floatId: "" }, tag, { caneBuyId: body.caneBuyId || "", blockId: body.blockId || "", jobId: body.jobId || "", truckId: body.truckId || "" });
+  }
+
+  if (action === "finalize_request") {
+    // Part was sent; the rest will not be paid. Not declined, settled at the amount sent.
+    const req = (db.moneyRequests || []).find((r) => r.id === body.id && r.status === "partial");
+    if (!req) throw new Error("Request not found");
+    req.status = "final";
+    req.decidedAt = todayStr();
+    req.reason = String(body.reason || "").trim();
+    if (req.driverId) db.notifications.unshift({ id: uid("n"), toDriverId: req.driverId, type: "float", title: "Request settled", text: "Your request was settled at UGX " + (req.sentUgx || 0).toLocaleString("en-UG") + " (asked UGX " + (req.amountUgx || req.totalUgx || 0).toLocaleString("en-UG") + ").", status: "unread", createdAt: new Date().toISOString() });
+  }
+
+  if (action === "close_advance") {
+    const fl = (db.disbursements || []).find((x) => x.id === body.id);
+    if (!fl) throw new Error("Advance not found");
+    if (fl.status === "closed") throw new Error("Already closed");
+    const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
+    const left = Math.max(0, fl.amountUgx - used);
+    const back = Number(body.returnedUgx) || 0;
+    if (back < 0 || back > left) throw new Error("Returned cash can be 0 to " + left.toLocaleString("en-UG"));
+    fl.status = "closed";
+    fl.closedAt = dayOf(body);
+    fl.returnedUgx = back;
+    fl.closeNote = String(body.note || "").trim();
+    if (back > 0) {
+      const who = db.drivers.find((d) => d.id === fl.toDriverId) || (db.users || []).find((u) => u.id === fl.toUserId);
+      db.cash.unshift({ id: uid("k"), date: fl.closedAt, direction: "in", amountUgx: back, tag: fl.tag || "trucking", category: "advance_return", method: body.method || "cash", note: "Advance balance returned · " + (who ? who.name : ""), refId: fl.id, driverId: fl.toDriverId || "", userId: fl.toUserId || "", truckId: fl.truckId || "" });
     }
   }
 
   if (action === "ack_float") {
     const fl = (db.disbursements || []).find((x) => x.id === body.id);
-    if (!fl) throw new Error("Not found");
+    if (!fl || !ownsFloat(fl, user)) throw new Error("Not found");
     fl.status = "received";
-    fl.receivedAt = new Date().toISOString().slice(0, 10);
+    fl.receivedAt = todayStr();
   }
 
   if (action === "log_float_use") {
     const fl = (db.disbursements || []).find((x) => x.id === body.id);
-    if (!fl) throw new Error("Not found");
-    const amount = Number(body.amountUgx) || 0;
-    if (amount <= 0) throw new Error("Enter amount used");
-    const usedSoFar = (fl.usages || []).reduce((s, u) => s + (u.amountUgx || 0), 0);
-    const left = fl.amountUgx - usedSoFar;
-    if (amount > left + 0.5) throw new Error("Only " + left + " UGX left on this send");
-    const use = {
-      id: uid("fu"),
-      amountUgx: amount,
-      category: body.category || "other",
-      note: body.note || body.otherNote || "",
-      date: new Date().toISOString().slice(0, 10),
-      photo: body.photo || "",
-    };
-    fl.usages = fl.usages || [];
-    fl.usages.unshift(use);
-    const used = usedSoFar + amount;
-    fl.status = used >= fl.amountUgx ? "spent" : "received";
+    if (!fl || !ownsFloat(fl, user)) throw new Error("Advance not found");
+    addFloatUse(db, fl, body, user);
   }
 
   if (action === "log_trip_result") {
@@ -1434,18 +1963,9 @@ function applyAction(db, user, body) {
     job.payPerTonne = Number(body.payPerTonne) || 0;
     job.incomeUgx = Math.round((job.tonnesDelivered || 0) * (job.payPerTonne || 0)) || Number(body.incomeUgx) || job.rateUgx || 0;
     job.status = "delivered";
-    job.paid = true;
-    db.cash.unshift({
-      id: uid("k"),
-      date: new Date().toISOString().slice(0, 10),
-      direction: "in",
-      amountUgx: job.incomeUgx,
-      tag: "trucking",
-      method: body.method || "cash",
-      note: (job.cargo || "Trip") + " · " + job.tonnesDelivered + " t",
-      truckId: job.truckId,
-      jobId: job.id,
-    });
+    job.deliveredAt = job.deliveredAt || dayOf(body);
+    job.paid = true; job.paidAt = dayOf(body); job.paidUgx = job.incomeUgx;
+    recordJobIncome(db, job, job.incomeUgx, job.paidAt, body.method || "cash");
   }
 
   if (action === "record_receipt") {
@@ -1453,7 +1973,7 @@ function applyAction(db, user, body) {
     const rec = db.receivables.find((r) => r.id === body.id);
     if (!rec) throw new Error("Not found");
     rec.status = "paid";
-    rec.paidDate = new Date().toISOString().slice(0, 10);
+    rec.paidDate = todayStr();
     db.cash.unshift({
       id: uid("k"),
       date: rec.paidDate,
@@ -1469,77 +1989,419 @@ function applyAction(db, user, body) {
   }
 }
 
+// ---- office sync: phones send only what changed; the server merges record by record ----
+const KEY_BASE = "conacrew.base.v1";
+const SYNC_URL = "/.netlify/functions/sync";
+const MEDIA_URL = "/.netlify/functions/media";
+const SYNC_LOCAL = new Set(["updatedAt", "mediaTrimmedAt", "_meta"]);
+const MEDIA_MIN = 1500;
+const isRecList = (v) => Array.isArray(v) && v.every((x) => x && typeof x === "object" && !Array.isArray(x) && (typeof x.id === "string" || typeof x.id === "number"));
+function hashOf(v) {
+  const s = JSON.stringify(v === undefined ? null : v);
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+}
+// small SHA-256 (for checking a PIN on a phone that is offline)
+function sha256hex(str) {
+  const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+  const bytes = Array.from(unescape(encodeURIComponent(str)), (c) => c.charCodeAt(0));
+  const l = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (l >>> (i * 8)) & 255);
+  let H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  const r = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let o = 0; o < bytes.length; o += 64) {
+    const w = [];
+    for (let i = 0; i < 16; i++) w[i] = (bytes[o + i * 4] << 24) | (bytes[o + i * 4 + 1] << 16) | (bytes[o + i * 4 + 2] << 8) | bytes[o + i * 4 + 3];
+    for (let i = 16; i < 64; i++) { const s0 = r(w[i - 15], 7) ^ r(w[i - 15], 18) ^ (w[i - 15] >>> 3); const s1 = r(w[i - 2], 17) ^ r(w[i - 2], 19) ^ (w[i - 2] >>> 10); w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0; }
+    let [a, b, c, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+      const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H = H.map((x, i) => (x + [a, b, c, d, e, f, g, h][i]) | 0);
+  }
+  return H.map((x) => (x >>> 0).toString(16).padStart(8, "0")).join("");
+}
+function readBase() {
+  try { const b = JSON.parse(localStorage.getItem(KEY_BASE) || "null"); if (b && b.h) return b; } catch (e) {}
+  return { seq: 0, skew: 0, h: {}, t: {} };
+}
+function writeBase(b) { try { localStorage.setItem(KEY_BASE, JSON.stringify(b)); } catch (e) {} }
+// What this phone changed since the last sync
+function diffBook(db, base) {
+  const ch = { set: {}, del: {}, top: {}, topU: {} };
+  let n = 0;
+  for (const k of Object.keys(db)) {
+    if (SYNC_LOCAL.has(k)) continue;
+    const v = db[k];
+    if (isRecList(v) && !(k in base.t)) {
+      const bh = base.h[k] || {};
+      const seen = new Set();
+      v.forEach((r) => { seen.add(String(r.id)); if (bh[r.id] !== hashOf(r)) { (ch.set[k] = ch.set[k] || []).push(r); n++; } });
+      Object.keys(bh).forEach((id) => { if (!seen.has(id)) { (ch.del[k] = ch.del[k] || []).push(id); n++; } });
+    } else if (base.t[k] !== hashOf(v)) { ch.top[k] = v; n++; }
+  }
+  return n ? ch : null;
+}
+async function liftMediaIn(value, token, depth) {
+  depth = depth || 0;
+  if (depth > 6 || value == null) return value;
+  if (typeof value === "string") {
+    if (value.length < MEDIA_MIN || !value.startsWith("data:")) return value;
+    const res = await fetch(MEDIA_URL, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) }, body: JSON.stringify({ data: value }) });
+    if (!res.ok) throw Object.assign(new Error("media upload " + res.status), { status: res.status });
+    return (await res.json()).url || value;
+  }
+  if (Array.isArray(value)) { for (let i = 0; i < value.length; i++) value[i] = await liftMediaIn(value[i], token, depth + 1); return value; }
+  if (typeof value === "object") { for (const k of Object.keys(value)) value[k] = await liftMediaIn(value[k], token, depth + 1); return value; }
+  return value;
+}
+const hasDataUrl = (v) => JSON.stringify(v).indexOf('"data:') >= 0;
+// Put the office's answer into this phone's book. `pre` holds each record's fingerprint at send time:
+// a record edited again while the request was on its way keeps the newer phone copy (it goes up next time).
+function applyDelta(db, base, d, pre) {
+  const preOf = (k, id) => (pre.h[k] && id in pre.h[k] ? pre.h[k][id] : (pre.base.h[k] || {})[id]);
+  let foreign = 0;
+  const mine = (k, id) => pre.h[k] && id in pre.h[k];
+  if (d.full) {
+    const out = {};
+    SYNC_LOCAL.forEach((k) => { if (k in db) out[k] = db[k]; });
+    base.h = {}; base.t = {};
+    for (const [k, recs] of Object.entries(d.set || {})) {
+      base.h[k] = {};
+      const local = new Map((Array.isArray(db[k]) ? db[k] : []).filter((r) => r && r.id != null).map((r) => [String(r.id), r]));
+      const list = [];
+      recs.forEach((r) => {
+        base.h[k][r.id] = hashOf(r);
+        const cur = local.get(String(r.id));
+        local.delete(String(r.id));
+        if (!pre.replace && cur && preOf(k, r.id) !== undefined && hashOf(cur) !== preOf(k, r.id)) list.push(cur); else { list.push(r); if (!cur || hashOf(cur) !== hashOf(r)) foreign++; }
+      });
+      // new on this phone while the request was on its way: keep
+      if (!pre.replace) local.forEach((r, id) => { if (preOf(k, id) === undefined) list.unshift(r); });
+      out[k] = list;
+    }
+    for (const [k, v] of Object.entries(d.top || {})) { out[k] = v; base.t[k] = hashOf(v); if (hashOf(db[k]) !== base.t[k] && !(pre.t && k in pre.t)) foreign++; }
+    if (!pre.replace) for (const k of Object.keys(db)) if (!(k in out)) out[k] = db[k]; // keys the office doesn't have yet
+    base.seq = d.seq;
+    return { db: out, foreign };
+  }
+  for (const [k, recs] of Object.entries(d.set || {})) {
+    if (!Array.isArray(db[k]) || !isRecList(db[k])) db[k] = [];
+    if (!base.h[k]) base.h[k] = {};
+    recs.forEach((r) => {
+      const i = db[k].findIndex((x) => String(x.id) === String(r.id));
+      const cur = i >= 0 ? db[k][i] : null;
+      base.h[k][r.id] = hashOf(r);
+      if (cur && preOf(k, r.id) !== undefined && hashOf(cur) !== preOf(k, r.id)) return; // edited again meanwhile
+      if (!mine(k, r.id)) foreign++;
+      if (i >= 0) db[k][i] = r; else db[k].unshift(r);
+    });
+  }
+  for (const [k, ids] of Object.entries(d.del || {})) {
+    if (!Array.isArray(db[k])) continue;
+    const gone = new Set(ids.map(String));
+    const before = db[k].length;
+    db[k] = db[k].filter((x) => !gone.has(String(x.id)));
+    if (db[k].length !== before) foreign++;
+    if (base.h[k]) gone.forEach((id) => { delete base.h[k][id]; });
+  }
+  for (const [k, v] of Object.entries(d.top || {})) {
+    base.t[k] = hashOf(v);
+    if (pre.t && k in pre.t && hashOf(db[k]) !== pre.t[k]) continue;
+    if (hashOf(db[k]) !== base.t[k]) foreign++;
+    db[k] = v;
+    if (base.h[k]) delete base.h[k];
+  }
+  base.seq = d.seq;
+  return { db, foreign };
+}
+
 const Conacrew = {
   seed: null,
   async init() {
     if (this.seed) return;
     const res = await fetch("./seed.json");
     this.seed = await res.json();
-    if (!localStorage.getItem(KEY_DB)) localStorage.setItem(KEY_DB, JSON.stringify(pruneFleet(deep(this.seed))));
-    else {
+    if (!localStorage.getItem(KEY_DB)) {
+      const fresh = pruneFleet(deep(this.seed));
+      fresh.bookVersion = 2;
+      fresh.updatedAt = 0; // an empty new phone is never "newer" than the office book
+      storeBook(fresh);
+    } else {
       const db = JSON.parse(localStorage.getItem(KEY_DB));
-      let changed = false;
       ["fleetTasks", "notifications", "issues", "services", "farmWorks", "receivables", "disbursements", "caneSales", "caneExpenses", "moneyRequests", "jobsTrash", "cargoTypes", "payStubs", "inspections"].forEach((k) => {
-        if (!db[k]) {
-          db[k] = this.seed[k] || [];
-          changed = true;
-        }
+        if (!db[k]) db[k] = this.seed[k] || [];
       });
       pruneFleet(db);
-      localStorage.setItem(KEY_DB, JSON.stringify(db));
+      storeBook(db);
     }
+    await this.probe();
+    if (this.server === "empty" || this.token()) await this.syncNow();
+    const db = this.db();
+    if (hasAdmin(db) && ensureRoster(db)) this.push(db);
+    this.autoSync();
   },
+  // server: "ok" (office book reachable) | "empty" (server has no book yet) | "none" (no sync server: this phone only)
+  //         | "offline" | "signin" (signed in without the office: sign in again to sync)
+  server: "",
+  lastOk: 0,
+  syncing: null,
+  again: false,
+  token() { const s = this.session(); return (s && s.token) || ""; },
+  async probe() {
+    try {
+      const res = await fetch(SYNC_URL, { cache: "no-store" });
+      if (!res.ok) { this.server = res.status === 404 ? "none" : "offline"; return; }
+      const j = await res.json().catch(() => null);
+      if (!j || j.server !== 2) { this.server = "none"; return; } // old sync function: not supported
+      this.server = j.exists ? (this.token() || !this.session() ? "ok" : "signin") : "empty";
+    } catch (e) { this.server = "offline"; }
+    this.emit();
+  },
+  emit(name) { try { window.dispatchEvent(new CustomEvent(name || "conacrew:sync", { detail: { server: this.server, lastOk: this.lastOk } })); } catch (e) {} },
+  syncNow() {
+    if (this.syncing) { this.again = true; return this.syncing; }
+    this.syncing = (async () => {
+      try { do { this.again = false; await this.syncOnce(); } while (this.again); }
+      catch (e) { if (this.server === "ok") this.server = "offline"; }
+      finally { this.syncing = null; this.emit(); }
+    })();
+    return this.syncing;
+  },
+  async pull() { await this.syncNow(); },
+  async syncOnce() {
+    if (this.server === "" || this.server === "offline") await this.probe();
+    if (this.server === "none" || this.server === "offline") return;
+    let db = this.db();
+    const base = readBase();
+    if (this.server === "empty") {
+      // First time: the main admin's phone starts the office book
+      const real = this.realUser();
+      if (!real || !isMainAdmin(real) || !hasAdmin(db)) return;
+      if (hasDataUrl(db)) { await liftMediaIn(db, ""); storeBook(db); }
+      const res = await fetch(SYNC_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "seed", book: db, userId: real.id, deviceId: deviceId() }) });
+      if (res.status === 409) { this.server = "ok"; this.again = true; return; }
+      const d = await res.json();
+      if (!res.ok || d.error) throw new Error(d.error || "seed failed");
+      const s = this.session(); s.token = d.token; this.setSession(s);
+      const got = applyDelta(db, base, d, { h: {}, t: {}, base: { h: {}, t: {} } });
+      base.skew = d.now - Date.now();
+      storeBook(pruneFleet(got.db)); writeBase(base);
+      this.server = "ok"; this.lastOk = Date.now();
+      return;
+    }
+    const token = this.token();
+    if (!token) { this.server = "signin"; return; }
+    const fresh = this._fresh;
+    const ch = fresh ? null : diffBook(db, base);
+    const pre = fresh ? { h: {}, t: {}, base: { h: {}, t: {} }, replace: true } : { h: {}, t: {}, base: JSON.parse(JSON.stringify(base)) };
+    if (ch) {
+      const at = Date.now() + (base.skew || 0);
+      if (base.seq) { Object.values(ch.set).forEach((recs) => recs.forEach((r) => { r._u = at; })); Object.keys(ch.top).forEach((k) => { ch.topU[k] = at; }); }
+      ch.delU = {}; Object.entries(ch.del).forEach(([c, ids]) => ids.forEach((id) => { ch.delU[c + ":" + id] = at; }));
+      if (hasDataUrl(ch.set) || hasDataUrl(ch.top)) await liftMediaIn(ch, token); // photos go up on their own
+      storeBook(db);
+      Object.entries(ch.set).forEach(([k, recs]) => { pre.h[k] = {}; recs.forEach((r) => { pre.h[k][r.id] = hashOf(r); }); });
+      Object.keys(ch.top).forEach((k) => { pre.t[k] = hashOf(ch.top[k]); });
+    }
+    const res = await fetch(SYNC_URL, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + token }, body: JSON.stringify({ op: "sync", since: fresh ? 0 : base.seq, changes: ch || {} }) });
+    if (res.status === 401) {
+      // token expired, phone removed or login turned off: this person must sign in again
+      const s = this.session(); if (s) { delete s.token; this.setSession(s); }
+      this.logout(); this.server = "ok"; this.emit("conacrew:signin"); return;
+    }
+    const d = await res.json();
+    if (d.empty) { this.server = "empty"; this.again = true; return; }
+    if (!res.ok || d.error) throw new Error(d.error || "sync failed");
+    db = this.db(); // the phone may have saved more while waiting
+    const got = applyDelta(db, base, d, pre);
+    base.skew = d.now - Date.now();
+    storeBook(pruneFleet(got.db)); writeBase(base);
+    this._fresh = false;
+    this.server = "ok"; this.lastOk = Date.now();
+    if (got.foreign) this.emit("conacrew:changed");
+  },
+  autoSync() {
+    if (this._auto || typeof window === "undefined") return;
+    this._auto = true;
+    const tick = () => { if (!document.hidden && this.session() && this.server !== "none") this.syncNow(); };
+    setInterval(tick, 45000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+    window.addEventListener("online", () => { this.server = ""; tick(); });
+  },
+  push(db) {
+    if (!hasAdmin(db)) { storeBook(db); return; } // never upload an empty book
+    db.updatedAt = Date.now();
+    storeBook(db);
+    if (this.server === "none") return;
+    clearTimeout(this._pushT);
+    this._pushT = setTimeout(() => this.syncNow(), 300);
+  },
+  setSession(s) { try { localStorage.setItem(KEY_USER, JSON.stringify(s)); sessionStorage.removeItem(KEY_USER); } catch (e) {} },
   db() {
-    return JSON.parse(localStorage.getItem(KEY_DB) || "null") || deep(this.seed);
+    let db = null;
+    try { db = JSON.parse(localStorage.getItem(KEY_DB) || "null"); } catch (e) {}
+    return pruneFleet(db || deep(this.seed));
   },
   save(db) {
-    localStorage.setItem(KEY_DB, JSON.stringify(db));
+    this.push(db);
   },
   reset() {
     localStorage.setItem(KEY_DB, JSON.stringify(pruneFleet(deep(this.seed))));
     localStorage.removeItem(KEY_USER);
   },
   session() {
-    const raw = sessionStorage.getItem(KEY_USER);
+    let raw = null;
+    try { raw = localStorage.getItem(KEY_USER) || sessionStorage.getItem(KEY_USER); } catch (e) {}
     return raw ? JSON.parse(raw) : null;
   },
-  user() {
+  // "View as" (admins, look only): see the app as another person without their PIN
+  viewing() {
+    let id = "";
+    try { id = sessionStorage.getItem("conacrew.viewAs") || ""; } catch (e) {}
+    return id;
+  },
+  viewAs(userId) { try { sessionStorage.setItem("conacrew.viewAs", userId); } catch (e) {} },
+  stopViewing() { try { sessionStorage.removeItem("conacrew.viewAs"); } catch (e) {} },
+  realUser() {
     const s = this.session();
     if (!s) return null;
-    const u = this.db().users.find((x) => x.id === s.userId && x.active) || null;
+    const u = this.db().users.find((x) => x.id === s.userId && x.active !== false) || null;
     if (!u) return null;
     if (u.role !== s.role) return null;
     if (u.role === "driver") {
       if (!u.driverId || u.driverId !== s.driverId) return null;
     }
+    if (!isMainAdmin(u)) {
+      if (!s.at || Date.now() - s.at > SESSION_HOURS * 3600e3) { this.logout(); return null; } // sign in again every 24h
+      if (u.lockedAt) { this.logout(); return null; }
+      if (!deviceOk(this.db(), u, s.deviceId)) { this.logout(); return null; } // phone removed by admin
+    }
     return u;
   },
-  login(phone, pin) {
-    const p = phoneKey(phone);
-    const user = this.db().users.find((u) => phoneKey(u.phone) === p && u.active);
-    if (!user || user.pin !== String(pin || "").trim()) throw new Error("Wrong phone or PIN.");
-    if (user.role === "driver" && !user.driverId) {
-      throw new Error("This driver login is not linked to a driver record.");
+  user() {
+    const real = this.realUser();
+    if (!real) return null;
+    const v = real.role === "admin" ? this.viewing() : "";
+    if (v && v !== real.id) {
+      const target = this.db().users.find((x) => x.id === v);
+      if (target) return target;
     }
-    sessionStorage.setItem(
-      KEY_USER,
-      JSON.stringify({
-        userId: user.id,
-        role: user.role,
-        driverId: user.driverId || null,
-      })
-    );
+    return real;
+  },
+  createOwner(name, phone, pin) {
+    const n = String(name || "").trim();
+    const p = phoneKey(phone);
+    const code = String(pin || "").trim();
+    if (!n || !p || !/^\d{6}$/.test(code)) throw new Error("Enter your name, phone, and a 6-digit PIN.");
+    const db = this.db();
+    if ((db.users || []).some((u) => u.role === "admin")) throw new Error("Admin already exists.");
+    db.users.unshift({ id: uid("u"), name: n, phone: p, pin: code, role: "admin", active: true });
+    db.bookVersion = 2;
+    this.save(db);
+  },
+  async login(phone, pin) {
+    const p = phoneKey(phone);
+    if (!p) throw new Error("Enter your phone number.");
+    if (!this.server || this.server === "offline") await this.probe();
+    if (this.server === "ok" || this.server === "signin") {
+      let j;
+      try {
+        const res = await fetch(SYNC_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "login", phone: p, pin: String(pin || "").trim(), deviceId: deviceId(), label: deviceLabel() }) });
+        j = await res.json();
+      } catch (e) {
+        this.server = "offline";
+        return this.localLogin(phone, pin); // no signal: check the PIN on this phone, sync later
+      }
+      if (j.empty) { this.server = "empty"; return this.localLogin(phone, pin); }
+      if (j.error) throw new Error(j.error);
+      if (j.needsApproval) return { ok: false, needsApproval: true, name: j.name };
+      const prev = this.session();
+      if (!prev || prev.userId !== j.user.id || !prev.token) this._fresh = true; // new person on this phone: take the office copy
+      this.setSession({ userId: j.user.id, role: j.user.role, driverId: j.user.driverId || null, at: Date.now(), deviceId: deviceId(), token: j.token });
+      this.stopViewing();
+      this.server = "ok";
+      try { await this.syncNow(); } catch (e) {}
+      const u = this.db().users.find((x) => x.id === j.user.id);
+      if (!u) throw new Error("Signed in, but this phone could not load the office book. Check the connection and try again.");
+      return { ok: true, role: j.user.role, name: j.user.name, home: homeFor(j.user.role) };
+    }
+    return this.localLogin(phone, pin);
+  },
+  localLogin(phone, pin) {
+    const p = phoneKey(phone);
+    if (!p) throw new Error("Enter your phone number.");
+    const db = this.db();
+    const matches = db.users.filter((u) => phoneKey(u.phone) === p);
+    const user = matches.find((u) => u.active !== false) || matches[0];
+    const fail = (msg, result) => { logSignIn(db, user, result, user ? {} : { phone: p }); this.save(db); throw new Error(msg); };
+    if (!user) fail("No login uses this phone number. Ask the admin to add you on Team & logins.", "unknown_phone");
+    if (user.active === false) fail("This login is turned off. Ask the admin.", "turned_off");
+    if (!user.pin && !user.pinHash) fail("No PIN has been set for this login yet. Ask the admin to set one.", "no_pin");
+    const pinOk = user.pin ? String(user.pin) === String(pin || "").trim() : sha256hex(user.id + ":" + String(pin || "").trim()) === user.pinHash;
+    const main = isMainAdmin(user);
+    if (!main && user.lockedAt) fail("This login is locked after too many wrong PINs. Ask the admin to unlock it.", "locked");
+    if (!pinOk) {
+      if (!main) {
+        user.failCount = (user.failCount || 0) + 1;
+        if (user.failCount >= MAX_TRIES) { user.lockedAt = new Date().toISOString(); fail("Wrong PIN. This login is now locked. Ask the admin to unlock it.", "locked_now"); }
+        fail("Wrong PIN. " + (MAX_TRIES - user.failCount) + " tries left before this login locks.", "wrong_pin");
+      }
+      fail("Wrong PIN.", "wrong_pin");
+    }
+    if (user.role === "driver" && !user.driverId) throw new Error("This driver login is not linked to a driver record.");
+    user.failCount = 0;
+    const dev = deviceId();
+    if (!main && !deviceOk(db, user, dev)) {
+      // new phone: ask the admin to approve it
+      user.pendingDevices = (user.pendingDevices || []).filter((d) => d.id !== dev);
+      user.pendingDevices.push({ id: dev, label: deviceLabel(), requestedAt: new Date().toISOString() });
+      logSignIn(db, user, "new_phone");
+      this.save(db);
+      return { ok: false, needsApproval: true, name: user.name };
+    }
+    logSignIn(db, user, "ok");
+    this.save(db);
+    this.setSession({ userId: user.id, role: user.role, driverId: user.driverId || null, at: Date.now(), deviceId: dev });
+    this.stopViewing();
     return { ok: true, role: user.role, name: user.name, home: homeFor(user.role) };
   },
   logout() {
-    sessionStorage.removeItem(KEY_USER);
+    this.flush();
+    try { localStorage.removeItem(KEY_USER); sessionStorage.removeItem(KEY_USER); } catch (e) {}
+    this.stopViewing();
+  },
+  // send anything not yet synced before this person leaves the phone
+  flush() {
+    try {
+      const token = this.token();
+      if (!token || this.server === "none") return;
+      const base = readBase();
+      const ch = diffBook(this.db(), base);
+      if (!ch || hasDataUrl(ch)) return;
+      const at = Date.now() + (base.skew || 0);
+      if (base.seq) { Object.values(ch.set).forEach((recs) => recs.forEach((r) => { r._u = at; })); Object.keys(ch.top).forEach((k) => { ch.topU[k] = at; }); }
+      fetch(SYNC_URL, { method: "POST", keepalive: true, headers: { "content-type": "application/json", authorization: "Bearer " + token }, body: JSON.stringify({ op: "sync", since: base.seq, changes: ch }) }).catch(() => {});
+    } catch (e) {}
   },
   bootstrap() {
     const user = this.user();
     if (!user) throw Object.assign(new Error("Sign in required"), { status: 401 });
-    return scopedDb(this.db(), user);
+    const data = scopedDb(this.db(), user);
+    const real = this.realUser();
+    if (real && real.id !== user.id) data.viewingAs = { by: real.name, name: user.name, role: user.role };
+    return data;
   },
   act(action, payload) {
+    const real = this.realUser();
+    if (real && this.user() && this.user().id !== real.id) throw new Error("Look only: you're viewing as someone else. Go back to your own view to make changes.");
     const user = this.user();
     if (!user) throw Object.assign(new Error("Sign in required"), { status: 401 });
     const db = this.db();

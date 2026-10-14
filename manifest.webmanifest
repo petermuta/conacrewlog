@@ -1,7 +1,7 @@
 {
   "name": "Conacrew Logistics",
   "short_name": "Conacrew",
-  "start_url": "./index.html",
+  "start_url": "./app.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0d4a30",

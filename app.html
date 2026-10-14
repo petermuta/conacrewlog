@@ -10,13 +10,14 @@
   <link rel="apple-touch-icon" href="./logo-mark.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" href="./logo-mark.png" />
-  <link rel="stylesheet" href="./styles.css?v=62" />
+  <link rel="stylesheet" href="./styles.css?v=125" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
   <header class="top">
     <div class="top-in">
       <div class="top-bar">
+        <button class="btn btn-ghost" id="refresh" aria-label="Refresh" onclick="softRefresh()">↻<span class="sync-dot grey" id="syncDot"></span></button>
         <div class="logo">
           <img class="mark-img" src="./logo-mark.png" alt="Conacrew" />
           <div class="logo-lockup">
@@ -25,23 +26,75 @@
           </div>
         </div>
         <div class="top-user">
-          <div style="text-align:right">
+          <button class="btn btn-ghost" id="out" onclick="try{Conacrew.logout()}catch(e){} location.href='./index.html'">Sign out</button>
+          <div class="who-block">
             <div id="who" style="font-size:14px;font-weight:600"></div>
             <div class="eyebrow" id="role"></div>
           </div>
-          <button class="btn btn-ghost" id="out">Sign out</button>
         </div>
       </div>
-      <label class="menu-box top-menu"><span>More pages</span><select class="field nav-jump" id="navJump" aria-label="Pages"></select></label>
       <nav class="nav desk-only" id="nav"></nav>
     </div>
   </header>
-  <main class="wrap" id="app"></main>
+  <div class="sync-bar" id="syncBar" hidden></div>
+  <main class="wrap" id="app">
+    <h1 id="bootTitle">Home</h1>
+    <div class="page-links" id="bootLinks">
+      <a href="#trucks">Fleet</a>
+      <a href="#cane">Cane</a>
+      <a href="#passion">Passion</a>
+      <a href="#money">Money</a>
+    </div>
+  </main>
+  <script>
+    try {
+      const s = JSON.parse(localStorage.getItem("conacrew.user.v2") || sessionStorage.getItem("conacrew.user.v2") || "null");
+      const box = document.getElementById("bootLinks");
+      const title = document.getElementById("bootTitle");
+      if (sessionStorage.getItem("conacrew.viewAs")) {
+      } else if (s && s.role === "driver" && box) {
+        title.textContent = "Driver";
+        box.innerHTML = '<a href="#drive">Desk</a><a href="#drive-jobs">Jobs</a><a href="#drive-pay">My pay</a><a href="#drive-report">Inspect</a>';
+        if (!location.hash || location.hash === "#home") location.hash = "drive";
+      } else if (s && s.role === "cane_manager" && box) {
+        title.textContent = "Cane";
+        box.innerHTML = '<a href="#cane">Board</a><a href="#cane-new">New buy</a><a href="#cane-sell">Sell</a>';
+      } else if (s && s.role === "passion_manager" && box) {
+        title.textContent = "Passion";
+        box.innerHTML = '<a href="#passion">Blocks</a><a href="#field">Work</a><a href="#passion-sell">Sell</a><a href="#passion-spend">Spend</a>';
+      }
+    } catch (e) {}
+  </script>
+  <script>
+    try {
+      const s = JSON.parse(localStorage.getItem("conacrew.user.v2") || sessionStorage.getItem("conacrew.user.v2") || "null");
+      const home = { admin: "home", driver: "drive", cane_manager: "cane", passion_manager: "passion" }[s && s.role];
+      const hash = location.hash.replace("#", "");
+      const ok = home && (s.role === "admin" || hash === home || hash.startsWith(home + "-") || (home === "passion" && hash.startsWith("field")));
+      if (s && home && !ok && !sessionStorage.getItem("conacrew.viewAs")) location.replace("./app.html#" + home);
+    } catch (e) {}
+  </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>
-  <script src="./store.js?v=62"></script>
-  <script src="./app.js?v=62"></script>
+  <script>
+    async function softRefresh() {
+      try { await Conacrew.syncNow(); } catch (e) {}
+      const bust = Date.now();
+      const css = document.querySelector("link[href*='styles.css']");
+      if (css) css.href = "./styles.css?r=" + bust;
+      await new Promise((done) => {
+        const s = document.createElement("script");
+        s.src = "./app.js?r=" + bust;
+        s.onload = done;
+        s.onerror = done;
+        document.body.appendChild(s);
+      });
+      if (window.route) route();
+    }
+  </script>
+  <script src="./store.js?v=125"></script>
+  <script src="./app.js?v=125"></script>
 </body>
 </html>

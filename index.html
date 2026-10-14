@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./logo-mark.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" href="./logo-mark.png" />
-  <link rel="stylesheet" href="./styles.css?v=61" />
+  <link rel="stylesheet" href="./styles.css?v=125" />
 </head>
 <body>
   <div class="login-page">
@@ -20,44 +20,34 @@
     </div>
     <div class="login-panel">
       <form class="card" id="login" style="padding:22px;width:min(420px,100%)">
-        <h2>Sign in</h2>
-        <p class="muted" style="margin:6px 0 16px">Phone + PIN</p>
-        <label class="label">Phone</label>
-        <input class="field" name="phone" value="0700000001" />
-        <div style="height:10px"></div>
-        <label class="label">PIN</label>
-        <input class="field" name="pin" type="password" value="admin123" />
+        <h2 id="loginTitle">Create admin</h2>
+        <input class="field" name="name" placeholder="Your name" />
+        <input class="field" name="phone" placeholder="Phone" style="margin-top:10px" />
+        <input class="field" name="pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" style="margin-top:10px" />
         <p class="err" id="err" style="margin:10px 0 0"></p>
-        <button class="btn btn-primary wide" style="margin-top:14px">Enter Conacrew</button>
-        <p class="eyebrow" style="margin:18px 0 8px">Demo people</p>
-        <div class="list" id="demos"></div>
-        <button type="button" class="btn btn-ghost wide" id="reset" style="margin-top:12px">Reset demo data</button>
+        <button class="btn btn-primary wide" style="margin-top:14px" id="loginBtn">Create and enter</button>
       </form>
     </div>
   </div>
-  <script src="./store.js?v=61"></script>
+  <script src="./store.js?v=125"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>
   <script>
-    const demos = [
-      ["Owner", "Peter M", "0700000001", "admin123"],
-      ["Driver", "Meddy", "0700000002", "drive123"],
-      ["Driver", "Paul", "0700000005", "drive123"],
-      ["Cane manager", "Sarah Namutebi", "0700000003", "cane123"],
-      ["Farm manager", "John Ssebunya", "0700000004", "fruit123"],
-    ];
-    document.getElementById("demos").innerHTML = demos.map(d =>
-      `<button type="button" class="demo" data-p="${d[2]}" data-pin="${d[3]}"><span><b>${d[1]}</b> · ${d[0]}</span><span class="muted">${d[2]} · PIN ${d[3]}</span></button>`
-    ).join("");
-    document.getElementById("demos").addEventListener("click", e => {
-      const b = e.target.closest(".demo");
-      if (!b) return;
-      document.querySelector("[name=phone]").value = b.dataset.p;
-      document.querySelector("[name=pin]").value = b.dataset.pin;
-      document.getElementById("login").requestSubmit();
-    });
     Conacrew.init().then(() => {
+      const hasOwner = (Conacrew.db().users || []).some((u) => u.role === "admin") || Conacrew.server === "ok" || Conacrew.server === "signin";
+      if (hasOwner) {
+        document.getElementById("loginTitle").textContent = "Sign in";
+        document.querySelector("[name=name]").style.display = "none";
+        document.getElementById("loginBtn").textContent = "Enter Conacrew";
+      } else if (Conacrew.server === "offline") {
+        // New phone with no connection: don't start an empty book, wait for the office book.
+        document.getElementById("loginTitle").textContent = "Sign in";
+        document.querySelector("[name=name]").style.display = "none";
+        document.getElementById("loginBtn").textContent = "Try again";
+        document.getElementById("err").textContent = "Can't reach the Conacrew server. Connect to the internet, then tap Try again. First sign-in on a new phone needs a connection.";
+        window.__waitServer = true;
+      }
       if (Conacrew.user()) location.href = ({
         admin: "app.html#home",
         driver: "app.html#drive",
@@ -69,19 +59,27 @@
       e.preventDefault();
       await Conacrew.init();
       const fd = new FormData(e.target);
+      if (window.__waitServer) { location.reload(); return; }
       try {
-        const json = Conacrew.login(fd.get("phone"), fd.get("pin"));
+        const users = Conacrew.db().users || [];
+        if (!users.some((u) => u.role === "admin") && Conacrew.server !== "ok" && Conacrew.server !== "signin") {
+          Conacrew.createOwner(fd.get("name"), fd.get("phone"), fd.get("pin"));
+        }
+        document.getElementById("loginBtn").disabled = true;
+        const json = await Conacrew.login(fd.get("phone"), fd.get("pin")).finally(() => { document.getElementById("loginBtn").disabled = false; });
+        if (json.needsApproval) {
+          document.getElementById("login").innerHTML = `<h2>Waiting for approval</h2>
+            <p style="margin-top:8px">Hi ${json.name}. This is a new phone for your login, so the admin needs to approve it first.</p>
+            <p class="muted" style="margin-top:8px">Ask the admin to open <b>Team &amp; logins</b> and tap <b>Approve</b> next to your name. Then sign in again here.</p>
+            <button class="btn btn-primary wide" style="margin-top:14px" type="button" onclick="location.reload()">Sign in again</button>`;
+          return;
+        }
+        sessionStorage.setItem("land", "1");
         location.href = json.home;
       } catch (err) {
         document.getElementById("err").textContent = err.message;
       }
     });
-    document.getElementById("reset").onclick = async () => {
-      await Conacrew.init();
-      Conacrew.reset();
-      document.getElementById("err").textContent = "";
-      alert("Demo data reset. Sign in again.");
-    };
   </script>
 </body>
 </html>
