@@ -365,14 +365,27 @@ function bizBar() {
       <a class="${biz === "passion" ? "on" : ""}" href="#passion">Passion${dot(req.passion)}</a>
       <a class="${biz === "money" ? "on" : ""}" href="#money">Money</a>
     </div>
-    ${subs.length ? `<div class="sub">${subs.map(([href, label, n]) => `<a class="${h === href ? "on" : ""} ${n ? "attn" : ""}" href="${href}">${label}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>` : ""}
+    ${subs.length ? `<div class="sub">${subs.map(([href, label, n]) => `<a class="${h === href ? "on" : ""} ${n ? "attn" : ""}" href="${href}">${label}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>${pagePick(subs, h)}` : ""}
   </nav>`;
+}
+// Phones: the pages of a section in one drop-down instead of a row of buttons
+function pagePick(items, current) {
+  const cur = items.find(([href]) => href === current) || items.find(([href]) => current.startsWith(href + "/")) || null;
+  const waiting = items.filter(([href, , n]) => n && href !== (cur && cur[0])).reduce((s, [, , n]) => s + Number(n), 0);
+  return `<div class="page-pick">
+    <select class="field js-pagepick" aria-label="Page">
+      ${cur ? "" : `<option value="" selected>Choose a page</option>`}
+      ${items.map(([href, label, n]) => `<option value="${href}" ${cur && cur[0] === href ? "selected" : ""}>${esc(label)}${n ? ` (${n})` : ""}</option>`).join("")}
+    </select>
+    ${waiting ? `<span class="pick-attn">${waiting} waiting</span>` : ""}
+  </div>`;
 }
 function tabMenu(items, on) {
   if (DATA && DATA.me.role === "admin") return "";
   const home = DATA.me.role === "driver" ? "#drive" : DATA.me.role === "cane_manager" ? "#cane" : DATA.me.role === "passion_manager" ? "#passion" : "";
   const homeLink = home ? `<a class="btn btn-ghost" href="${home}">Home</a>` : "";
-  return `${homeLink}<div class="page-links">${items.map(([h, l, k, n]) => `<a class="${on === h.slice(1) ? "on" : ""} ${n ? "attn" : ""}" href="${h}">${l}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>`;
+  const cur = (items.find(([h]) => on === h.slice(1)) || [])[0] || "#" + on;
+  return `<div class="tab-wrap">${homeLink}<div class="page-links">${items.map(([h, l, k, n]) => `<a class="${on === h.slice(1) ? "on" : ""} ${n ? "attn" : ""}" href="${h}">${l}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>${pagePick(items.map(([h, l, k, n]) => [h, l, n]), cur)}</div>`;
 }
 function fleetTabs(on) {
   const items = [
@@ -546,7 +559,7 @@ function fmtSec(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ":" + S
 function voiceBox(label) {
   return `<div class="voice-box js-voice">
     <input type="hidden" name="voice" value="" /><input type="hidden" name="voiceSec" value="0" />
-    <p class="lbl" style="margin:0">${label || "Voice note (up to 3 minutes)"}</p>
+    <p class="lbl" style="margin:0">${label || "Voice note (max 3 min)"}</p>
     <div class="voice-row">
       <button type="button" class="btn btn-steel js-rec">● Record</button>
       <button type="button" class="btn btn-ghost js-stop" disabled>■ Stop</button>
@@ -653,8 +666,8 @@ function viewTruckWork() {
         <label class="lbl">Truck<select class="field" name="truckId" required>${trucks.map((t) => `<option value="${esc(t.id)}">${esc(t.plate)} · ${esc(dname(t.assignedDriverId))}</option>`).join("")}</select></label>
         <label class="lbl">What to do<select class="field" name="kind" id="taskKind">${TASK_KINDS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label>
       </div>
-      <div id="taskParts" style="margin-top:12px"><p class="lbl" style="margin:0">Parts to check (pick one or more)</p>${partPicker()}</div>
-      <label class="lbl" style="margin-top:12px">Instructions for the driver<textarea class="field" name="instructions" rows="3" placeholder="e.g. Check brake lines on the rear axle for leaks or cracks. Photo each side."></textarea></label>
+      <div id="taskParts" style="margin-top:12px"><p class="lbl" style="margin:0">Parts to check</p>${partPicker()}</div>
+      <label class="lbl" style="margin-top:12px">Instructions for the driver<textarea class="field" name="instructions" rows="3" placeholder="e.g. Check rear brake lines"></textarea></label>
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Priority<select class="field" name="priority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label>
         <label class="lbl">Due (optional)<input class="field" name="dueDate" type="date" /></label>
@@ -1651,7 +1664,7 @@ function enhanceFields(root) {
     if (!/e\.g\./i.test(el.placeholder)) el.placeholder = /optional/i.test(el.getAttribute("placeholder")) ? "Optional" : "";
   });
   (root || document).querySelectorAll("#app select.field[aria-label]").forEach((el) => {
-    if (el.closest("label") || el.classList.contains("js-flow")) return;
+    if (el.closest("label") || el.classList.contains("js-flow") || el.classList.contains("js-pagepick")) return;
     const lab = document.createElement("label"); lab.className = "lbl auto"; lab.textContent = el.getAttribute("aria-label");
     const mt = el.style.marginTop; el.style.marginTop = ""; lab.style.marginTop = mt || "";
     el.parentNode.insertBefore(lab, el); lab.appendChild(el);
@@ -1804,7 +1817,7 @@ function payeeFields(prefix, v, opts) {
   return `
     <div class="pay-fields js-payee" data-prefix="${prefix}">
       <div class="grid g2">
-        <label class="lbl">Paid to (full name)<input class="field" name="payeeName" ${req ? "required" : ""} placeholder="Name on the phone or account" value="${esc(v.name || "")}" /></label>
+        <label class="lbl">Paid to (full name)<input class="field" name="payeeName" ${req ? "required" : ""} value="${esc(v.name || "")}" /></label>
         <label class="lbl">Method<select class="field js-method" name="method">
           ${["mtn_momo", "airtel_money", "bank", "cash"].map((k) => `<option value="${k}" ${m === k ? "selected" : ""}>${METHOD_LABEL[k]}</option>`).join("")}
         </select></label>
@@ -2050,7 +2063,7 @@ function viewFundsAdmin(tag) {
     </details>`; }).join("") : `<div class="card item muted" style="margin-top:10px">No requests waiting.</div>`}
     ${done.length ? `<details class="settings" style="margin-top:10px"><summary>Recently settled requests</summary>${done.map((r) => { const p = requesterOf(r); const [tone, st] = reqStatusText(r); return `<div class="pay-line"><div><b>${esc(p ? p.name : r.by)} · ${ugx(reqAsked(r))}</b><div class="muted">${esc(reqWhat(tag, r))} · ${fmtDay(r.date)}</div></div><span class="badge ${tone}">${esc(st)}</span></div>`; }).join("")}</details>` : ""}
     <details class="card team-row" style="margin-top:12px">
-      <summary><div class="avatar">＋</div><div style="flex:1"><b>Send money without a request</b><div class="muted">${tag === "trucking" ? "Choose the driver" : "Goes to the " + title.toLowerCase() + " manager"}</div></div></summary>
+      <summary><div class="avatar">＋</div><div style="flex:1"><b>Send money without a request</b></div></summary>
       <div style="margin-top:12px">${sendForm(tag)}</div>
     </details>
     <h2 style="margin:22px 0 0">How the money was spent</h2>
@@ -2154,10 +2167,10 @@ function workerFundsView(tag) {
             <button class="btn btn-primary wide" style="margin-top:12px">Save</button>
           </form>
         </details>` : ""}`;
-      }).join("") : `<div class="card item muted">Nothing received yet. Use "Request money" when you need funds.</div>`}
+      }).join("") : `<div class="card item muted">Nothing received yet.</div>`}
     </div>
     ${tag !== "trucking" ? `<details class="card team-row" style="margin-top:14px">
-      <summary><div class="avatar">⋯</div><div style="flex:1"><b>Spent from cash on hand</b><div class="muted">Not from office money</div></div></summary>
+      <summary><div class="avatar">⋯</div><div style="flex:1"><b>Spent from cash on hand</b></div></summary>
       <form data-form="direct-spend" style="margin-top:12px">
         <div class="grid g2">
           <label class="lbl">What<select class="field" name="category">${FUND_FOR[tag].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
@@ -2189,7 +2202,7 @@ function fundSelect(tag, noPayee, need) {
     .sort((x, y) => advLeft(y).left - advLeft(x).left);
   return `<label class="lbl" style="margin-top:10px">Paid from<select class="field" name="floatId">
     ${open.map((f, i) => `<option value="${esc(f.id)}" ${i === 0 ? "selected" : ""}>Office money · ${fmtDay(f.date)} · ${ugx(advLeft(f).left)} left</option>`).join("")}
-    <option value="">Cash on hand (not from the office)</option></select></label>
+    <option value="">Cash on hand</option></select></label>
     ${noPayee ? "" : `<label class="lbl" style="margin-top:10px">Paid to<input class="field" name="payeeName" placeholder="e.g. 5 workers / supplier name" /></label>`}`;
 }
 
@@ -2340,7 +2353,7 @@ function viewTeam() {
         <div class="grid g3">
           <label class="lbl">Name<input class="field" name="name" value="${esc(u.name)}" /></label>
           <label class="lbl">Sign-in phone<input class="field" name="phone" inputmode="tel" value="${esc(u.phone || "")}" placeholder="07XX XXX XXX" /></label>
-          <label class="lbl">${u.hasPin ? "New 6-digit PIN (blank = keep)" : "Set 6-digit PIN"}<input class="field" name="pin" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="6 digits" /></label>
+          <label class="lbl">${u.hasPin ? "New PIN" : "Set 6-digit PIN"}<input class="field" name="pin" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="6 digits" /></label>
         </div>
         ${u.role === "driver" ? `<label class="lbl" style="margin-top:10px">Truck<select class="field" name="truckId">${truckOpts(d && d.assignedTruckId)}</select></label>` : ""}
         ${u.role !== "admin" || (u.assistant && !iAmII) ? `<label class="check"><input type="checkbox" name="active" value="1" ${u.active !== false ? "checked" : ""} /> Login is on (untick to stop this person signing in)</label><input type="hidden" name="activeSent" value="1" />` : ""}
@@ -2368,11 +2381,11 @@ function viewTeam() {
       <div class="card kpi ${waiting ? "attn-kpi" : ""}"><span class="eyebrow">Phones waiting</span><b>${waiting}</b></div>
     </div>
     <details class="card team-row add" ${users.length <= 1 ? "open" : ""}>
-      <summary><div class="avatar">+</div><div style="flex:1"><b>Add a login</b><div class="muted">Driver, cane manager, passion manager${iAmII ? "" : " or Admin II"}</div></div></summary>
+      <summary><div class="avatar">+</div><div style="flex:1"><b>Add a login</b></div></summary>
       <form data-form="login" style="margin-top:12px">
         <div class="grid g2">
           <label class="lbl">Role<select class="field" name="role" id="newRole">
-            <option value="driver">Driver</option><option value="cane_manager">Cane manager</option><option value="passion_manager">Passion manager</option>${iAmII ? "" : `<option value="admin2">Admin II (assistant admin, all pages)</option>`}
+            <option value="driver">Driver</option><option value="cane_manager">Cane manager</option><option value="passion_manager">Passion manager</option>${iAmII ? "" : `<option value="admin2">Admin II</option>`}
           </select></label>
           <label class="lbl">Full name<input class="field" name="name" required placeholder="e.g. Paul Balikaita" /></label>
         </div>
@@ -2446,7 +2459,7 @@ function driverFuelView() {
       <div class="thumbs use-preview"></div>
       <label class="lbl" style="margin-top:10px">Paid from<select class="field" name="floatId">
         ${open.map((f, i) => `<option value="${esc(f.id)}" ${i === 0 ? "selected" : ""}>Advance ${fmtDay(f.date)} · ${ugx(advLeft(f).left)} left</option>`).join("")}
-        <option value="">Not from an advance (office will check)</option>
+        <option value="">Not from an advance</option>
       </select></label>
       <button class="btn btn-primary wide" style="margin-top:12px">Save fuel</button>
     </form>
@@ -2479,22 +2492,26 @@ function profileForm(kind, person) {
           <option value="month" ${plan === "month" ? "selected" : ""}>Monthly salary</option>
           <option value="both" ${plan === "both" ? "selected" : ""}>Monthly salary + trip allowance</option>
         </select></label>
-        <label class="lbl">Allowance per load (UGX)<input class="field" name="tripAllowanceUgx" inputmode="numeric" value="${person.tripAllowanceUgx || ""}" placeholder="e.g. 50000" /></label>
-        <label class="lbl">Monthly salary (UGX)<input class="field" name="monthRateUgx" inputmode="numeric" value="${person.monthRateUgx || ""}" placeholder="e.g. 900000" /></label>
+        <label class="lbl js-plan-trip">Allowance per load (UGX)<input class="field" name="tripAllowanceUgx" inputmode="numeric" value="${person.tripAllowanceUgx || ""}" placeholder="e.g. 50000" /></label>
+        <label class="lbl js-plan-month">Monthly salary (UGX)<input class="field" name="monthRateUgx" inputmode="numeric" value="${person.monthRateUgx || ""}" placeholder="e.g. 900000" /></label>
       </div>` : kind === "cane" ? `<div class="grid g2">
         <label class="lbl">Pay per delivered trip (UGX)<input class="field" name="perTripUgx" inputmode="numeric" value="${person.perTripUgx || ""}" placeholder="e.g. 30000" /></label>
       </div>` : `<div class="grid g2">
         <label class="lbl">Fixed pay per sale (UGX)<input class="field" name="perSaleUgx" inputmode="numeric" value="${person.perSaleUgx || ""}" placeholder="e.g. 20000" /></label>
         <label class="lbl">…or % of each sale<input class="field" name="perSalePct" inputmode="decimal" value="${person.perSalePct || ""}" placeholder="e.g. 5" /></label>
       </div>`}
-      <div class="grid g2" style="margin-top:10px">
-        <label class="lbl">Account / MoMo name<input class="field" name="accountName" value="${esc(pp.name)}" placeholder="Registered name" /></label>
-        <label class="lbl">Pay by<select class="field" name="payMethod">${["mtn_momo", "airtel_money", "bank", "cash"].map((k) => `<option value="${k}" ${pp.method === k ? "selected" : ""}>${METHOD_LABEL[k]}</option>`).join("")}</select></label>
-      </div>
-      <div class="grid g3" style="margin-top:10px">
-        <label class="lbl">Mobile money number<input class="field" name="payPhone" inputmode="tel" value="${esc(pp.phone)}" placeholder="07XX XXX XXX" /></label>
-        <label class="lbl">Bank<input class="field" name="bankName" value="${esc(pp.bankName)}" placeholder="If paid by bank" /></label>
-        <label class="lbl">Account number<input class="field" name="bankAccount" inputmode="numeric" value="${esc(pp.bankAccount)}" placeholder="If paid by bank" /></label>
+      <div class="js-payee">
+        <div class="grid g2" style="margin-top:10px">
+          <label class="lbl">Pay by<select class="field js-method" name="payMethod">${["mtn_momo", "airtel_money", "bank", "cash"].map((k) => `<option value="${k}" ${pp.method === k ? "selected" : ""}>${METHOD_LABEL[k]}</option>`).join("")}</select></label>
+          <label class="lbl">Name on account<input class="field" name="accountName" value="${esc(pp.name)}" /></label>
+        </div>
+        <div class="grid g2 js-if-mobile" style="margin-top:10px">
+          <label class="lbl">Mobile money number<input class="field" name="payPhone" inputmode="tel" value="${esc(pp.phone)}" placeholder="07XX XXX XXX" /></label>
+        </div>
+        <div class="grid g2 js-if-bank" style="margin-top:10px">
+          <label class="lbl">Bank<input class="field" name="bankName" value="${esc(pp.bankName)}" /></label>
+          <label class="lbl">Account number<input class="field" name="bankAccount" inputmode="numeric" value="${esc(pp.bankAccount)}" /></label>
+        </div>
       </div>
       <button class="btn btn-steel wide" style="margin-top:10px">Save pay settings</button>
     </form></details>`;
@@ -2510,6 +2527,7 @@ function paidLine(s) {
 }
 function workerCard(kind, person, src) {
   const o = owedTo(kind, person, DATA.payStubs, src);
+  const closeBtn = `<button type="button" class="btn btn-ghost btn-sm js-paydone">Close</button>`;
   const truck = kind === "driver" ? (DATA.trucks || []).find((t) => t.id === person.assignedTruckId) : null;
   const known = o.waiting.filter((w) => w.amount).reduce((s, w) => s + w.amount, 0);
   return `<section class="card worker">
@@ -2521,6 +2539,7 @@ function workerCard(kind, person, src) {
         <div class="chip-line">${esc(planText(kind, person))}</div>
         <div class="muted" style="margin-top:4px">Payout: ${payoutText(person)}</div>
       </div>
+      ${closeBtn}
     </div>
     <div class="stat-strip">
       <div><span>Waiting</span><b>${o.waiting.length}${known ? ` · ${ugx(known)}` : ""}</b></div>
@@ -2536,7 +2555,7 @@ function workerCard(kind, person, src) {
         <div class="due-right"><b class="amt">${w.amount ? ugx(w.amount) : "Set amount"}</b><span class="btn btn-primary btn-sm">Pay</span></div>
       </summary>
       ${payForm(kind, person, w)}
-    </details>`).join("") : `<p class="muted" style="margin-top:6px">Nothing waiting. All caught up.</p>`}
+    </details>`).join("") : `<p class="muted" style="margin-top:6px">All paid up.</p>`}
     ${o.paid.length ? `<p class="eyebrow" style="margin-top:14px">Recently paid</p>${o.paid.slice(0, 5).map(paidLine).join("")}` : ""}
   </section>`;
 }
@@ -2566,9 +2585,20 @@ function viewPayAdmin() {
       <div class="card kpi"><span class="eyebrow">This month</span><b>${ugx(allSums.month)}</b></div>
       <div class="card kpi steel"><span class="eyebrow">Year to date</span><b>${ugx(allSums.ytd)}</b></div>
     </div>
-    <div class="list" style="margin-top:12px">
-      ${g.people.length ? g.people.map((p) => workerCard(g.kind, p, DATA)).join("") : `<div class="card item muted">${g.none}</div>`}
-    </div>`;
+    ${payPicker(g)}`;
+}
+function payPicker(g) {
+  if (!g.people.length) return `<div class="card item muted" style="margin-top:12px">${g.none}</div>`;
+  const key = "payPerson." + g.kind;
+  const pick = sessionStorage.getItem(key) || "";
+  const person = g.people.find((p) => p.id === pick);
+  const owed = (p) => { const o = owedTo(g.kind, p, DATA.payStubs, DATA); return { n: o.waiting.length, amt: o.waiting.reduce((s, w) => s + (w.amount || 0), 0) }; };
+  const who = g.kind === "driver" ? "driver" : "person";
+  return `<label class="lbl" style="margin-top:14px">Pay ${who}<select class="field js-payperson" data-key="${key}">
+      <option value="">— Choose ${who} —</option>
+      ${g.people.map((p) => { const o = owed(p); return `<option value="${esc(p.id)}" ${p.id === pick ? "selected" : ""}>${esc(p.name)}${o.n ? ` · ${o.n} waiting${o.amt ? " · " + ugx(o.amt) : ""}` : " · paid up"}</option>`; }).join("")}
+    </select></label>
+    ${person ? `<div class="list" style="margin-top:12px">${workerCard(g.kind, person, DATA)}</div>` : `<div class="card" style="padding:4px 14px;margin-top:12px">${g.people.map((p) => { const o = owed(p); return `<button type="button" class="pay-line pick-row js-pickpay" data-id="${esc(p.id)}" data-key="${key}"><div><b>${esc(p.name)}</b><div class="muted">${o.n ? o.n + " waiting" : "Paid up"}</div></div><b class="amt">${o.amt ? ugx(o.amt) : ""}</b></button>`; }).join("")}</div>`}`;
 }
 
 // ───────────── Worker "My pay" (driver, cane manager, passion manager) ─────────────
@@ -2593,7 +2623,7 @@ function myPayView(kind) {
       ${o.waiting.length ? o.waiting.map((w) => `<div class="card pay-line due">
         <div><b>${esc(w.title)}</b><div class="muted">${esc(w.sub)}${w.date ? " · " + (w.kind === "trip" ? "delivered " : "") + fmtDay(w.date) : ""}</div></div>
         <div class="due-right"><span class="badge gold">Waiting</span>${w.amount ? `<b class="amt">${ugx(w.amount)}</b>` : ""}</div>
-      </div>`).join("") : `<div class="card item muted">Nothing waiting. ${kind === "driver" ? "Each load you mark Delivered shows here until the office pays it." : kind === "cane" ? "Each delivered trip shows here until the office pays it." : "Each sale shows here until the office pays it."}</div>`}
+      </div>`).join("") : `<div class="card item muted">Nothing waiting. ${kind === "driver" ? "" : kind === "cane" ? "" : ""}</div>`}
     </div>
     <h2 style="margin:18px 0 0">Payments received</h2>
     ${Object.keys(byMonth).length ? Object.entries(byMonth).map(([m, list]) => `
@@ -2615,6 +2645,20 @@ function bindMoney() {
   bindDriverAdvance();
   bindPayee(document.querySelector(".worker") ? document : null);
   document.querySelectorAll("[data-paybiz]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("payBiz", b.dataset.paybiz); route(); }; });
+  const pickPay = (key, id) => { if (id) sessionStorage.setItem(key, id); else sessionStorage.removeItem(key); route(); };
+  document.querySelectorAll(".js-payperson").forEach((s) => { s.onchange = () => pickPay(s.dataset.key, s.value); });
+  document.querySelectorAll(".js-pickpay").forEach((b) => { b.onclick = () => pickPay(b.dataset.key, b.dataset.id); });
+  // only the pay amounts that belong to the chosen plan
+  document.querySelectorAll("form[data-form=pay-profile] [name=payPlan]").forEach((sel) => {
+    const f = sel.form;
+    const sync = () => {
+      const v = sel.value;
+      f.querySelectorAll(".js-plan-trip").forEach((l) => { l.style.display = v === "month" ? "none" : ""; });
+      f.querySelectorAll(".js-plan-month").forEach((l) => { l.style.display = v === "trip" ? "none" : ""; });
+    };
+    sel.addEventListener("change", sync); sync();
+  });
+  document.querySelectorAll(".js-paydone").forEach((b) => { b.onclick = () => { const s = document.querySelector(".js-payperson"); if (s) pickPay(s.dataset.key, ""); }; });
   // Opening one payment closes the others.
   document.querySelectorAll("details.pay-line").forEach((d) => {
     d.addEventListener("toggle", () => { if (d.open) document.querySelectorAll("details.pay-line").forEach((o) => { if (o !== d) o.open = false; }); });
@@ -3193,7 +3237,7 @@ function updateLiveStatus() {
   if (!box || !DATA) return;
   let awake = false;
   try { awake = localStorage.getItem("conacrew-live-awake") === "1"; } catch (e) {}
-  let tone = "gold", title = "Live tracking is off", body = "Turn it on so the office can see where your truck is.", button = true;
+  let tone = "gold", title = "Live tracking is off", body = "The office can't see your truck.", button = true;
   if (!navigator.geolocation) { tone = "red"; title = "Location not available"; body = "This phone or browser can't share location."; button = false; }
   else if (!DATA.truck) { tone = "blue"; title = "No truck assigned"; body = "Tracking starts once the office assigns you a truck."; button = false; }
   else if (LIVE.status === "starting") { tone = "blue"; title = "Finding your location…"; body = "Allow location if your phone asks."; button = false; }
@@ -3257,7 +3301,7 @@ async function drawLiveMap() {
     return { t, p, d, tone, state };
   });
 
-  if (note) note.textContent = (reached ? "Updated " : "Couldn't reach the live server · showing last saved · ") + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (note) note.textContent = (reached ? "Updated " : "Offline · last saved · ") + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   if (list) list.innerHTML = rows.map(({ t, p, d, tone, state }) =>
     `<div class="card item"><div class="row"><div><b>${t.plate}</b><p class="muted">${(p && p.driverName) || (d ? d.name : "—")} · ${state}</p></div>${p ? `<span class="badge ${tone}">${tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old"}</span>` : ""}</div></div>`
   ).join("") || `<p class="muted">No trucks yet.</p>`;
@@ -3371,6 +3415,7 @@ function bindMedia() {
 
 window.route = route;
 window.addEventListener("hashchange", () => DATA && route());
+document.addEventListener("change", (e) => { const s = e.target.closest && e.target.closest(".js-pagepick"); if (s && s.value) location.hash = s.value; });
 // ---- office sync light, and fresh data from other phones ----
 function syncLight() {
   const dot = document.getElementById("syncDot");
@@ -3390,7 +3435,7 @@ function syncLight() {
   const bar = document.getElementById("syncBar");
   if (bar) {
     bar.hidden = st !== "signin";
-    bar.innerHTML = st === "signin" ? `<span>This phone isn't syncing with the office. Sign in again to send your changes.</span> <button type="button" class="btn btn-primary" onclick="Conacrew.logout(); location.href='./index.html'">Sign in</button>` : "";
+    bar.innerHTML = st === "signin" ? `<span>Not syncing. Sign in again.</span> <button type="button" class="btn btn-primary" onclick="Conacrew.logout(); location.href='./index.html'">Sign in</button>` : "";
   }
 }
 function busyTyping() {

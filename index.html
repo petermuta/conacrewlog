@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./logo-mark.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" href="./logo-mark.png" />
-  <link rel="stylesheet" href="./styles.css?v=126" />
+  <link rel="stylesheet" href="./styles.css?v=127" />
 </head>
 <body>
   <div class="login-page">
@@ -29,7 +29,7 @@
       </form>
     </div>
   </div>
-  <script src="./store.js?v=126"></script>
+  <script src="./store.js?v=127"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>
@@ -69,8 +69,7 @@
         const json = await Conacrew.login(fd.get("phone"), fd.get("pin")).finally(() => { document.getElementById("loginBtn").disabled = false; });
         if (json.needsApproval) {
           document.getElementById("login").innerHTML = `<h2>Waiting for approval</h2>
-            <p style="margin-top:8px">Hi ${json.name}. This is a new phone for your login, so the admin needs to approve it first.</p>
-            <p class="muted" style="margin-top:8px">Ask the admin to open <b>Team &amp; logins</b> and tap <b>Approve</b> next to your name. Then sign in again here.</p>
+            <p style="margin-top:8px">Hi ${json.name}. Ask the admin to approve this phone, then sign in again.</p>
             <button class="btn btn-primary wide" style="margin-top:14px" type="button" onclick="location.reload()">Sign in again</button>`;
           return;
         }

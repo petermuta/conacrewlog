@@ -543,3 +543,19 @@ details.led-row > summary::-webkit-details-marker { display: none; }
 .sync-bar { max-width: 1080px; margin: 10px auto 0; padding: 10px 14px; border-radius: 12px; background: #3a1414; border: 1px solid #ff5a5a; color: #ffd9d9; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .sync-bar[hidden] { display: none; }
 .sync-word { font-size: 11px; font-weight: 600; opacity: .85; }
+
+/* phones: a section's pages in one drop-down */
+.page-pick { display: none; }
+@media (max-width: 800px) {
+  .admin-nav .sub, .page-links { display: none; }
+  .page-pick { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .page-pick select { flex: 1; font-weight: 700; }
+  .admin-nav .page-pick select { background-color: #fff; color: #10243f; border-color: transparent; }
+  .pick-attn { background: #f5c400; color: #101a30; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 6px 10px; white-space: nowrap; }
+  .tab-wrap { display: flex; align-items: center; gap: 8px; margin: 12px 0 10px; }
+  .tab-wrap .page-pick { flex: 1; margin-top: 0; }
+}
+
+.pick-row { width: 100%; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.pick-row:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,.08); }
+.worker-head .js-paydone { align-self: flex-start; }
