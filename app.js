@@ -3383,6 +3383,8 @@ function syncLight() {
     : st === "none" ? ["grey", "Office sync not set up on this site · this phone only"] : ["grey", "Checking…"];
   dot.className = "sync-dot " + tone;
   dot.title = tip;
+  const word = document.getElementById("syncWord");
+  if (word) word.textContent = st === "ok" ? "Synced" : st === "offline" ? "Offline" : st === "signin" ? "Sign in" : st === "empty" ? "Not started" : st === "none" ? "This phone only" : "…";
   const btn = document.getElementById("refresh");
   if (btn) btn.setAttribute("aria-label", "Refresh · " + tip);
   const bar = document.getElementById("syncBar");
