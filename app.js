@@ -2398,7 +2398,23 @@ function bindDriverAdvance() {
 
 // ───────────── Team & logins (admin) ─────────────
 const ROLE_NAMES = { admin: "Admin", driver: "Driver", cane_manager: "Cane manager", passion_manager: "Passion manager" };
-const LOG_TEXT = { ok: ["green", "Signed in"], wrong_pin: ["gold", "Wrong PIN"], locked_now: ["red", "Locked (5 wrong PINs)"], locked: ["red", "Tried while locked"], new_phone: ["gold", "New phone, waiting approval"], phone_approved: ["green", "Phone approved"], phone_removed: ["gold", "Phone removed"], unlocked: ["green", "Unlocked"], unknown_phone: ["red", "Unknown phone number"], computer_trusted: ["blue", "Computer trusted"], computer_untrusted: ["gold", "Computer untrusted"], turned_off: ["red", "Login is off"], no_pin: ["gold", "No PIN set"] };
+const LOG_TEXT = { ok: ["green", "Signed in"], wrong_pin: ["gold", "Wrong PIN"], locked_now: ["red", "Locked (5 wrong PINs)"], locked: ["red", "Tried while locked"], new_phone: ["gold", "New phone, waiting approval"], phone_approved: ["green", "Phone approved"], phone_removed: ["gold", "Phone removed"], unlocked: ["green", "Unlocked"], unknown_phone: ["red", "Unknown phone number"], computer_trusted: ["blue", "Computer trusted"], computer_untrusted: ["gold", "Computer untrusted"], turned_off: ["red", "Login is off"], no_pin: ["gold", "No PIN set"], blocked_device: ["red", "Blocked device tried"], blocked_login: ["red", "Blocked: too many tries"], office_book_started: ["blue", "Office book started"] };
+// main admin: devices and connections blocked after wrong tries (they only ever see "try again later")
+async function loadBlocks(op, extra) {
+  const box = document.getElementById("blocksBox");
+  if (!box || !Conacrew.token()) return;
+  try {
+    const res = await fetch("/.netlify/functions/sync", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ op: op || "blocks", ...(extra || {}) }) });
+    if (!res.ok) return;
+    const { blocks } = await res.json();
+    if (!document.body.contains(box)) return;
+    box.innerHTML = blocks && blocks.length ? `<div class="card item" style="margin-top:12px;border:1px solid #ff5a5a">
+      <b>Blocked from signing in</b>
+      ${blocks.map((x) => `<div class="pay-line"><div><b>${esc(x.label)}</b><div class="muted">${x.tries} wrong tries · until ${whenShort(new Date(x.until).toISOString())}</div></div><button type="button" class="btn btn-ghost btn-sm js-unblock" data-kind="${esc(x.kind)}" data-id="${esc(x.id)}">Lift</button></div>`).join("")}
+    </div>` : "";
+    box.querySelectorAll(".js-unblock").forEach((b) => { b.onclick = () => loadBlocks("unblock", { kind: b.dataset.kind, id: b.dataset.id }); });
+  } catch (e) {}
+}
 function phonesWaiting() {
   return (DATA.users || []).reduce((n, u) => n + ((u.pendingDevices || []).length), 0);
 }
@@ -2473,6 +2489,7 @@ function viewTeam() {
       <button type="button" class="btn ${thisTrusted ? "btn-ghost" : "btn-primary"} btn-sm" data-act="${thisTrusted ? "untrust_device" : "trust_device"}" data-device="${esc(myDev)}" data-label="${esc(deviceLabel())}">${thisTrusted ? "Stop trusting" : "Trust this computer"}</button></div>
       ${trusted.filter((d) => d.id !== myDev).map((d) => `<div class="pay-line"><div><b>${esc(d.label)}</b><div class="muted">Trusted ${whenShort(d.addedAt)}</div></div><button type="button" class="btn btn-ghost btn-sm" data-act="untrust_device" data-device="${esc(d.id)}">Remove</button></div>`).join("")}
     </div>` : ""}
+    ${isMain ? `<div id="blocksBox"></div>` : ""}
     <div class="grid g3" style="margin-top:14px">
       <div class="card kpi"><span class="eyebrow">People</span><b>${users.length}</b></div>
       <div class="card kpi steel"><span class="eyebrow">Ready to sign in</span><b>${ok}</b></div>
@@ -2502,6 +2519,7 @@ function viewTeam() {
     </div>`;
 }
 function bindTeam() {
+  loadBlocks();
   const role = document.getElementById("newRole");
   const truck = document.getElementById("newTruck");
   if (role && truck) {

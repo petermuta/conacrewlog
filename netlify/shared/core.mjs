@@ -244,8 +244,32 @@ function logSignIn(book, user, result, extra) {
 }
 const userTouched = (book, user) => { user._u = now(); user._s = meta(book).seq; };
 
+// ---------- sign-in guard: wrong tries are counted per device, per connection and per login ----------
+const GUARD_WINDOW = 2 * 3600e3; // 2 hours
+const DEVICE_TRIES = 3;           // wrong tries on one device before it is blocked for 2 hours
+const IP_TRIES = 10;              // wrong tries from one internet connection
+const LOGIN_TRIES = 10;           // wrong tries on one login from devices it has never signed in on
+const QUIET = "Phone or PIN is wrong.";
+const BLOCKED = "Sign-in isn't available right now. Try again later.";
+async function loadGuard(kv) { const g = await kv.get("guard"); try { return g ? JSON.parse(g.text) : {}; } catch (e) { return {}; } }
+async function saveGuard(kv, g) {
+  const t = now();
+  for (const k of ["d", "i", "p"]) for (const [id, v] of Object.entries(g[k] || {})) if ((v.until || 0) < t && t - (v.t0 || 0) > GUARD_WINDOW) delete g[k][id];
+  await kv.set("guard", JSON.stringify(g), {});
+}
+const isBlocked = (g, k, id) => !!(id && g[k] && g[k][id] && (g[k][id].until || 0) > now());
+function strike(g, k, id, limit) {
+  if (!id) return;
+  g[k] = g[k] || {};
+  const t = now();
+  let v = g[k][id];
+  if (!v || t - v.t0 > GUARD_WINDOW) v = g[k][id] = { n: 0, t0: t };
+  v.n++; v.last = t;
+  if (v.n >= limit) v.until = t + GUARD_WINDOW;
+}
+
 // ---------- the request handler (method, headers, body) -> { status, body } ----------
-export async function handleSync(kv, { method, token, body }) {
+export async function handleSync(kv, { method, token, body, ip }) {
   if (method === "GET") {
     const { book } = await loadBook(kv);
     return { status: 200, body: { exists: !!book, server: 2 } };
@@ -258,26 +282,37 @@ export async function handleSync(kv, { method, token, body }) {
     const pin = String(body.pin || "").trim();
     const dev = String(body.deviceId || "").slice(0, 60);
     const label = String(body.label || "Phone").slice(0, 60);
+    const where = String(ip || "").slice(0, 60);
     if (!p) return { status: 400, body: { error: "Enter your phone number." } };
-    let out;
-    const res = await updateBook(kv, async (book) => {
+    const guard = await loadGuard(kv);
+    if (isBlocked(guard, "d", dev) || isBlocked(guard, "i", where)) {
+      await updateBook(kv, async (book) => { if (!book) return { write: false }; bump(book); logSignIn(book, null, "blocked_device", { phone: p, device: label, deviceId: dev }); return { book }; });
+      return { status: 200, body: { error: BLOCKED } };
+    }
+    let out, wrong = false, okUser = null;
+    await updateBook(kv, async (book) => {
+      wrong = false; okUser = null;
       if (!book) { out = { status: 200, body: { empty: true } }; return { write: false }; }
       bump(book);
       const matches = (book.users || []).filter((u) => phoneKey(u.phone) === p);
       const user = matches.find((u) => u.active !== false) || matches[0];
       const fail = (msg, result) => { logSignIn(book, user, result, { phone: p, device: label, deviceId: dev }); out = { status: 200, body: { error: msg } }; return { book }; };
-      if (!user) return fail("No login uses this phone number. Ask the admin to add you on Team & logins.", "unknown_phone");
-      if (user.active === false) return fail("This login is turned off. Ask the admin.", "turned_off");
-      if (!user.pin) return fail("No PIN has been set for this login yet. Ask the admin to set one.", "no_pin");
-      const main = isMainAdmin(user);
-      if (!main && user.lockedAt) return fail("This login is locked after too many wrong PINs. Ask the admin to unlock it.", "locked");
-      if (String(user.pin) !== pin) {
-        if (main) return fail("Wrong PIN.", "wrong_pin");
-        user.failCount = (user.failCount || 0) + 1;
-        userTouched(book, user);
-        if (user.failCount >= MAX_TRIES) { user.lockedAt = new Date().toISOString(); return fail("Wrong PIN. This login is now locked. Ask the admin to unlock it.", "locked_now"); }
-        return fail("Wrong PIN. " + (MAX_TRIES - user.failCount) + " tries left before this login locks.", "wrong_pin");
+      const known = user && ((guard.k || {})[user.id] || []).includes(dev);
+      if (user && !known && isBlocked(guard, "p", user.id)) return fail(BLOCKED, "blocked_login");
+      // the same answer for an unknown phone, a wrong PIN or a login with no PIN: nothing to learn here
+      if (!user || !user.pin || String(user.pin) !== pin) {
+        wrong = true;
+        if (user && user.pin && !isMainAdmin(user)) {
+          user.failCount = (user.failCount || 0) + 1;
+          userTouched(book, user);
+          if (user.failCount >= MAX_TRIES && !user.lockedAt) { user.lockedAt = new Date().toISOString(); return fail(QUIET, "locked_now"); }
+        }
+        return fail(QUIET, !user ? "unknown_phone" : !user.pin ? "no_pin" : "wrong_pin");
       }
+      // right PIN from here on, so it's safe to say what's wrong
+      const main = isMainAdmin(user);
+      if (user.active === false) return fail("This login is turned off. Ask the admin.", "turned_off");
+      if (!main && user.lockedAt) return fail("This login is locked. Ask the admin to unlock it.", "locked");
       if (user.role === "driver" && !user.driverId) { out = { status: 200, body: { error: "This driver login is not linked to a driver record." } }; return { write: false }; }
       if (user.failCount) { user.failCount = 0; userTouched(book, user); }
       if (!main && !deviceOk(book, user, dev)) {
@@ -289,11 +324,43 @@ export async function handleSync(kv, { method, token, body }) {
         return { book };
       }
       logSignIn(book, user, "ok", { device: label, deviceId: dev });
+      okUser = user;
       out = { status: 200, body: { ok: true, user: { id: user.id, role: user.role, driverId: user.driverId || null, name: user.name }, token: await makeToken(kv, user, dev) } };
       return { book };
     });
-    void res;
+    if (wrong) {
+      strike(guard, "d", dev, DEVICE_TRIES);
+      strike(guard, "i", where, IP_TRIES);
+      const u = await (async () => { const { book } = await loadBook(kv); return book && (book.users || []).find((x) => phoneKey(x.phone) === p); })();
+      if (u && !((guard.k || {})[u.id] || []).includes(dev)) strike(guard, "p", u.id, LOGIN_TRIES);
+      if (guard.d && guard.d[dev]) guard.d[dev].label = label;
+      await saveGuard(kv, guard);
+    } else if (okUser) {
+      if (guard.d) delete guard.d[dev];
+      guard.k = guard.k || {};
+      guard.k[okUser.id] = [dev].concat((guard.k[okUser.id] || []).filter((x) => x !== dev)).slice(0, 10);
+      await saveGuard(kv, guard);
+    }
     return out;
+  }
+
+  if (op === "blocks" || op === "unblock") {
+    // main admin: see and lift sign-in blocks
+    const { book } = await loadBook(kv);
+    const who = await readToken(kv, book, token);
+    if (!who || !isMainAdmin(who.user)) return { status: 403, body: { error: "Only the main admin" } };
+    const guard = await loadGuard(kv);
+    if (op === "unblock") {
+      const k = ["d", "i", "p"].includes(body.kind) ? body.kind : "d";
+      if (guard[k]) delete guard[k][String(body.id || "")];
+      await saveGuard(kv, guard);
+    }
+    const list = [];
+    const t = now();
+    for (const [k, kind] of [["d", "device"], ["i", "connection"], ["p", "login"]]) for (const [id, v] of Object.entries(guard[k] || {})) {
+      if ((v.until || 0) > t) list.push({ kind: k, what: kind, id, label: k === "p" ? ((book.users || []).find((u) => u.id === id) || {}).name || id : k === "d" ? v.label || "Device" : "Internet connection", tries: v.n, until: v.until });
+    }
+    return { status: 200, body: { blocks: list } };
   }
 
   if (op === "seed") {

@@ -574,3 +574,10 @@ details.led-row > summary::-webkit-details-marker { display: none; }
 .bk-form { margin-top: 12px; }
 .btn-whatsapp { background: #1fa855; color: #fff; border: 0; text-decoration: none; }
 .share-card .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* sign-in page: way in for clients */
+.client-entry { display: flex; align-items: center; gap: 12px; width: min(420px, 100%); margin-top: 14px; padding: 10px; border-radius: 18px; background: #fff; color: #10243f; text-decoration: none; border: 2px solid #f29a12; box-shadow: 0 2px 0 rgba(0,0,0,.08); }
+.client-entry img { width: 76px; height: 54px; object-fit: cover; border-radius: 12px; flex: none; }
+.client-entry b { display: block; font-size: 16px; }
+.client-entry small { display: block; color: #4a5d75; font-size: 13px; }
+.login-panel { display: flex; flex-direction: column; align-items: center; }

@@ -2373,24 +2373,29 @@ const Conacrew = {
   localLogin(phone, pin) {
     const p = phoneKey(phone);
     if (!p) throw new Error("Enter your phone number.");
+    // this phone also counts wrong tries (offline sign-in): 3 wrong, then 2 hours
+    let g = {};
+    try { g = JSON.parse(localStorage.getItem("conacrew.guard") || "{}") || {}; } catch (e) {}
+    if ((g.until || 0) > Date.now()) throw new Error("Sign-in isn't available right now. Try again later.");
     const db = this.db();
     const matches = db.users.filter((u) => phoneKey(u.phone) === p);
     const user = matches.find((u) => u.active !== false) || matches[0];
     const fail = (msg, result) => { logSignIn(db, user, result, user ? {} : { phone: p }); this.save(db); throw new Error(msg); };
-    if (!user) fail("No login uses this phone number. Ask the admin to add you on Team & logins.", "unknown_phone");
-    if (user.active === false) fail("This login is turned off. Ask the admin.", "turned_off");
-    if (!user.pin && !user.pinHash) fail("No PIN has been set for this login yet. Ask the admin to set one.", "no_pin");
-    const pinOk = user.pin ? String(user.pin) === String(pin || "").trim() : sha256hex(user.id + ":" + String(pin || "").trim()) === user.pinHash;
+    const pinOk = !!user && (user.pin ? String(user.pin) === String(pin || "").trim() : !!user.pinHash && sha256hex(user.id + ":" + String(pin || "").trim()) === user.pinHash);
     const main = isMainAdmin(user);
-    if (!main && user.lockedAt) fail("This login is locked after too many wrong PINs. Ask the admin to unlock it.", "locked");
     if (!pinOk) {
-      if (!main) {
+      if (!g.t0 || Date.now() - g.t0 > 2 * 3600e3) g = { n: 0, t0: Date.now() };
+      g.n++; if (g.n >= 3) g.until = Date.now() + 2 * 3600e3;
+      try { localStorage.setItem("conacrew.guard", JSON.stringify(g)); } catch (e) {}
+      if (user && (user.pin || user.pinHash) && !main) {
         user.failCount = (user.failCount || 0) + 1;
-        if (user.failCount >= MAX_TRIES) { user.lockedAt = new Date().toISOString(); fail("Wrong PIN. This login is now locked. Ask the admin to unlock it.", "locked_now"); }
-        fail("Wrong PIN. " + (MAX_TRIES - user.failCount) + " tries left before this login locks.", "wrong_pin");
+        if (user.failCount >= MAX_TRIES && !user.lockedAt) user.lockedAt = new Date().toISOString();
       }
-      fail("Wrong PIN.", "wrong_pin");
+      fail("Phone or PIN is wrong.", !user ? "unknown_phone" : "wrong_pin");
     }
+    try { localStorage.removeItem("conacrew.guard"); } catch (e) {}
+    if (user.active === false) fail("This login is turned off. Ask the admin.", "turned_off");
+    if (!main && user.lockedAt) fail("This login is locked. Ask the admin to unlock it.", "locked");
     if (user.role === "driver" && !user.driverId) throw new Error("This driver login is not linked to a driver record.");
     user.failCount = 0;
     const dev = deviceId();
