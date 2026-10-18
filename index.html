@@ -10,7 +10,8 @@
   <link rel="apple-touch-icon" href="./logo-mark.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" href="./logo-mark.png" />
-  <link rel="stylesheet" href="./styles.css?v=130" />
+  <link rel="stylesheet" href="./styles.css?v=131" />
+  <style>html.going .login-panel { visibility: hidden; }</style>
 </head>
 <body>
   <div class="login-page">
@@ -20,12 +21,12 @@
     </div>
     <div class="login-panel">
       <form class="card" id="login" style="padding:22px;width:min(420px,100%)">
-        <h2 id="loginTitle">Create admin</h2>
-        <input class="field" name="name" placeholder="Your name" />
+        <h2 id="loginTitle">Sign in</h2>
+        <input class="field" name="name" placeholder="Your name" style="display:none" />
         <input class="field" name="phone" placeholder="Phone" style="margin-top:10px" />
         <input class="field" name="pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" style="margin-top:10px" />
         <p class="err" id="err" style="margin:10px 0 0"></p>
-        <button class="btn btn-primary wide" style="margin-top:14px" id="loginBtn">Create and enter</button>
+        <button class="btn btn-primary wide" style="margin-top:14px" id="loginBtn">Enter Conacrew</button>
       </form>
       <a class="client-entry" href="./book.html">
         <img src="./truck-8x4-sm.jpg" alt="" />
@@ -33,44 +34,46 @@
       </a>
     </div>
   </div>
-  <script src="./store.js?v=130"></script>
+  <script src="./store.js?v=131"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>
   <script>
+    const HOME = { admin: "app.html#home", driver: "app.html#drive", cane_manager: "app.html#cane", passion_manager: "app.html#passion" };
+    // already signed in on this phone: go straight in, without showing the form
+    try {
+      if (Conacrew.session() && localStorage.getItem("conacrew.db.v2")) { const u = Conacrew.user(); if (u) { location.replace(HOME[u.role]); document.documentElement.classList.add("going"); } }
+    } catch (e) {}
     Conacrew.init().then(() => {
       const hasOwner = (Conacrew.db().users || []).some((u) => u.role === "admin") || Conacrew.server === "ok" || Conacrew.server === "signin";
-      if (hasOwner) {
-        document.getElementById("loginTitle").textContent = "Sign in";
-        document.querySelector("[name=name]").style.display = "none";
-        document.getElementById("loginBtn").textContent = "Enter Conacrew";
-      } else if (Conacrew.server === "offline") {
-        // New phone with no connection: don't start an empty book, wait for the office book.
-        document.getElementById("loginTitle").textContent = "Sign in";
-        document.querySelector("[name=name]").style.display = "none";
+      if (!hasOwner && Conacrew.server === "offline") {
+        // New phone with no connection: wait for the office book.
         document.getElementById("loginBtn").textContent = "Try again";
-        document.getElementById("err").textContent = "Can't reach the Conacrew server. Connect to the internet, then tap Try again. First sign-in on a new phone needs a connection.";
+        document.getElementById("err").textContent = "No connection. Connect to the internet, then tap Try again.";
         window.__waitServer = true;
+      } else if (!hasOwner) {
+        // brand-new site with no office book yet: first person creates the main admin
+        document.getElementById("loginTitle").textContent = "Create admin";
+        document.querySelector("[name=name]").style.display = "";
+        document.getElementById("loginBtn").textContent = "Create and enter";
       }
-      if (Conacrew.user()) location.href = ({
-        admin: "app.html#home",
-        driver: "app.html#drive",
-        cane_manager: "app.html#cane",
-        passion_manager: "app.html#passion"
-      })[Conacrew.user().role];
+      if (Conacrew.user() && !document.documentElement.classList.contains("going")) location.replace(HOME[Conacrew.user().role]);
     });
     document.getElementById("login").addEventListener("submit", async e => {
       e.preventDefault();
-      await Conacrew.init();
+      const btn = document.getElementById("loginBtn");
+      const label = btn.textContent;
+      btn.disabled = true; btn.textContent = "Signing in…";
+      document.getElementById("err").textContent = "";
       const fd = new FormData(e.target);
+      await Conacrew.init();
       if (window.__waitServer) { location.reload(); return; }
       try {
         const users = Conacrew.db().users || [];
         if (!users.some((u) => u.role === "admin") && Conacrew.server !== "ok" && Conacrew.server !== "signin") {
           Conacrew.createOwner(fd.get("name"), fd.get("phone"), fd.get("pin"));
         }
-        document.getElementById("loginBtn").disabled = true;
-        const json = await Conacrew.login(fd.get("phone"), fd.get("pin")).finally(() => { document.getElementById("loginBtn").disabled = false; });
+        const json = await Conacrew.login(fd.get("phone"), fd.get("pin"));
         if (json.needsApproval) {
           document.getElementById("login").innerHTML = `<h2>Waiting for approval</h2>
             <p style="margin-top:8px">Hi ${json.name}. Ask the admin to approve this phone, then sign in again.</p>
@@ -78,8 +81,9 @@
           return;
         }
         sessionStorage.setItem("land", "1");
-        location.href = json.home;
+        location.replace(json.home); // keep "Signing in…" showing until the app opens
       } catch (err) {
+        btn.disabled = false; btn.textContent = label;
         document.getElementById("err").textContent = err.message;
       }
     });

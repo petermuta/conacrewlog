@@ -2160,8 +2160,13 @@ function applyDelta(db, base, d, pre) {
 
 const Conacrew = {
   seed: null,
-  async init() {
-    if (this.seed) return;
+  // background: show the app from this phone's copy straight away and sync with the office behind it
+  init(opts) {
+    if (!this._local) this._local = this.initLocal();
+    if (!this._net) this._net = this._local.then(() => this.initNet());
+    return opts && opts.background ? this._local : this._net;
+  },
+  async initLocal() {
     const res = await fetch("./seed.json");
     this.seed = await res.json();
     if (!localStorage.getItem(KEY_DB)) {
@@ -2177,6 +2182,8 @@ const Conacrew = {
       pruneFleet(db);
       storeBook(db);
     }
+  },
+  async initNet() {
     await this.probe();
     if (this.server === "empty" || this.token()) await this.syncNow();
     const db = this.db();

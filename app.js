@@ -151,7 +151,8 @@ let DATA = null;
 const ROLE = { admin: "Admin", driver: "Driver", cane_manager: "Cane manager", passion_manager: "Passion manager" };
 
 async function boot() {
-  await Conacrew.init();
+  // signed in: open from this phone's copy at once; the office sync follows and refreshes the page if anything changed
+  await Conacrew.init({ background: !!Conacrew.session() });
   try {
     DATA = Conacrew.bootstrap();
   } catch (err) {
