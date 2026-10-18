@@ -58,6 +58,19 @@ function cargoSelect(val) {
 function isPaid(j) {
   return !!(j && (j.paid || j.status === "paid"));
 }
+// ---- where a load came from: a client booking (CR-...), the office or a driver ----
+function jobSource(j) {
+  const bk = j.bookingId ? (DATA.bookings || []).find((x) => x.id === j.bookingId) : null;
+  const ref = j.bookingRef || (bk && bk.ref) || "";
+  if (ref) return { kind: "client", ref, text: "Client booking " + ref };
+  if (j.source === "driver") return { kind: "driver", text: "Added by driver" + (j.loggedBy ? " · " + j.loggedBy : "") };
+  return { kind: "office", text: "Created by office" + (j.loggedBy ? " · " + j.loggedBy : "") };
+}
+function sourceChip(j) {
+  const s = jobSource(j);
+  if (s.kind === "client") return `<button type="button" class="src-chip client js-openbk" data-ref="${esc(s.ref)}" title="Open the booking">Client · ${esc(s.ref)}</button>`;
+  return `<span class="src-chip ${s.kind}">${s.kind === "driver" ? "Driver" : "Office"}</span>`;
+}
 // ---- trip steps: one distinct word for each moment ----
 const TRIP = [
   ["booked", "Truck assigned", ""],
@@ -488,11 +501,17 @@ function viewDrivers() {
 }
 
 function viewTruckJobs() {
-  const open = (DATA.jobs || []).filter((j) => !isPaid(j));
+  const src = sessionStorage.getItem("jobSrc") || "";
+  const all = (DATA.jobs || []).filter((j) => !isPaid(j));
+  const open = all.filter((j) => !src || jobSource(j).kind === src);
+  const cnt = (k) => all.filter((j) => jobSource(j).kind === k).length;
   return `
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-jobs")}
-    <div class="card" style="margin-top:14px;overflow:auto">
+    <div class="seg src-seg" style="margin-top:14px">
+      ${[["", "All", all.length], ["client", "Client", cnt("client")], ["office", "Office", cnt("office")], ["driver", "Driver", cnt("driver")]].map(([k, t, n]) => `<button type="button" class="seg-btn ${src === k ? "on" : ""}" data-jobsrc="${k}">${t}${n ? ` <span class="count">${n}</span>` : ""}</button>`).join("")}
+    </div>
+    <div class="card" style="margin-top:12px;overflow:auto">
       <table>
         <thead><tr><th>Load ID</th><th>Cargo</th><th>Route</th><th>Km / fuel</th><th>Pay</th><th>Trip</th><th></th></tr></thead>
         <tbody>
@@ -500,7 +519,7 @@ function viewTruckJobs() {
             const c = DATA.contractors.find((x) => x.id === j.contractorId);
             const t = DATA.trucks.find((x) => x.id === j.truckId);
             return `<tr>
-              <td><b>${j.code || "—"}</b></td>
+              <td><b>${j.code || "—"}</b><div>${sourceChip(j)}</div></td>
               <td>${j.cargo}<div class="muted">${c?.name || ""} · ${t?.plate || ""}</div></td>
               <td>${j.origin} → ${j.destination}<div class="muted">${j.pickupAt||""}${j.dropAt?" → "+j.dropAt:""}</div></td>
               <td>${j.km || 0} km<div class="muted">${j.fuelLitres||0} L · ${ugx(j.fuelCostUgx||0)}</div></td>
@@ -528,7 +547,7 @@ function viewPaidJobs() {
             const c = DATA.contractors.find((x) => x.id === j.contractorId);
             const t = DATA.trucks.find((x) => x.id === j.truckId);
             return `<tr>
-              <td><b>${j.code || ""} ${j.cargo}</b><div class="muted">${c?.name || ""} · ${t?.plate || ""}</div></td>
+              <td><b>${j.code || ""} ${j.cargo}</b><div class="muted">${c?.name || ""} · ${t?.plate || ""}</div><div>${sourceChip(j)}</div></td>
               <td>${j.origin} → ${j.destination}</td>
               <td>${j.paidAt || j.startDate || ""}</td>
               <td>${ugx(j.paidUgx || j.rateUgx || 0)}</td>
@@ -1032,7 +1051,7 @@ function viewBookings() {
     const job = b.jobId ? (DATA.jobs || []).find((j) => j.id === b.jobId) : null;
     const gmap = `https://www.google.com/maps/dir/?api=1&origin=${b.pickup.lat},${b.pickup.lng}&destination=${b.drop.lat},${b.drop.lng}&travelmode=driving`;
     const canQuote = ["new", "seen", "quoted", "payment_check"].includes(b.status);
-    return `<details class="card bk-card" ${list.length === 1 ? "open" : ""}>
+    return `<details class="card bk-card" ${list.length === 1 || sessionStorage.getItem("bkOpen") === b.ref ? "open" : ""} id="bk-${esc(b.ref)}">
       <summary>
         <div style="flex:1;min-width:0"><b>${esc(c.company || c.name)}</b> <span class="muted">${esc(b.ref)}</span>
           <div class="muted">${esc(b.cargo)}${b.trips > 1 ? ", " + b.trips + " trips" : ""} · ${fmtDay(b.date)}${b.km ? " · " + b.km + " km" : ""}</div></div>
@@ -1248,7 +1267,7 @@ function viewDrive(page, taskId) {
         const n = next[j.status];
         const income = j.incomeUgx || ((j.tonnesDelivered || 0) * (j.payPerTonne || 0)) || j.rateUgx;
         const dir = j.pickupPin && j.dropPin ? `https://www.google.com/maps/dir/?api=1&origin=${j.pickupPin.lat},${j.pickupPin.lng}&destination=${j.dropPin.lat},${j.dropPin.lng}&travelmode=driving` : "";
-        return `<div class="card item"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">From office</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""} · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}</p></div>${badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
+        return `<div class="card item"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">${j.bookingRef ? "Client booking " + esc(j.bookingRef) : "From office"}</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""} · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}</p></div>${badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
         ${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : `<form data-form="scale" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><input class="field" name="tonnes" required placeholder="Tonnes after scale" /><input class="field" name="ticket" type="file" accept="image/*" required /></div><button class="btn btn-steel wide" style="margin-top:8px">Save scale ticket</button></form>`}
         ${j.scaleTicket && !j.invoice ? `<form data-form="invoice" data-id="${j.id}" style="margin-top:8px"><input class="field" name="amountUgx" required placeholder="Amount UGX" value="${income || ""}" /><input class="field" name="invoice" type="file" accept="image/*" required style="margin-top:8px" /><select class="field" name="paidNow" style="margin-top:8px"><option value="0">Pay later</option><option value="1">Paid now</option></select><button class="btn btn-primary wide" style="margin-top:8px">Send invoice</button></form>` : ""}
         ${j.invoice ? `<img src="${j.invoice}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : ""}
@@ -1969,7 +1988,8 @@ function moneyTabs(on) {
 function cashRef(c) {
   const bits = [];
   if (c.truckId) { const t = (DATA.trucks || []).find((x) => x.id === c.truckId); if (t) bits.push(t.plate); }
-  if (c.jobId) { const j = (DATA.jobs || []).find((x) => x.id === c.jobId); if (j) bits.push("Load " + (j.code || j.id)); }
+  if (c.jobId) { const j = (DATA.jobs || []).find((x) => x.id === c.jobId); if (j) bits.push("Load " + (j.code || j.id) + (j.bookingRef ? " (" + j.bookingRef + ")" : "")); }
+  else if (c.bookingId) { const bk = (DATA.bookings || []).find((x) => x.id === c.bookingId); if (bk) bits.push("Booking " + bk.ref); }
   if (c.caneBuyId) { const b = (DATA.caneBuys || []).find((x) => x.id === c.caneBuyId); bits.push(b ? "Cane buy · " + (b.location || b.id) : c.caneBuyId); }
   if (c.blockId) bits.push("Block " + c.blockId);
   return bits.join(" · ");
@@ -3060,6 +3080,14 @@ function viewPL(mode) {
 
 function bind() {
   bindBookings();
+  document.querySelectorAll("[data-jobsrc]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("jobSrc", b.dataset.jobsrc); route(); }; });
+  document.querySelectorAll(".js-openbk").forEach((b) => { b.onclick = () => {
+    const bk = (DATA.bookings || []).find((x) => x.ref === b.dataset.ref);
+    const tab = !bk ? "open" : ["confirmed"].includes(bk.status) ? "booked" : ["declined", "client_declined"].includes(bk.status) ? "closed" : "open";
+    sessionStorage.setItem("bkTab", tab); sessionStorage.setItem("bkOpen", b.dataset.ref); location.hash = "#trucks-book";
+  }; });
+  const bkOpen = sessionStorage.getItem("bkOpen");
+  if (bkOpen && location.hash === "#trucks-book") { const el = document.getElementById("bk-" + bkOpen); if (el) setTimeout(() => el.scrollIntoView({ block: "start", behavior: "smooth" }), 50); sessionStorage.removeItem("bkOpen"); }
   document.querySelectorAll(".js-tripset").forEach((sel) => { sel.onchange = () => act("update_job", { id: sel.dataset.id, status: sel.value }); });
   bindLoadFromBooking();
   document.querySelectorAll("form[data-form=inspect] .mark").forEach((lab) => {
