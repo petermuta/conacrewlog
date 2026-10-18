@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./book.css?v=3" />
+  <link rel="stylesheet" href="./book.css?v=4" />
 </head>
 <body class="app">
   <div class="shell">
@@ -83,7 +83,12 @@
       <section class="screen" data-step="3" aria-label="Your details">
         <h2 class="screen-title">Your details</h2>
         <label class="f">Name<input class="in" name="name" autocomplete="name" required maxlength="80" /></label>
-        <label class="f">Phone<input class="in" name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="0772 123 456" /></label>
+        <div class="f">WhatsApp / phone
+          <div class="phone-row">
+            <select class="in" name="cc" aria-label="Country code"><option value="256">🇺🇬 +256</option><option value="254">🇰🇪 +254</option><option value="255">🇹🇿 +255</option><option value="250">🇷🇼 +250</option><option value="211">🇸🇸 +211</option><option value="243">🇨🇩 +243</option><option value="257">🇧🇮 +257</option><option value="251">🇪🇹 +251</option><option value="27">🇿🇦 +27</option><option value="234">🇳🇬 +234</option><option value="971">🇦🇪 +971</option><option value="1">🇺🇸 +1</option><option value="44">🇬🇧 +44</option><option value="91">🇮🇳 +91</option><option value="86">🇨🇳 +86</option></select>
+            <input class="in" name="phone" type="tel" inputmode="tel" autocomplete="tel-national" required placeholder="772 123 456" aria-label="Phone number" />
+          </div>
+        </div>
         <label class="f">Company <small>(optional)</small><input class="in" name="company" autocomplete="organization" maxlength="80" /></label>
         <label class="toggle"><input type="checkbox" name="whatsapp" checked /><span class="sw" aria-hidden="true"></span>Quote on WhatsApp</label>
         <div class="trap" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off" /></label></div>
@@ -110,6 +115,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="./book.js?v=3"></script>
+  <script src="./book.js?v=4"></script>
 </body>
 </html>

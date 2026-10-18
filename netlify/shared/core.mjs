@@ -454,6 +454,15 @@ const MAX_TONNES = 42; // one Sinotruk 8x4 trip
 const CARGO_BASE = ["Plaster Sand", "Lake Sand", "Stone dust", "Coal", "Dirt (murram)", "Bumba", "Rocks", "Sugarcane"];
 const BOOK_PER_DAY = 150;
 const clip = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
+// client phones from any country, stored as +<country><number>; a local Ugandan 07... number becomes +256...
+function intlPhone(v) {
+  const raw = String(v || "").trim(); const d = raw.replace(/\D/g, "");
+  if (raw.startsWith("+")) return "+" + d;
+  if (d.startsWith("00")) return "+" + d.slice(2);
+  const ug = phoneKey(raw);
+  if (/^0\d{9}$/.test(ug)) return "+256" + ug.slice(1);
+  return d ? "+" + d : "";
+}
 const inArea = (p) => p && isFinite(p.lat) && isFinite(p.lng) && p.lat > -12 && p.lat < 6 && p.lng > 28 && p.lng < 42;
 const place = (p) => ({ name: clip(p && p.name, 140), lat: Math.round(Number(p.lat) * 1e6) / 1e6, lng: Math.round(Number(p.lng) * 1e6) / 1e6 });
 const ymd = (d) => d.toISOString().slice(0, 10);
@@ -491,9 +500,9 @@ export async function handleBook(kv, { method, body, query }) {
   if (op === "request") {
     if (body.website) return { status: 200, body: { ref: "CR-0000-00", key: "x" } }; // spam trap: pretend it worked
     if (Number(body.openedAt) && now() - Number(body.openedAt) < 4000) return { status: 400, body: { error: "Please check the form and send again." } };
-    const name = clip(body.name, 80), company = clip(body.company, 80), phone = phoneKey(body.phone), email = clip(body.email, 120);
+    const name = clip(body.name, 80), company = clip(body.company, 80), phone = intlPhone(body.phone), email = clip(body.email, 120);
     if (name.length < 2) return { status: 400, body: { error: "Enter your name." } };
-    if (!/^0\d{9}$/.test(phone)) return { status: 400, body: { error: "Enter a valid phone number, e.g. 0772 123 456." } };
+    if (!/^\+\d{8,15}$/.test(phone)) return { status: 400, body: { error: "Enter a valid phone number with the country code." } };
     if (!inArea(body.pickup) || !inArea(body.drop)) return { status: 400, body: { error: "Pin the pickup and drop-off on the map." } };
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || "")) ? String(body.date) : "";
     if (!date || date < ymd(new Date(now() - 864e5))) return { status: 400, body: { error: "Choose the date you need the truck." } };

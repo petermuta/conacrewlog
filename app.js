@@ -901,8 +901,9 @@ function viewNewJob() {
 }
 
 // ───────────── Client bookings (from the public booking page) ─────────────
-const phoneDigits = (p) => { let d = String(p || "").replace(/\D/g, ""); if (d.startsWith("256")) d = d.slice(3); if (d.length === 9) d = "0" + d; return d; };
-const waNumber = (p) => { const d = phoneDigits(p); return d ? "256" + d.replace(/^0/, "") : ""; };
+// full international digits: "+44 7700 900123" -> 447700900123, a local "0772..." -> 256772...
+const phoneDigits = (p) => { const raw = String(p || "").trim(); let d = raw.replace(/\D/g, ""); if (!d) return ""; if (raw.startsWith("+")) return d; if (d.startsWith("00")) return d.slice(2); if (d.startsWith("256") && d.length === 12) return d; if (d.length === 9) d = "0" + d; return /^0\d{9}$/.test(d) ? "256" + d.slice(1) : d; };
+const waNumber = (p) => phoneDigits(p);
 function bookingsWaiting() { return (DATA && DATA.bookings || []).filter((b) => ["new", "seen", "accepted"].includes(b.status)); }
 const BK_STATUS = { new: ["gold", "New"], seen: ["gold", "To quote"], quoted: ["blue", "Quote sent"], accepted: ["green", "Client accepted"], confirmed: ["green", "Load created"], declined: ["red", "Declined"], client_declined: ["red", "Client said no"] };
 function bookingLink(b) { return location.origin + "/track?r=" + encodeURIComponent(b.ref) + "&k=" + encodeURIComponent(b.key || ""); }

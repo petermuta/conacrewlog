@@ -41,6 +41,16 @@
     if (step === 3) send();
   };
   function err(m) { $("#err").textContent = m || ""; }
+  // any country: pick the code, or type the number with + in front
+  function fullPhone() {
+    const raw = form.phone.value.trim(); const d = raw.replace(/\D/g, "");
+    if (raw.startsWith("+")) return "+" + d;
+    if (d.startsWith("00")) return "+" + d.slice(2);
+    const cc = form.cc.value;
+    if (cc === "256" && d.startsWith("256") && d.length === 12) return "+" + d;
+    return "+" + cc + d.replace(/^0+/, "");
+  }
+
   form.addEventListener("input", () => err(""));
   form.addEventListener("change", () => err(""));
 
@@ -156,11 +166,12 @@
   }
   async function send() {
     if (!form.name.value.trim()) { form.name.focus(); return err("Enter your name."); }
-    if (form.phone.value.replace(/\D/g, "").length < 9) { form.phone.focus(); return err("Enter your phone number."); }
+    const intl = fullPhone();
+    if (!/^\+\d{8,15}$/.test(intl)) { form.phone.focus(); return err("Enter your phone number."); }
     const btn = $("#next"); btn.disabled = true; btn.textContent = "Sending…";
     const body = {
       op: "request", openedAt, website: form.website.value,
-      name: form.name.value, company: form.company.value, phone: form.phone.value, whatsapp: form.whatsapp.checked,
+      name: form.name.value, company: form.company.value, phone: intl, whatsapp: form.whatsapp.checked,
       cargo: form.cargo.value === "Other" ? (form.cargoOther.value.trim() || "Other") : form.cargo.value,
       trips: form.trips.value, tonnes: form.tonnes.value, date: form.date.value, time: form.time.value, notes: form.notes.value,
       pickup: { name: pins.a.name, lat: pins.a.lat, lng: pins.a.lng }, drop: { name: pins.b.name, lat: pins.b.lat, lng: pins.b.lng }, km: Math.round(km),

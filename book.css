@@ -235,3 +235,6 @@ div.f { display: block; font-weight: 600; font-size: 14px; margin-top: 14px; }
 @media (prefers-reduced-motion: no-preference) { .screen.on { animation: in .18s ease-out; } @keyframes in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } } }
 
 .track-main { padding: 18px 16px 28px; }
+
+.phone-row { display: grid; grid-template-columns: 116px 1fr; gap: 8px; }
+.phone-row .in { margin-top: 6px; }
