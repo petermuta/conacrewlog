@@ -31,7 +31,7 @@
     <p class="lede">Sand, stone, murram, hardcore and building materials, delivered to your site anywhere in Uganda.</p>
     <ul class="specs">
       <li>8×4, 12 wheels</li>
-      <li>420 hp</li>
+      <li>Up to 42 tonnes</li>
       <li>Tipping body</li>
       <li>Driver included</li>
     </ul>
@@ -62,16 +62,16 @@
         <section class="sheet" aria-labelledby="h-load">
           <h2 id="h-load"><span class="step">2</span>The load</h2>
           <label class="f">What are you moving?
-            <select class="in" name="cargo" required>
+            <select class="in" name="cargo" required id="cargo">
               <option value="">Choose</option>
-              <option>Lake sand</option><option>Plaster sand</option><option>Aggregate / stones</option><option>Stone dust</option>
-              <option>Murram</option><option>Hardcore</option><option>Bricks / blocks</option><option>Other</option>
+              <option>Plaster Sand</option><option>Lake Sand</option><option>Stone dust</option><option>Coal</option><option>Dirt (murram)</option><option>Bumba</option><option>Rocks</option><option>Sugarcane</option>
+              <option value="Other">Other</option>
             </select>
           </label>
           <label class="f" id="otherBox" hidden>Describe it<input class="in" name="cargoOther" maxlength="50" /></label>
           <div class="row2">
             <label class="f">Trips<input class="in" name="trips" type="number" inputmode="numeric" min="1" max="200" value="1" /></label>
-            <label class="f">Tonnes <small>(if known)</small><input class="in" name="tonnes" type="number" inputmode="decimal" min="0" max="500" /></label>
+            <label class="f">Tonnes per trip <small>(max 42)</small><input class="in" name="tonnes" type="number" inputmode="decimal" min="0" max="42" step="0.5" /></label>
           </div>
           <div class="row2">
             <label class="f">Date needed<input class="in" name="date" type="date" required /></label>
@@ -110,6 +110,6 @@
   <footer>Conacrew Logistics, Uganda</footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="./book.js?v=1"></script>
+  <script src="./book.js?v=2"></script>
 </body>
 </html>

@@ -11,6 +11,13 @@
   const d = new Date(); const today = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   form.date.min = today; form.date.value = today;
   form.cargo.onchange = () => { $("#otherBox").hidden = form.cargo.value !== "Other"; };
+  // same material list as the office uses on New job
+  fetch(API + "?list=cargo", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+    if (!j || !Array.isArray(j.cargo) || !j.cargo.length) return;
+    const keep = form.cargo.value;
+    form.cargo.innerHTML = `<option value="">Choose</option>` + j.cargo.map((c) => `<option>${esc(c)}</option>`).join("") + `<option value="Other">Other</option>`;
+    form.cargo.value = keep;
+  }).catch(() => {});
 
   // ---- map ----
   let map = null;
@@ -118,6 +125,7 @@
     e.preventDefault(); err("");
     if (!pins.a || !pins.b) { err("Pin the pickup and the drop-off on the map."); $("#h-route").scrollIntoView({ behavior: "smooth" }); return; }
     if (!form.cargo.value) { err("Choose what you're moving."); form.cargo.focus(); return; }
+    if (Number(form.tonnes.value) > 42) { err("Our truck carries up to 42 tonnes per trip. Add more trips instead."); form.tonnes.focus(); return; }
     if (!form.name.value.trim()) { err("Enter your name."); form.name.focus(); return; }
     if (form.phone.value.replace(/\D/g, "").length < 9) { err("Enter your phone number."); form.phone.focus(); return; }
     const btn = $("#send"); btn.disabled = true; btn.textContent = "Sending…";

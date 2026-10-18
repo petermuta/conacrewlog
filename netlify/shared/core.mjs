@@ -380,6 +380,8 @@ export async function handleMedia(kv, { method, token, body, query }) {
 // ---------- public booking page (clients, no sign-in) ----------
 // Clients can only add a new request and read their own request with its private key. Nothing else.
 const BOOK_PER_PHONE_DAY = 4;
+const MAX_TONNES = 42; // one Sinotruk 8x4 trip
+const CARGO_BASE = ["Plaster Sand", "Lake Sand", "Stone dust", "Coal", "Dirt (murram)", "Bumba", "Rocks", "Sugarcane"];
 const BOOK_PER_DAY = 150;
 const clip = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
 const inArea = (p) => p && isFinite(p.lat) && isFinite(p.lng) && p.lat > -12 && p.lat < 6 && p.lng > 28 && p.lng < 42;
@@ -402,6 +404,12 @@ export function bookingPublic(b, book) {
   };
 }
 export async function handleBook(kv, { method, body, query }) {
+  if (method === "GET" && query.list === "cargo") {
+    const { book } = await loadBook(kv);
+    const all = [...CARGO_BASE];
+    ((book && book.cargoTypes) || []).forEach((x) => { const v = clip(x, 50); if (v && !all.some((a) => a.toLowerCase() === v.toLowerCase())) all.push(v); });
+    return { status: 200, body: { cargo: all } };
+  }
   if (method === "GET") {
     const { book } = await loadBook(kv);
     const b = book && (book.bookings || []).find((x) => x.ref === String(query.r || "") && x.key === String(query.k || ""));
@@ -421,6 +429,7 @@ export async function handleBook(kv, { method, body, query }) {
     if (!date || date < ymd(new Date(now() - 864e5))) return { status: 400, body: { error: "Choose the date you need the truck." } };
     const cargo = clip(body.cargo, 60);
     if (!cargo) return { status: 400, body: { error: "Choose what you're moving." } };
+    if (Number(body.tonnes) > MAX_TONNES) return { status: 400, body: { error: "Our truck carries up to 42 tonnes per trip. Add more trips instead." } };
     let out;
     await updateBook(kv, async (book) => {
       if (!book) { out = { status: 503, body: { error: "Booking is not open yet. Please call us." } }; return { write: false }; }
@@ -439,7 +448,7 @@ export async function handleBook(kv, { method, body, query }) {
         id: "bk-" + crypto.randomBytes(5).toString("hex"), ref, key: crypto.randomBytes(12).toString("hex"),
         status: "new", createdAt: new Date().toISOString(),
         client: { name, company, phone, email, whatsapp: body.whatsapp !== false },
-        cargo, tonnes: Math.max(0, Math.min(500, Number(body.tonnes) || 0)), trips: Math.max(0, Math.min(200, Math.round(Number(body.trips) || 0))),
+        cargo, tonnes: Math.max(0, Math.min(MAX_TONNES, Number(body.tonnes) || 0)), trips: Math.max(0, Math.min(200, Math.round(Number(body.trips) || 0))),
         date, time: clip(body.time, 20), pickup: place(body.pickup), drop: place(body.drop),
         km: Math.max(0, Math.min(3000, Math.round(Number(body.km) || 0))), notes: clip(body.notes, 600),
         history: [{ at: new Date().toISOString(), what: "Request received" }], _u: now(), _s: s,
