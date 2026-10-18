@@ -683,6 +683,24 @@ function applyAction(db, user, body) {
     return;
   }
 
+  if (action === "create_job" && body.bookingId && user.role === "admin") {
+    // a load from a client booking keeps what the client gave and the agreed price
+    const bk = (db.bookings || []).find((x) => x.id === body.bookingId);
+    if (!bk) throw new Error("Booking not found");
+    if (bk.jobId) throw new Error("This booking already has a load");
+    const c = bk.client || {};
+    if (!db.contractors) db.contractors = [];
+    const digits = (p) => { let d = String(p || "").replace(/\D/g, ""); if (/^0\d{9}$/.test(d)) d = "256" + d.slice(1); else if (/^\d{9}$/.test(d)) d = "256" + d; return d; };
+    let co = db.contractors.find((x) => x.phone && digits(x.phone) === digits(c.phone));
+    if (!co) { co = { id: uid("co"), name: c.company || c.name, phone: c.phone || "", note: "From booking " + bk.ref }; db.contractors.unshift(co); }
+    Object.assign(body, {
+      contractorId: co.id, contractorName: "", cargo: bk.cargo, cargoOther: "",
+      origin: bk.pickup.name || "Pickup", destination: bk.drop.name || "Drop-off", km: bk.km, kmHaul: bk.km,
+      rateUgx: bk.payment && bk.payment.total ? bk.payment.total : bk.quote ? bk.quote.amountUgx : 0,
+      notes: [Number(bk.trips) > 1 ? bk.trips + " trips" : "", bk.tonnes ? bk.tonnes + " t per trip" : "", bk.notes || ""].filter(Boolean).join(" · "),
+      startDate: bk.date || body.startDate,
+    });
+  }
   if (action === "create_job") {
     if (!db.contractors) db.contractors = [];
     let contractorId = body.contractorId && body.contractorId !== "new" ? body.contractorId : "";
@@ -745,7 +763,7 @@ function applyAction(db, user, body) {
       if (bk) {
         job0.bookingId = bk.id; job0.bookingRef = bk.ref; job0.fromOffice = true;
         job0.pickupPin = { lat: bk.pickup.lat, lng: bk.pickup.lng }; job0.dropPin = { lat: bk.drop.lat, lng: bk.drop.lng };
-        if (bk.notes && !job0.notes) job0.notes = bk.notes;
+
         bk.status = "confirmed"; bk.jobId = job0.id; bk.updatedAt = new Date().toISOString();
         if (bk.payment && bk.payment.total) job0.rateUgx = bk.payment.total; // 100% paid gets the 5% off
         (db.cash || []).forEach((c) => { if (c.bookingId === bk.id) { c.jobId = job0.id; c.truckId = job0.truckId; } });

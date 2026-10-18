@@ -852,8 +852,65 @@ function viewJobTrash() {
     </div>`;
 }
 
+// A load from a client booking: everything the client gave stays as it is; the office picks driver, truck and fuel
+function viewLoadFromBooking(bk) {
+  const c = bk.client || {};
+  const price = bk.payment && bk.payment.total ? bk.payment.total : bk.quote ? bk.quote.amountUgx : 0;
+  const p = bk.payment || {};
+  const paid = p.status === "received" ? p.due : 0;
+  const trips = Math.max(1, Number(bk.trips) || 1);
+  const diesel = DATA.dieselDefaultUgx || 5200;
+  const est = estimateTripFuel(bk.km || 0, bk.km || 0, 370, diesel); // loaded there, empty back
+  const litres = Math.round(est.litres * trips * 10) / 10, fuel = Math.round(est.fuelUgx * trips);
+  const at = bk.date ? bk.date + "T" + ({ Morning: "08:00", Afternoon: "13:00", Evening: "17:00" }[bk.time] || "08:00") : "";
+  const free = (DATA.trucks || []).map((t) => { const d = (DATA.drivers || []).find((x) => x.id === t.assignedDriverId); return { t, d }; });
+  const gmap = `https://www.google.com/maps/dir/?api=1&origin=${bk.pickup.lat},${bk.pickup.lng}&destination=${bk.drop.lat},${bk.drop.lng}&travelmode=driving`;
+  return `
+    <h1>New load</h1>
+    ${fleetTabs("trucks-new")}
+    <form class="card item" data-form="job" style="margin-top:16px;max-width:560px">
+      <input type="hidden" name="bookingId" value="${esc(bk.id)}" />
+      <div class="row keep" style="align-items:center"><div><b>Booking ${esc(bk.ref)}</b><div class="muted">From the client, can't be changed here</div></div><button type="button" class="btn btn-ghost btn-sm" id="dropBooking">Cancel</button></div>
+      <dl class="bk-facts">
+        <dt>Client</dt><dd>${esc(c.company || c.name)}${c.company ? `<div class="muted">${esc(c.name)}</div>` : ""}<div class="muted">${esc(c.phone)}</div></dd>
+        <dt>Load</dt><dd>${esc(bk.cargo)}${trips > 1 ? ", " + trips + " trips" : ""}${bk.tonnes ? ", " + bk.tonnes + " t per trip" : ""}</dd>
+        <dt>When</dt><dd>${fmtDay(bk.date)}${bk.time ? ", " + esc(bk.time.toLowerCase()) : ""}</dd>
+        <dt>From</dt><dd>${esc(bk.pickup.name || "Pinned pickup")}</dd>
+        <dt>To</dt><dd>${esc(bk.drop.name || "Pinned drop-off")} · <a href="${gmap}" target="_blank" rel="noopener">route</a></dd>
+        <dt>Distance</dt><dd>${bk.km || 0} km</dd>
+        ${bk.notes ? `<dt>Notes</dt><dd>${esc(bk.notes)}</dd>` : ""}
+        <dt>Price</dt><dd><b>${ugx(price)}</b>${p.plan === "full" ? " (5% off for paying in full)" : ""}</dd>
+        <dt>Paid</dt><dd>${paid ? ugx(paid) : "Nothing yet"}${p.balance ? ` · ${ugx(p.balance)} due on delivery` : ""}</dd>
+      </dl>
+      <div class="grid g2" style="margin-top:14px">
+        <label class="lbl">Truck<select class="field js-bk-truck" name="truckId">${free.map(({ t, d }) => `<option value="${t.id}" data-driver="${d ? d.id : ""}">${esc(t.plate)}${d ? " · " + esc(d.name) : ""}</option>`).join("")}</select></label>
+        <label class="lbl">Driver<select class="field js-bk-driver" name="driverId">${(DATA.drivers || []).map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
+      </div>
+      <label class="lbl" style="margin-top:10px">Pickup time<input class="field" type="datetime-local" name="pickupAt" value="${at}" /></label>
+      <p class="eyebrow" style="margin-top:14px">Fuel</p>
+      <div class="grid g3">
+        <label class="lbl">Diesel UGX / litre<input class="field js-bk-diesel" name="dieselUgxPerLitre" inputmode="numeric" value="${diesel}" /></label>
+        <label class="lbl">Litres<input class="field js-bk-litres" name="fuelLitres" inputmode="decimal" value="${litres}" /></label>
+        <label class="lbl">Fuel cost (UGX)<input class="field js-bk-fuel" name="fuelCostUgx" inputmode="numeric" value="${fuel}" /></label>
+      </div>
+      <p class="muted js-bk-fuelnote" style="margin-top:6px">${bk.km || 0} km there and back${trips > 1 ? " × " + trips + " trips" : ""}</p>
+      <button class="btn btn-steel wide" style="margin-top:14px">Create load</button>
+    </form>`;
+}
+function bindLoadFromBooking() {
+  const f = document.querySelector("form[data-form=job] [name=bookingId]");
+  if (!f) return;
+  const form = f.form;
+  const truck = form.querySelector(".js-bk-truck"), driver = form.querySelector(".js-bk-driver");
+  const pickDriver = () => { const o = truck.selectedOptions[0]; if (o && o.dataset.driver) driver.value = o.dataset.driver; };
+  truck.onchange = pickDriver; pickDriver();
+  const dz = form.querySelector(".js-bk-diesel"), lt = form.querySelector(".js-bk-litres"), fc = form.querySelector(".js-bk-fuel");
+  const cost = () => { fc.value = Math.round((Number(lt.value) || 0) * (Number(dz.value) || 0)); };
+  dz.oninput = cost; lt.oninput = cost;
+}
 function viewNewJob() {
   const bk = (DATA.bookings || []).find((x) => x.id === sessionStorage.getItem("jobFromBooking") && !x.jobId) || null;
+  if (bk) return viewLoadFromBooking(bk);
   const cl = bk ? bk.client || {} : {};
   const known = bk ? (DATA.contractors || []).find((c) => phoneDigits(c.phone) && phoneDigits(c.phone) === phoneDigits(cl.phone)) : null;
   const newC = bk && !known;
@@ -2927,6 +2984,7 @@ function viewPL(mode) {
 
 function bind() {
   bindBookings();
+  bindLoadFromBooking();
   document.querySelectorAll("form[data-form=inspect] .mark").forEach((lab) => {
     lab.onclick = () => {
       const box = lab.closest(".inspect-part");

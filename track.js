@@ -136,6 +136,8 @@
     if (n) n.onclick = async () => { if (!confirm("Turn down this quote?")) return; try { const j = await post({ op: "answer", answer: "decline" }); draw(j.ref ? j : b); } catch (x) { alert(x.message); } };
   }
   load();
+  const rb = document.getElementById("reload");
+  if (rb) rb.onclick = () => { rb.classList.add("spin"); (q.get("r") ? load() : Promise.resolve(location.reload())).finally(() => setTimeout(() => rb.classList.remove("spin"), 400)); };
   // refresh every minute, but never while the client is filling in the payment
   setInterval(() => { if (!document.hidden && !document.getElementById("payBox")) load(); }, 60000);
 })();

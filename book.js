@@ -23,6 +23,7 @@
     if (n === 1 && map) setTimeout(() => map.invalidateSize(), 50);
     if (n === 3) summary();
     window.scrollTo(0, 0);
+    if (typeof saveDraft === "function" && n < 4) setTimeout(() => { try { saveDraft(); } catch (e) {} }, 0);
   }
   $("#back").onclick = () => go(Math.max(1, step - 1));
   $("#next").onclick = () => {
@@ -118,6 +119,7 @@
     label(k); if (!name) nameOf(k);
     if (k === "a" && !pins.b) choose("b");
     err(""); measure();
+    if (typeof saveDraft === "function") setTimeout(() => saveDraft(), 0);
   }
   function label(k) { const p = pins[k]; $(k === "a" ? "#aName" : "#bName").textContent = p ? (p.name || "Pinned") : "Tap the map"; }
   async function nameOf(k) {
@@ -200,6 +202,7 @@
       $("#via").textContent = form.whatsapp.checked ? "We'll send your quote on WhatsApp." : "We'll call you with your quote.";
       $("#trackLink").value = link; $("#openTrack").href = link;
       go(4);
+      saveDraft({ done: { ref: j.ref, link, via: $("#via").textContent } });
     } catch (x) { err(x.message); }
     btn.disabled = false; btn.textContent = "Send request";
   }
@@ -241,12 +244,44 @@
     form.cargo.value = ""; form.cargoOther.value = ""; $("#otherBox").hidden = true; form.trips.value = 1; form.tonnes.value = ""; form.notes.value = "";
     chips.querySelector("button").click(); $("#timeSeg button").click();
   }
-  $("#sameRoute").onclick = () => { freshLoad(); go(2); };
-  $("#newRoute").onclick = () => { freshLoad(); clearPins(); go(1); };
+  $("#sameRoute").onclick = () => { freshLoad(); go(2); saveDraft(); };
+  $("#newRoute").onclick = () => { freshLoad(); clearPins(); go(1); saveDraft(); };
   $("#copy").onclick = async () => { const v = $("#trackLink").value; try { await navigator.clipboard.writeText(v); $("#copy").textContent = "Link copied"; } catch (e) { prompt("Copy your booking link", v); } };
+
+  // ---- refresh without losing anything: the page keeps a draft while it's open ----
+  const DRAFT = "conacrew.bookDraft";
+  const FIELDS = ["cargo", "cargoOther", "trips", "tonnes", "date", "time", "notes", "name", "company", "cc", "phone"];
+  function saveDraft(extra) {
+    if (step === 4 && !extra) return; // keep the "sent" screen as it is
+    const d = { step, pins: { a: pins.a && { lat: pins.a.lat, lng: pins.a.lng, name: pins.a.name }, b: pins.b && { lat: pins.b.lat, lng: pins.b.lng, name: pins.b.name } }, f: {}, wa: form.whatsapp.checked, day: (chips.querySelector("button.on") || {}).dataset && chips.querySelector("button.on").dataset.d, at: Date.now(), ...(extra || {}) };
+    FIELDS.forEach((k) => { d.f[k] = form[k] ? form[k].value : ""; });
+    try { sessionStorage.setItem(DRAFT, JSON.stringify(d)); } catch (e) {}
+  }
+  function restoreDraft() {
+    let d = null; try { d = JSON.parse(sessionStorage.getItem(DRAFT) || "null"); } catch (e) {}
+    if (!d || Date.now() - (d.at || 0) > 6 * 3600e3) return false;
+    if (d.done) { $("#ref").textContent = d.done.ref; $("#via").textContent = d.done.via; $("#trackLink").value = d.done.link; $("#openTrack").href = d.done.link; go(4); return true; }
+    FIELDS.forEach((k) => { if (form[k] && d.f && d.f[k] != null) form[k].value = d.f[k]; });
+    form.whatsapp.checked = d.wa !== false;
+    $("#otherBox").hidden = form.cargo.value !== "Other";
+    if (typeof showCc === "function") showCc();
+    const dayBtn = [...chips.querySelectorAll("button")].find((x) => x.dataset.d === d.day) || chips.querySelector('[data-d="pick"]');
+    chips.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === dayBtn));
+    form.date.hidden = !(dayBtn && dayBtn.dataset.d === "pick");
+    $("#timeSeg").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.v === form.time.value));
+    if (d.pins && d.pins.a) setPin("a", d.pins.a.lat, d.pins.a.lng, d.pins.a.name);
+    if (d.pins && d.pins.b) setPin("b", d.pins.b.lat, d.pins.b.lng, d.pins.b.name);
+    if (d.step > 1 && d.step < 4 && d.pins && d.pins.a && d.pins.b) setTimeout(() => go(d.step), 30);
+    return true;
+  }
+  form.addEventListener("input", () => saveDraft());
+  form.addEventListener("change", () => saveDraft());
+  form.addEventListener("click", () => setTimeout(() => saveDraft(), 0));
+  $("#reload").onclick = () => { saveDraft(); location.reload(); };
 
   go(1); info("—", "Tap the map for pickup");
   showMe(); showRecent();
+  const restored = restoreDraft();
   // "Book again" from a booking page: same route, straight to the load
-  if (new URLSearchParams(location.search).get("same")) { const last = store.get("conacrew.lastRoute", null); if (last) { useRoute(last); setTimeout(() => go(2), 50); } }
+  if (!restored && new URLSearchParams(location.search).get("same")) { const last = store.get("conacrew.lastRoute", null); if (last) { useRoute(last); setTimeout(() => go(2), 50); } }
 })();
