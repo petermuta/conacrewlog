@@ -58,6 +58,27 @@ function cargoSelect(val) {
 function isPaid(j) {
   return !!(j && (j.paid || j.status === "paid"));
 }
+// ---- trip steps: one distinct word for each moment ----
+const TRIP = [
+  ["booked", "Truck assigned", ""],
+  ["to_pickup", "Heading to pickup", "Start trip"],
+  ["loading", "Loading", "Arrived at pickup"],
+  ["en_route", "In transit", "Loaded, leaving"],
+  ["delivered", "Delivered", "Delivered"],
+];
+const TRIP_NAME = Object.fromEntries(TRIP.map(([k, n]) => [k, n]));
+const tripIdx = (st) => { const i = TRIP.findIndex(([k]) => k === st); return i >= 0 ? i : ["invoiced", "paid"].includes(st) ? 4 : 0; };
+const tripNext = (j) => TRIP[tripIdx(j.status) + 1] || null;
+function tripTime(j, k) { const s = (j.steps || {})[k]; return s && s.at ? new Date(s.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; }
+// office: next step button plus a picker to fix a step the driver forgot
+function tripControls(j) {
+  if (tripIdx(j.status) >= 4) return "";
+  const n = tripNext(j);
+  return `<div class="trip-ctl">
+    <button type="button" class="btn btn-steel btn-sm" data-act="update_job" data-id="${esc(j.id)}" data-status="${n[0]}">${esc(n[1])}</button>
+    <select class="field js-tripset" data-id="${esc(j.id)}" aria-label="Set step">${TRIP.map(([k, name], i) => `<option value="${k}" ${k === j.status ? "selected" : ""} ${i < tripIdx(j.status) ? "disabled" : ""}>${name}</option>`).join("")}</select>
+  </div>`;
+}
 function badge(status) {
   const map = {
     idle: "green",
@@ -75,6 +96,7 @@ function badge(status) {
     en_route: "blue",
     in_transit: "blue",
     booked: "",
+    to_pickup: "blue",
     loading: "gold",
     cutting: "gold",
     delivered: "gold",
@@ -88,7 +110,7 @@ function badge(status) {
     unread: "gold",
     urgent: "red",
   };
-  return `<span class="badge ${map[status] || ""}">${label(status)}</span>`;
+  return `<span class="badge ${map[status] || ""}">${TRIP_NAME[status] && status !== "delivered" ? TRIP_NAME[status] : label(status)}</span>`;
 }
 function landed(b) {
   const costs = (b.buyPriceUgx || 0) + (b.cuttingCostUgx || 0) + (b.loadingCostUgx || 0) + (b.fuelUgx || 0);
@@ -472,7 +494,7 @@ function viewTruckJobs() {
     ${fleetTabs("trucks-jobs")}
     <div class="card" style="margin-top:14px;overflow:auto">
       <table>
-        <thead><tr><th>Load ID</th><th>Cargo</th><th>Route</th><th>Pay</th><th></th></tr></thead>
+        <thead><tr><th>Load ID</th><th>Cargo</th><th>Route</th><th>Km / fuel</th><th>Pay</th><th>Trip</th><th></th></tr></thead>
         <tbody>
           ${open.length ? open.map((j) => {
             const c = DATA.contractors.find((x) => x.id === j.contractorId);
@@ -483,10 +505,11 @@ function viewTruckJobs() {
               <td>${j.origin} → ${j.destination}<div class="muted">${j.pickupAt||""}${j.dropAt?" → "+j.dropAt:""}</div></td>
               <td>${j.km || 0} km<div class="muted">${j.fuelLitres||0} L · ${ugx(j.fuelCostUgx||0)}</div></td>
               <td>${ugx(j.rateUgx||0)}<div class="muted">${j.tonnesDelivered ? j.tonnesDelivered + " t" : ""}</div>${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="width:72px;border-radius:8px" />` : ""}${j.invoice ? `<img src="${j.invoice}" alt="" style="width:72px;border-radius:8px" />` : ""}</td>
+              <td>${badge(j.status)}${tripTime(j, j.status) ? `<div class="muted">${tripTime(j, j.status)}${(j.steps || {})[j.status] && j.steps[j.status].office ? " · office" : ""}</div>` : ""}${tripControls(j)}</td>
               <td>${badge("not paid")}<button class="btn btn-primary" data-act="mark_job_paid" data-id="${j.id}" style="margin-left:8px">Paid</button>
               <button class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></td>
             </tr>`;
-          }).join("") : `<tr><td colspan="5" class="muted">No open loads</td></tr>`}
+          }).join("") : `<tr><td colspan="7" class="muted">No open loads</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -967,7 +990,7 @@ const PLAN_TEXT = { full: "100% (5% off)", deposit: "75% now, 25% on delivery", 
 // one WhatsApp message for where the booking is now
 function bookingStage(b) {
   const job = b.jobId ? (DATA.jobs || []).find((j) => j.id === b.jobId) : null;
-  if (job) return ["delivered", "invoiced", "paid"].includes(job.status) ? "delivered" : job.status === "en_route" ? "on_the_way" : job.status === "loading" ? "loading" : "assigned";
+  if (job) return ["delivered", "invoiced", "paid"].includes(job.status) ? "delivered" : job.status === "en_route" ? "on_the_way" : job.status === "loading" ? "loading" : job.status === "to_pickup" ? "heading" : "assigned";
   return b.status;
 }
 function bookingLink(b) { return location.origin + "/track?r=" + encodeURIComponent(b.ref) + "&k=" + encodeURIComponent(b.key || ""); }
@@ -987,15 +1010,16 @@ function bookingWhatsApp(b) {
     seen: [hi, `We've received your request and will send your quote shortly.`, `Your booking: ${link}`],
     payment_check: [hi, `We're checking your payment of ${ugx(p.due)}. We'll confirm shortly.`, link],
     accepted: [hi, p.plan === "account" ? `Your booking is confirmed. Payment of ${ugx(p.total)} is due on delivery.` : `Payment of ${ugx(p.due)} received, thank you. Your booking is confirmed.`, `We're assigning a truck. Follow your load here: ${link}`],
-    assigned: [hi, `Truck ${truck ? truck.plate : ""} is booked for ${fmtDay(b.date)}${job && job.pickupAt ? " at " + String(job.pickupAt).slice(11, 16) : ""}.`, `Follow your load: ${link}`],
+    assigned: [hi, `Truck ${truck ? truck.plate : ""} is assigned for ${fmtDay(b.date)}${job && job.pickupAt ? " at " + String(job.pickupAt).slice(11, 16) : ""}.`, `Follow your load: ${link}`],
+    heading: [hi, `Truck ${truck ? truck.plate : ""} is heading to the pickup.`, `Follow your load: ${link}`],
     loading: [hi, `The truck is at the pickup and loading now.`, `Follow your load: ${link}`],
-    on_the_way: [hi, `Your load is on the way${truck ? " in truck " + truck.plate : ""}.`, `Follow it here: ${link}`],
+    on_the_way: [hi, `Your load is in transit${truck ? " in truck " + truck.plate : ""}.`, `Follow it here: ${link}`],
     delivered: [hi, `Your load has been delivered. Thank you for choosing Conacrew.`].concat(p.balance && !p.balancePaidAt ? [`Balance due: ${ugx(p.balance)}.`] : []).concat([link]),
     declined: [hi, `Sorry, we can't take this load${b.declineNote ? ": " + b.declineNote : "."}`],
   }[stage] || [hi, link];
   return "https://wa.me/" + waNumber(c.phone) + "?text=" + encodeURIComponent(lines.join("\n"));
 }
-const STAGE_BTN = { new: "Tell client: request received", seen: "Tell client: request received", quoted: "Send quote on WhatsApp", payment_check: "Tell client: checking payment", accepted: "Tell client: booking confirmed", assigned: "Tell client: truck booked", loading: "Tell client: loading", on_the_way: "Tell client: on the way", delivered: "Tell client: delivered" };
+const STAGE_BTN = { new: "Tell client: request received", seen: "Tell client: request received", quoted: "Send quote on WhatsApp", payment_check: "Tell client: checking payment", accepted: "Tell client: booking confirmed", assigned: "Tell client: truck assigned", heading: "Tell client: heading to pickup", loading: "Tell client: loading", on_the_way: "Tell client: in transit", delivered: "Tell client: delivered" };
 function viewBookings() {
   const all = DATA.bookings || [];
   const tab = sessionStorage.getItem("bkTab") || "open";
@@ -1027,7 +1051,7 @@ function viewBookings() {
           ${b.quote ? `<dt>Quote</dt><dd><b>${ugx(b.quote.amountUgx)}</b> · valid to ${fmtDay(b.quote.validUntil)}${b.quote.note ? " · " + esc(b.quote.note) : ""}</dd>` : ""}
           ${b.payment ? `<dt>Payment</dt><dd>${esc(PLAN_TEXT[b.payment.plan] || "")}${b.payment.due ? ` · <b>${ugx(b.payment.due)}</b> by ${b.payment.method === "bank" ? "bank" : "Airtel Money"}${b.payment.txn ? " · ID " + esc(b.payment.txn) : ""}` : ""} · ${{ checking: "to check", received: "received", rejected: "not found", account: "on delivery" }[b.payment.status] || ""}${b.payment.balance ? ` · balance ${ugx(b.payment.balance)}${b.payment.balancePaidAt ? " paid" : " due on delivery"}` : ""}</dd>` : ""}
           ${b.clientAnswer && b.clientAnswer.note ? `<dt>Client said</dt><dd>${esc(b.clientAnswer.note)}</dd>` : ""}
-          ${job ? `<dt>Load</dt><dd><a href="#trucks-jobs">${esc(job.code)}</a> · ${esc(label(job.status))}</dd>` : ""}
+          ${job ? `<dt>Load</dt><dd><a href="#trucks-jobs">${esc(job.code)}</a> · ${esc(TRIP_NAME[job.status] || label(job.status))}${tripTime(job, job.status) ? " · " + tripTime(job, job.status) : ""}${tripControls(job)}</dd>` : ""}
         </dl>
         ${b.payment && b.payment.status === "checking" ? `<div class="bk-pay">
           <b>Check ${b.payment.method === "bank" ? "the Stanbic account" : "Airtel Money"} for ${ugx(b.payment.due)}</b><div class="muted">Transaction ID ${esc(b.payment.txn)}${b.payment.payer ? " · from " + esc(b.payment.payer) : ""}</div>
@@ -1121,7 +1145,8 @@ function viewReports() {
 }
 
 function viewDrive(page, taskId) {
-  const next = { booked: "loading", loading: "en_route", en_route: "delivered" };
+  const next = { booked: "to_pickup", to_pickup: "loading", loading: "en_route", en_route: "delivered" };
+  const nextLabel = { to_pickup: "Start trip", loading: "Arrived at pickup", en_route: "Loaded, leaving", delivered: "Delivered" };
   const myId = DATA.me.driverId;
   const jobs = (DATA.jobs || []).filter((j) => j.driverId === myId);
   const tasks = (DATA.fleetTasks || []).filter((t) => t.driverId === myId && !["done", "cancelled"].includes(t.status));
@@ -1228,7 +1253,7 @@ function viewDrive(page, taskId) {
         ${j.scaleTicket && !j.invoice ? `<form data-form="invoice" data-id="${j.id}" style="margin-top:8px"><input class="field" name="amountUgx" required placeholder="Amount UGX" value="${income || ""}" /><input class="field" name="invoice" type="file" accept="image/*" required style="margin-top:8px" /><select class="field" name="paidNow" style="margin-top:8px"><option value="0">Pay later</option><option value="1">Paid now</option></select><button class="btn btn-primary wide" style="margin-top:8px">Send invoice</button></form>` : ""}
         ${j.invoice ? `<img src="${j.invoice}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : ""}
         <button class="btn btn-ghost wide" style="margin-top:8px" data-act="trash_job" data-id="${j.id}">Remove</button>
-        ${n ? `<button class="btn btn-steel wide" style="margin-top:10px" data-act="update_job" data-id="${j.id}" data-status="${n}">Mark ${label(n)}</button>` : ""}
+        ${n ? `<div class="trip-now">${badge(j.status)}${tripTime(j, j.status) ? ` <span class="muted">${tripTime(j, j.status)}</span>` : ""}</div><button class="btn btn-steel wide" style="margin-top:10px" data-act="update_job" data-id="${j.id}" data-status="${n}">${nextLabel[n]}</button>` : ""}
         </div>`;
       }).join("") : `<div class="card item">None</div>`}
     </div>`;
@@ -1760,7 +1785,7 @@ function viewMoney(tag) {
       ${sideList("Owed to us", owedUs, "pos")}
       ${sideList("We owe", weOwe.concat(payWait), "neg")}
     </div>
-    <div class="row keep" style="margin-top:18px;align-items:center"><h2 style="margin:0">Transactions <span class="muted" style="font-size:14px">${rows.length}</span></h2><button type="button" class="btn btn-ghost btn-sm" id="flowCsv">⬇ Export CSV</button></div>
+    <div class="row keep" style="margin-top:18px;align-items:center"><h2 style="margin:0">Transactions <span class="muted" style="font-size:14px">${rows.length}</span></h2><button type="button" class="btn btn-ghost btn-sm" id="flowPdf">⬇ Export PDF</button></div>
     ${days.length ? days.map((d) => `<div class="day-head"><b>${fmtDay(d.d)}</b><span>${d.i ? `<span class="pos">+${ugx(d.i)}</span>` : ""}${d.i && d.o ? " · " : ""}${d.o ? `<span class="neg">−${ugx(d.o)}</span>` : ""}</span></div>
       <div class="card ledger">${d.rows.map((c) => { const ch = typeChip[c._type]; const who = c.payeeName || ""; const how = (METHOD_LABEL[c.method] || label(c.method || "")) + (c.payeePhone ? " " + c.payeePhone : c.bankAccount ? " · " + (c.bankName || "") + " " + c.bankAccount : "") + (c.reference ? " · Ref " + c.reference : ""); const link = cashRef(c); return `<details class="led-row"><summary>
         <span class="badge ${ch[0]}">${ch[1]}</span>
@@ -1779,18 +1804,69 @@ function bindFlow() {
   document.querySelectorAll("[data-flowbiz]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("flowBiz", b.dataset.flowbiz); if (location.hash !== "#money") location.hash = "#money"; else route(); }; });
   document.querySelectorAll("[data-flowtype]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("flowType", b.dataset.flowtype); route(); }; });
   const more = document.getElementById("flowMore"); if (more) more.onclick = () => { sessionStorage.setItem("flowShow", String(Number(sessionStorage.getItem("flowShow") || 150) + 300)); route(); };
-  const csv = document.getElementById("flowCsv");
-  if (csv) csv.onclick = () => {
-    const period = sessionStorage.getItem("flowPeriod") || "month";
-    const rows = flowRows(sessionStorage.getItem("flowBiz") || "", sessionStorage.getItem("flowType") || "", period, (sessionStorage.getItem("flowQ") || "").toLowerCase());
-    const [from, to] = periodRange(period);
-    const cell = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
-    const lines = [["Date", "Business", "Type", "Category", "In (UGX)", "Out (UGX)", "Paid to / from", "Method", "Number / account", "Reference", "Linked to", "Note"].map(cell).join(",")];
-    rows.slice().reverse().forEach((c) => lines.push([c.date, BIZ_LABEL[c.tag] || c.tag, c._type, catLabel(c.tag, c.category), c.direction === "in" ? c.amountUgx : "", c.direction === "out" ? c.amountUgx : "", c.payeeName, METHOD_LABEL[c.method] || c.method, c.payeePhone || ((c.bankName || "") + " " + (c.bankAccount || "")).trim(), c.reference, cashRef(c), c.note].map(cell).join(",")));
-    const href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv" }));
-    const a = document.createElement("a"); a.href = href; a.download = `conacrew-money-${from === "0000-00-00" ? "all" : from}-to-${to === "9999-99-99" ? todayYmd() : to}.csv`; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(href), 30000);
+  const pdf = document.getElementById("flowPdf");
+  if (pdf) pdf.onclick = async () => {
+    const label0 = pdf.textContent; pdf.disabled = true; pdf.textContent = "Making PDF…";
+    try { await moneyPdf(); } catch (e) { alert("Couldn't make the PDF. Check the connection and try again."); }
+    pdf.disabled = false; pdf.textContent = label0;
   };
+}
+function loadScript(src) {
+  return new Promise((ok, bad) => { if (document.querySelector(`script[src="${src}"]`)) return ok(); const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
+}
+// Money › Flow as a PDF report: the same rows the page shows (business, type, period, search)
+async function moneyPdf() {
+  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
+  const period = sessionStorage.getItem("flowPeriod") || "month";
+  const biz = sessionStorage.getItem("flowBiz") || "", type = sessionStorage.getItem("flowType") || "", q = (sessionStorage.getItem("flowQ") || "").toLowerCase();
+  const rows = flowRows(biz, type, period, q).slice().reverse();
+  const [from, to] = periodRange(period);
+  const sum = (dir) => rows.filter((c) => c.direction === dir).reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
+  const tin = sum("in"), tout = sum("out");
+  const n = (v) => Math.round(Number(v) || 0).toLocaleString("en-UG");
+  const day = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); } catch (e) { return d; } };
+  const range = from === "0000-00-00" ? "All time" : day(from) + " to " + day(to === "9999-99-99" ? todayYmd() : to);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  let logo = null;
+  try { logo = await new Promise((ok) => { const img = new Image(); img.onload = () => { const c = document.createElement("canvas"); c.width = 120; c.height = 120; c.getContext("2d").drawImage(img, 0, 0, 120, 120); ok(c.toDataURL("image/png")); }; img.onerror = () => ok(null); img.src = "./logo-mark.png"; }); } catch (e) {}
+  doc.setFillColor(16, 36, 63); doc.rect(0, 0, W, 70, "F");
+  if (logo) doc.addImage(logo, "PNG", 36, 15, 40, 40);
+  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.text("Conacrew Logistics", logo ? 86 : 36, 36);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(11); doc.text("Money report", logo ? 86 : 36, 54);
+  doc.setFontSize(10); doc.text(range, W - 36, 36, { align: "right" });
+  doc.text([biz ? BIZ_LABEL[biz] || biz : "All businesses", type ? "Only: " + type : "", q ? 'Search: "' + q + '"' : ""].filter(Boolean).join("   |   "), W - 36, 54, { align: "right" });
+  // totals
+  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]]];
+  boxes.forEach(([t, v, col], i) => {
+    const x = 36 + i * 180;
+    doc.setDrawColor(211, 221, 231); doc.roundedRect(x, 86, 168, 48, 6, 6, "S");
+    doc.setTextColor(74, 93, 117); doc.setFontSize(9); doc.text(t, x + 12, 102);
+    doc.setTextColor(...col); doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("UGX " + n(v), x + 12, 124); doc.setFont("helvetica", "normal");
+  });
+  doc.setTextColor(74, 93, 117); doc.setFontSize(9); doc.text(rows.length + " transactions", W - 36, 124, { align: "right" });
+  doc.autoTable({
+    startY: 150,
+    head: [["Date", "Business", "Type", "Category", "Paid to / from", "Method", "Reference", "Linked to", "In (UGX)", "Out (UGX)"]],
+    body: rows.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", String(c._type || "").replace(/^./, (x) => x.toUpperCase()), catLabel(c.tag, c.category) || c.note || "", [c.payeeName, c.payeePhone || ((c.bankName || "") + " " + (c.bankAccount || "")).trim()].filter(Boolean).join("\n"), METHOD_LABEL[c.method] || c.method || "", c.reference || "", cashRef(c) || "", c.direction === "in" ? n(c.amountUgx) : "", c.direction === "out" ? n(c.amountUgx) : ""]),
+    foot: [["", "", "", "", "", "", "", "Total", n(tin), n(tout)]],
+    styles: { font: "helvetica", fontSize: 8, cellPadding: 4, textColor: [16, 36, 63], lineColor: [211, 221, 231], lineWidth: 0.4 },
+    headStyles: { fillColor: [16, 36, 63], textColor: 255, fontStyle: "bold" },
+    footStyles: { fillColor: [234, 241, 247], textColor: [16, 36, 63], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [247, 250, 252] },
+    columnStyles: { 0: { cellWidth: 62 }, 8: { halign: "right", cellWidth: 70 }, 9: { halign: "right", cellWidth: 70 } },
+    margin: { left: 36, right: 36 },
+    didParseCell: (d) => { if (d.column.index >= 8) d.cell.styles.halign = "right"; if (typeof d.cell.text === "object") d.cell.text = d.cell.text.map((x) => String(x).replace(/·/g, "-").replace(/›/g, ">")); },
+    didDrawPage: () => {
+      const H = doc.internal.pageSize.getHeight();
+      doc.setFontSize(8); doc.setTextColor(120, 135, 155);
+      doc.text("Made " + new Date().toLocaleString("en-GB") + " by " + (DATA.me.name || ""), 36, H - 18);
+      doc.text("Page " + doc.internal.getNumberOfPages(), W - 36, H - 18, { align: "right" });
+    },
+  });
+  doc.save(`conacrew-money-${from === "0000-00-00" ? "all" : from}-to-${to === "9999-99-99" ? todayYmd() : to}.pdf`);
 }
 
 // ───────────── Admin Home: what needs you today ─────────────
@@ -1866,7 +1942,7 @@ function enhanceFields(root) {
     if (!/e\.g\./i.test(el.placeholder)) el.placeholder = /optional/i.test(el.getAttribute("placeholder")) ? "Optional" : "";
   });
   (root || document).querySelectorAll("#app select.field[aria-label]").forEach((el) => {
-    if (el.closest("label") || el.classList.contains("js-flow") || el.classList.contains("js-pagepick")) return;
+    if (el.closest("label") || el.classList.contains("js-flow") || el.classList.contains("js-pagepick") || el.classList.contains("js-tripset")) return;
     const lab = document.createElement("label"); lab.className = "lbl auto"; lab.textContent = el.getAttribute("aria-label");
     const mt = el.style.marginTop; el.style.marginTop = ""; lab.style.marginTop = mt || "";
     el.parentNode.insertBefore(lab, el); lab.appendChild(el);
@@ -2984,6 +3060,7 @@ function viewPL(mode) {
 
 function bind() {
   bindBookings();
+  document.querySelectorAll(".js-tripset").forEach((sel) => { sel.onchange = () => act("update_job", { id: sel.dataset.id, status: sel.value }); });
   bindLoadFromBooking();
   document.querySelectorAll("form[data-form=inspect] .mark").forEach((lab) => {
     lab.onclick = () => {

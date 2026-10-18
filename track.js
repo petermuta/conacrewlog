@@ -23,12 +23,13 @@
     ["quoted", "Quote ready", "Choose how to pay below to confirm."],
     ["payment_check", "Payment sent", "We're checking it now."],
     ["accepted", "Booking confirmed", "We're assigning a truck."],
-    ["assigned", "Truck booked", "Your load is on our schedule."],
+    ["assigned", "Truck assigned", "Your load is on our schedule."],
+    ["heading", "Heading to pickup", "The truck is on its way to collect your load."],
     ["loading", "Loading", "The truck is at the pickup."],
-    ["on_the_way", "On the way", "Your load is heading to you."],
-    ["delivered", "Delivered", "Thank you for using Conacrew."],
+    ["on_the_way", "In transit", "Your load is on its way to you."],
+    ["delivered", "Delivered", "Thank you for choosing Conacrew."],
   ];
-  const order = (s) => ({ new: 0, seen: 0, quoted: 1, payment_check: 2, accepted: 3, confirmed: 4, assigned: 4, loading: 5, on_the_way: 6, delivered: 7 })[s];
+  const order = (s) => ({ new: 0, seen: 0, quoted: 1, payment_check: 2, accepted: 3, confirmed: 4, assigned: 4, heading: 5, loading: 6, on_the_way: 7, delivered: 8 })[s];
   let plan = "full", method = "airtel";
   const fmtNum = (n) => String(n || "").replace(/^(\d{4})(\d{3})(\d{3})$/, "$1 $2 $3");
   function payBox(b) {
@@ -75,7 +76,8 @@
   function draw(b) {
     const at = order(b.step);
     const closed = b.step === "declined" || b.step === "client_declined";
-    const steps = closed ? "" : `<ol class="steps">${STEPS.map(([key, t, s], i) => `<li class="${i < at ? "done-step" : i === at ? "now" : ""}">${t}${i === at ? `<small>${s}</small>` : ""}</li>`).join("")}</ol>`;
+    const tm = (key) => { const v = (b.times || {})[key]; return v ? new Date(v).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : ""; };
+    const steps = closed ? "" : `<ol class="steps">${STEPS.map(([key, t, s], i) => `<li class="${i < at ? "done-step" : i === at ? "now" : ""}">${t}${tm(key) && i <= at ? ` <span class="when">${tm(key)}</span>` : ""}${i === at ? `<small>${s}</small>` : ""}</li>`).join("")}</ol>`;
     const quote = b.step === "quoted" && b.plans ? payBox(b) : b.quote ? `<div class="quote">
         <div class="sub" style="margin:0">Your quote</div>
         <div class="amt">${ugx(b.quote.amountUgx)}</div>

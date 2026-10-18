@@ -282,3 +282,5 @@ div.f { display: block; font-weight: 600; font-size: 14px; margin-top: 14px; }
 .icon-btn.spin svg { animation: spin .6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .appbar .icon-btn#reload { flex: none; }
+
+.steps .when { font-weight: 500; color: var(--ink-2); font-size: 13px; margin-left: 4px; }

@@ -995,9 +995,19 @@ function applyAction(db, user, body) {
     const job = db.jobs.find((j) => j.id === body.id);
     if (!job) throw new Error("Job not found");
     if (user.role === "driver" && job.driverId !== user.driverId) throw new Error("No access");
+    // trip steps keep their time and who set them; steps nobody tapped are marked as passed
+    const STEPS = ["booked", "to_pickup", "loading", "en_route", "delivered"];
+    const from = STEPS.indexOf(job.status), to = STEPS.indexOf(body.status);
+    if (to >= 0) {
+      job.steps = job.steps || {};
+      const at = new Date().toISOString();
+      for (let i = Math.max(1, from + 1); i < to; i++) if (!job.steps[STEPS[i]]) job.steps[STEPS[i]] = { skipped: true, by: user.name };
+      job.steps[body.status] = { at, by: user.name, office: user.role === "admin" };
+    }
     job.status = body.status;
     const truck = db.trucks.find((t) => t.id === job.truckId);
     if (truck) {
+      if (body.status === "to_pickup") truck.status = "on_trip";
       if (body.status === "loading") truck.status = "loading";
       else if (body.status === "en_route") truck.status = "on_trip";
       else if (["delivered", "invoiced", "paid"].includes(body.status)) truck.status = "idle";

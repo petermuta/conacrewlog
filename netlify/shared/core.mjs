@@ -473,7 +473,7 @@ function intlPhone(v) {
 const inArea = (p) => p && isFinite(p.lat) && isFinite(p.lng) && p.lat > -12 && p.lat < 6 && p.lng > 28 && p.lng < 42;
 const place = (p) => ({ name: clip(p && p.name, 140), lat: Math.round(Number(p.lat) * 1e6) / 1e6, lng: Math.round(Number(p.lng) * 1e6) / 1e6 });
 const ymd = (d) => d.toISOString().slice(0, 10);
-const JOB_STEP = { booked: "assigned", loading: "loading", en_route: "on_the_way", delivered: "delivered", invoiced: "delivered", paid: "delivered" };
+const JOB_STEP = { booked: "assigned", to_pickup: "heading", loading: "loading", en_route: "on_the_way", delivered: "delivered", invoiced: "delivered", paid: "delivered" };
 export function bookingPublic(b, book) {
   const job = b.jobId ? (book.jobs || []).find((j) => j.id === b.jobId) : null;
   const truck = job ? (book.trucks || []).find((t) => t.id === job.truckId) : null;
@@ -486,6 +486,7 @@ export function bookingPublic(b, book) {
     quote: b.quote && ["quoted", "payment_check", "accepted", "confirmed"].includes(b.status) || (b.quote && job) ? { amountUgx: b.quote.amountUgx, note: b.quote.note || "", at: b.quote.at, validUntil: b.quote.validUntil || "" } : null,
     declineNote: b.status === "declined" ? b.declineNote || "" : "",
     truck: truck ? { plate: truck.plate } : null,
+    times: job ? Object.fromEntries(Object.entries(job.steps || {}).map(([k, v]) => [JOB_STEP[k] || k, v && v.at ? v.at : ""])) : {},
     clientAnswer: b.clientAnswer || null,
     payment: b.payment ? { plan: b.payment.plan, total: b.payment.total, due: b.payment.due, balance: b.payment.balance, method: b.payment.method, txn: b.payment.txn, status: b.payment.status, note: b.payment.note || "", at: b.payment.at, balancePaidAt: b.payment.balancePaidAt || "" } : null,
     payInfo: b.quote && ["quoted", "payment_check"].includes(b.status) ? { ...PAY_INFO, ...(book.payInfo || {}) } : null,

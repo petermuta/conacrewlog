@@ -583,3 +583,7 @@ details.led-row > summary::-webkit-details-marker { display: none; }
 .login-panel { display: flex; flex-direction: column; align-items: center; }
 
 .bk-pay { margin-top: 12px; padding: 12px; border-radius: 12px; background: rgba(245,196,0,.12); border: 1px solid rgba(245,196,0,.5); }
+
+.trip-ctl { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+.trip-ctl select { width: auto; min-width: 150px; padding: 6px 8px; min-height: 36px; font-size: 13px; }
+.trip-now { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
