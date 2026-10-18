@@ -8,8 +8,14 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const ugx = (n) => "UGX " + Math.round(Number(n) || 0).toLocaleString("en-UG");
   const day = (s) => { if (!s) return ""; const d = new Date(String(s).length === 10 ? s + "T12:00:00" : s); return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" }); };
-  if (!r || !k) {
-    box.innerHTML = `<h2>Check a booking</h2><p class="sub">Open the link we sent you, or the one you saved after booking.</p><a class="btn btn-go" href="./book.html">Book a truck</a>`;
+  let mine = [];
+  try { mine = JSON.parse(localStorage.getItem("conacrew.myBookings") || "[]") || []; } catch (e) {}
+  if (!q.get("r")) {
+    // My bookings: every booking made on this phone
+    box.innerHTML = `<h2 class="screen-title">My bookings</h2>
+      ${mine.length ? `<div class="list-bk">${mine.map((x) => `<a href="${esc(x.link)}"><span><b>${esc(x.ref)}</b><br/>${esc(x.cargo || "")}, ${esc(String(x.from || "").split(",")[0])} to ${esc(String(x.to || "").split(",")[0])}</span><span>${day(x.date)}</span></a>`).join("")}</div>`
+        : `<p class="sub">Bookings you make on this phone show here. Or open the link we sent you on WhatsApp.</p>`}
+      <a class="btn btn-go" href="./book.html" style="margin-top:16px">Book a truck</a>`;
     return;
   }
   const STEPS = [
@@ -95,7 +101,9 @@
         ${b.km ? `<dt>Distance</dt><dd>${b.km.toLocaleString()} km</dd>` : ""}
         ${b.truck ? `<dt>Truck</dt><dd>${esc(b.truck.plate)}</dd>` : ""}
       </dl>
-      <div id="mini"></div>${closeNote}`;
+      <div id="mini"></div>${closeNote}
+      <div class="again"><b>Book another load</b><div class="again-btns"><button type="button" class="btn btn-line" id="againSame">Same route</button><a class="btn btn-line" href="./book.html">New route</a></div></div>
+      ${mine.length > 1 ? `<p class="center" style="margin-top:14px"><a href="./track.html">All my bookings</a></p>` : ""}`;
     if (typeof L !== "undefined" && b.pickup && b.drop) {
       mini = L.map("mini", { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false });
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mini);
@@ -122,6 +130,8 @@
       try { const j = await post({ op: "pay", plan, method, txn, payer: document.getElementById("payer").value }); draw(j.ref ? j : b); window.scrollTo(0, 0); }
       catch (x) { e.textContent = x.message; paid.disabled = false; paid.textContent = "I've paid, confirm booking"; }
     };
+    const again = document.getElementById("againSame");
+    if (again) again.onclick = () => { try { localStorage.setItem("conacrew.lastRoute", JSON.stringify({ a: b.pickup, b: b.drop })); } catch (e) {} location.href = "./book.html?same=1"; };
     const n = document.getElementById("no");
     if (n) n.onclick = async () => { if (!confirm("Turn down this quote?")) return; try { const j = await post({ op: "answer", answer: "decline" }); draw(j.ref ? j : b); } catch (x) { alert(x.message); } };
   }

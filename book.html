@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./book.css?v=6" />
+  <link rel="stylesheet" href="./book.css?v=7" />
 </head>
 <body class="app">
   <div class="shell">
@@ -22,7 +22,7 @@
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <a class="brand" href="./book.html"><img src="./logo-mark.png" alt="" /><b>Conacrew</b></a>
-      <a class="pill-link" href="./track.html" id="myBooking">My booking</a>
+      <a class="pill-link" href="./track.html" id="myBooking">My bookings</a>
     </header>
     <div class="progress" id="progress" aria-hidden="true"><i></i><i></i><i></i></div>
 
@@ -33,6 +33,7 @@
           <img src="./truck-8x4-sm.jpg" alt="Sinotruk HOWO 8×4 tipper" />
           <div><b>Sinotruk 8×4 tipper</b><span>Up to 42 tonnes, driver included</span></div>
         </div>
+        <div class="recent" id="recent" hidden></div>
         <div class="map-wrap">
           <div id="map" role="application" aria-label="Map"></div>
           <div class="map-top">
@@ -82,6 +83,8 @@
       <!-- 3 · contact -->
       <section class="screen" data-step="3" aria-label="Your details">
         <h2 class="screen-title">Your details</h2>
+        <div class="me-card" id="meCard" hidden><div><b id="meName"></b><span id="mePhone"></span></div><button type="button" class="btn-text" id="meEdit">Change</button></div>
+        <div id="meForm">
         <label class="f">Name<input class="in" name="name" autocomplete="name" required maxlength="80" /></label>
         <div class="f">WhatsApp / phone
           <div class="phone-row">
@@ -91,6 +94,7 @@
         </div>
         <label class="f">Company <small>(optional)</small><input class="in" name="company" autocomplete="organization" maxlength="80" /></label>
         <label class="toggle"><input type="checkbox" name="whatsapp" checked /><span class="sw" aria-hidden="true"></span>Quote on WhatsApp</label>
+        </div>
         <div class="trap" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off" /></label></div>
         <div class="summary" id="summary"></div>
       </section>
@@ -103,6 +107,10 @@
         <p class="center muted-t" id="via">We'll send your quote on WhatsApp.</p>
         <a class="btn btn-go" id="openTrack" href="#">Open my booking</a>
         <button type="button" class="btn btn-line wide" id="copy">Copy booking link</button>
+        <div class="again">
+          <b>Book another load</b>
+          <div class="again-btns"><button type="button" class="btn btn-line" id="sameRoute">Same route</button><button type="button" class="btn btn-line" id="newRoute">New route</button></div>
+        </div>
         <p class="close-note">You can close this page. We'll send updates to your WhatsApp.</p>
         <input type="hidden" id="trackLink" />
       </section>
@@ -116,6 +124,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="./book.js?v=4"></script>
+  <script src="./book.js?v=5"></script>
 </body>
 </html>

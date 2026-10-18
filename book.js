@@ -165,9 +165,9 @@
     $("#summary").innerHTML = `<span>From</span><b>${esc(pins.a && pins.a.name || "Pinned")}</b><span>To</span><b>${esc(pins.b && pins.b.name || "Pinned")}</b><span>Load</span><b>${esc(cargo)}, ${trips} trip${trips > 1 ? "s" : ""}${form.tonnes.value ? ", " + esc(form.tonnes.value) + " t" : ""}</b><span>When</span><b>${dayText(form.date.value)}${form.time.value ? ", " + form.time.value.toLowerCase() : ""}</b><span>Distance</span><b>${Math.round(km)} km</b>`;
   }
   async function send() {
-    if (!form.name.value.trim()) { form.name.focus(); return err("Enter your name."); }
+    if (!form.name.value.trim()) { $("#meCard").hidden = true; $("#meForm").hidden = false; form.name.focus(); return err("Enter your name."); }
     const intl = fullPhone();
-    if (!/^\+\d{8,15}$/.test(intl)) { form.phone.focus(); return err("Enter your phone number."); }
+    if (!/^\+\d{8,15}$/.test(intl)) { $("#meCard").hidden = true; $("#meForm").hidden = false; form.phone.focus(); return err("Enter your phone number."); }
     const btn = $("#next"); btn.disabled = true; btn.textContent = "Sending…";
     const body = {
       op: "request", openedAt, website: form.website.value,
@@ -182,6 +182,7 @@
       if (!r.ok || !j.ref) throw new Error(j.error || "Couldn't send. Check your connection and try again.");
       const link = location.origin + "/track.html?r=" + encodeURIComponent(j.ref) + "&k=" + encodeURIComponent(j.key);
       try { localStorage.setItem("conacrew.myBooking", link); } catch (x) {}
+      remember(j.ref, link, body);
       $("#ref").textContent = j.ref;
       $("#via").textContent = form.whatsapp.checked ? "We'll send your quote on WhatsApp." : "We'll call you with your quote.";
       $("#trackLink").value = link; $("#openTrack").href = link;
@@ -189,7 +190,50 @@
     } catch (x) { err(x.message); }
     btn.disabled = false; btn.textContent = "Send request";
   }
+  // ---- returning clients: this phone remembers their details, places and bookings ----
+  const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+  function remember(ref, link, body) {
+    store.set("conacrew.client", { name: body.name.trim(), company: body.company.trim(), phone: body.phone, whatsapp: body.whatsapp });
+    const pl = store.get("conacrew.places", []).filter((p) => ![body.pickup, body.drop].some((q) => Math.abs(q.lat - p.lat) < 0.002 && Math.abs(q.lng - p.lng) < 0.002));
+    store.set("conacrew.places", [body.pickup, body.drop].concat(pl).slice(0, 8));
+    store.set("conacrew.lastRoute", { a: body.pickup, b: body.drop });
+    store.set("conacrew.myBookings", [{ ref, link, cargo: body.cargo, date: body.date, from: body.pickup.name, to: body.drop.name, at: Date.now() }].concat(store.get("conacrew.myBookings", []).filter((x) => x.ref !== ref)).slice(0, 30));
+    showMe(); showRecent();
+  }
+  function showMe() {
+    const me = store.get("conacrew.client", null);
+    if (!me || !me.name || !me.phone) { $("#meCard").hidden = true; $("#meForm").hidden = false; return; }
+    form.name.value = me.name; form.company.value = me.company || ""; form.phone.value = me.phone; form.whatsapp.checked = me.whatsapp !== false;
+    $("#meName").textContent = me.name + (me.company ? ", " + me.company : "");
+    $("#mePhone").textContent = me.phone;
+    $("#meCard").hidden = false; $("#meForm").hidden = true;
+  }
+  $("#meEdit").onclick = () => { $("#meCard").hidden = true; $("#meForm").hidden = false; form.name.focus(); };
+  const short = (n) => String(n || "Pinned").split(",")[0];
+  function showRecent() {
+    const box = $("#recent");
+    const last = store.get("conacrew.lastRoute", null);
+    const seen = new Set();
+    const pl = store.get("conacrew.places", []).filter((p) => { const n = short(p.name).toLowerCase(); if (seen.has(n)) return false; seen.add(n); return true; }).slice(0, 5);
+    if (!last && !pl.length) { box.hidden = true; return; }
+    box.innerHTML = (last ? `<button type="button" class="route" data-route="1">Last route: ${esc(short(last.a.name))} to ${esc(short(last.b.name))}</button>` : "")
+      + pl.map((p, i) => `<button type="button" data-place="${i}">${esc(short(p.name))}</button>`).join("");
+    box.hidden = false;
+    box.querySelectorAll("[data-route]").forEach((b) => { b.onclick = () => useRoute(last); });
+    box.querySelectorAll("[data-place]").forEach((b) => { b.onclick = () => { const p = pl[b.dataset.place]; if (map) map.setView([p.lat, p.lng], 14); setPin(active, p.lat, p.lng, p.name); }; });
+  }
+  function useRoute(r) { if (!r || !map) return; setPin("a", r.a.lat, r.a.lng, r.a.name); setPin("b", r.b.lat, r.b.lng, r.b.name); }
+  function clearPins() { ["a", "b"].forEach((k) => { if (pins[k] && map) map.removeLayer(pins[k].m); pins[k] = null; label(k); }); if (route && map) map.removeLayer(route); route = null; km = 0; choose("a"); measure(); }
+  function freshLoad() {
+    form.cargo.value = ""; form.cargoOther.value = ""; $("#otherBox").hidden = true; form.trips.value = 1; form.tonnes.value = ""; form.notes.value = "";
+    chips.querySelector("button").click(); $("#timeSeg button").click();
+  }
+  $("#sameRoute").onclick = () => { freshLoad(); go(2); };
+  $("#newRoute").onclick = () => { freshLoad(); clearPins(); go(1); };
   $("#copy").onclick = async () => { const v = $("#trackLink").value; try { await navigator.clipboard.writeText(v); $("#copy").textContent = "Link copied"; } catch (e) { prompt("Copy your booking link", v); } };
-  try { if (localStorage.getItem("conacrew.myBooking")) $("#myBooking").href = localStorage.getItem("conacrew.myBooking"); } catch (e) {}
+
   go(1); info("—", "Tap the map for pickup");
+  showMe(); showRecent();
+  // "Book again" from a booking page: same route, straight to the load
+  if (new URLSearchParams(location.search).get("same")) { const last = store.get("conacrew.lastRoute", null); if (last) { useRoute(last); setTimeout(() => go(2), 50); } }
 })();

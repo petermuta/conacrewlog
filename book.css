@@ -256,3 +256,19 @@ div.f { display: block; font-weight: 600; font-size: 14px; margin-top: 14px; }
 #payBox .btn-go { margin-top: 12px; }
 .btn-text { display: block; margin: 10px auto 0; background: none; border: 0; font: inherit; color: var(--ink-2); text-decoration: underline; cursor: pointer; padding: 8px; }
 .close-note { margin: 18px 0 0; padding: 14px; border-radius: var(--r-md); background: #e3f4ea; color: var(--ok); font-weight: 600; text-align: center; }
+
+/* returning clients */
+.recent { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 10px; scrollbar-width: none; }
+.recent::-webkit-scrollbar { display: none; }
+.recent button { flex: none; appearance: none; border: 1.5px solid var(--line); background: var(--paper); border-radius: 999px; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink); padding: 8px 12px; cursor: pointer; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent button.route { background: var(--ink); color: #fff; border-color: var(--ink); }
+.me-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding: 14px; border-radius: var(--r-md); background: var(--sky); }
+.me-card b { display: block; font-size: 17px; }
+.me-card span { color: var(--ink-2); font-size: 14px; }
+.me-card .btn-text { margin: 0; }
+.again { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); text-align: center; }
+.again-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.list-bk { display: grid; gap: 8px; margin-top: 12px; }
+.list-bk a { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px; border-radius: var(--r-md); border: 1.5px solid var(--line); text-decoration: none; color: var(--ink); }
+.list-bk a b { font-variation-settings: "wdth" 112; }
+.list-bk a span { color: var(--ink-2); font-size: 14px; }
