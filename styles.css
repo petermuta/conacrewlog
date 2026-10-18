@@ -581,3 +581,5 @@ details.led-row > summary::-webkit-details-marker { display: none; }
 .client-entry b { display: block; font-size: 16px; }
 .client-entry small { display: block; color: #4a5d75; font-size: 13px; }
 .login-panel { display: flex; flex-direction: column; align-items: center; }
+
+.bk-pay { margin-top: 12px; padding: 12px; border-radius: 12px; background: rgba(245,196,0,.12); border: 1px solid rgba(245,196,0,.5); }

@@ -12,7 +12,7 @@ const MEDIA_MIN = 1500; // data URLs longer than this go to media storage
 const TOMBSTONE_DAYS = 180;
 const LOCAL_ONLY = new Set(["updatedAt", "mediaTrimmedAt", "_meta"]);
 const SERVER_ONLY = new Set(["loginLog"]); // phones can't write these
-const MAIN_ADMIN_ONLY = new Set(["users", "trustedDevices"]); // only the main admin can change logins
+const MAIN_ADMIN_ONLY = new Set(["users", "trustedDevices", "payInfo"]); // only the main admin can change logins
 const ADMIN_ONLY = new Set(["bookings"]); // client booking requests: admin and Admin II only
 
 export const isMainAdmin = (u) => !!u && u.role === "admin" && !u.assistant;
@@ -451,6 +451,13 @@ export async function handleMedia(kv, { method, token, body, query }) {
 // Clients can only add a new request and read their own request with its private key. Nothing else.
 const BOOK_PER_PHONE_DAY = 4;
 const MAX_TONNES = 42; // one Sinotruk 8x4 trip
+// where clients pay (the main admin can change this on Fleet › Bookings)
+export const PAY_INFO = {
+  airtel: { number: "0705139060", name: "Restatuta" },
+  bank: { bank: "Stanbic Bank Uganda", name: "Conacrew Logistics Ltd", account: "9030025603272", code: "042641" },
+};
+const FULL_OFF = 0.05, DEPOSIT = 0.75;
+export const payPlan = (quote, plan) => { const q = Math.round(Number(quote) || 0); if (plan === "full") { const total = Math.round(q * (1 - FULL_OFF)); return { total, due: total, balance: 0 }; } const due = Math.round(q * DEPOSIT); return { total: q, due, balance: q - due }; };
 const CARGO_BASE = ["Plaster Sand", "Lake Sand", "Stone dust", "Coal", "Dirt (murram)", "Bumba", "Rocks", "Sugarcane"];
 const BOOK_PER_DAY = 150;
 const clip = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
@@ -476,10 +483,13 @@ export function bookingPublic(b, book) {
     ref: b.ref, step, createdAt: b.createdAt, updatedAt: b.updatedAt || b.createdAt,
     name: b.client && b.client.name, cargo: b.cargo, tonnes: b.tonnes, trips: b.trips, date: b.date,
     pickup: b.pickup, drop: b.drop, km: b.km,
-    quote: b.quote && ["quoted", "accepted", "confirmed"].includes(b.status) || (b.quote && job) ? { amountUgx: b.quote.amountUgx, note: b.quote.note || "", at: b.quote.at, validUntil: b.quote.validUntil || "" } : null,
+    quote: b.quote && ["quoted", "payment_check", "accepted", "confirmed"].includes(b.status) || (b.quote && job) ? { amountUgx: b.quote.amountUgx, note: b.quote.note || "", at: b.quote.at, validUntil: b.quote.validUntil || "" } : null,
     declineNote: b.status === "declined" ? b.declineNote || "" : "",
     truck: truck ? { plate: truck.plate } : null,
     clientAnswer: b.clientAnswer || null,
+    payment: b.payment ? { plan: b.payment.plan, total: b.payment.total, due: b.payment.due, balance: b.payment.balance, method: b.payment.method, txn: b.payment.txn, status: b.payment.status, note: b.payment.note || "", at: b.payment.at, balancePaidAt: b.payment.balancePaidAt || "" } : null,
+    payInfo: b.quote && ["quoted", "payment_check"].includes(b.status) ? { ...PAY_INFO, ...(book.payInfo || {}) } : null,
+    plans: b.quote ? { full: payPlan(b.quote.amountUgx, "full"), deposit: payPlan(b.quote.amountUgx, "deposit") } : null,
   };
 }
 export async function handleBook(kv, { method, body, query }) {
@@ -534,6 +544,30 @@ export async function handleBook(kv, { method, body, query }) {
       };
       list.unshift(rec);
       out = { status: 200, body: { ref: rec.ref, key: rec.key } };
+      return { book };
+    });
+    return out;
+  }
+  if (op === "pay") {
+    // the client picks 100% (5% off) or 75% now, pays by Airtel Money or bank, and gives the transaction ID
+    let out;
+    await updateBook(kv, async (book) => {
+      const b = book && (book.bookings || []).find((x) => x.ref === String(body.r || "") && x.key === String(body.k || ""));
+      if (!b) { out = { status: 404, body: { error: "Booking not found." } }; return { write: false }; }
+      if (b.status !== "quoted" || !b.quote) { out = { status: 409, body: { error: "This booking can't be paid now.", ...bookingPublic(b, book) } }; return { write: false }; }
+      const plan = body.plan === "full" ? "full" : "deposit";
+      const method = body.method === "bank" ? "bank" : "airtel";
+      const txn = clip(body.txn, 60);
+      if (txn.length < 4) { out = { status: 400, body: { error: "Enter the transaction ID from your payment message." } }; return { write: false }; }
+      const pl = payPlan(b.quote.amountUgx, plan);
+      const at = new Date().toISOString();
+      b.payment = { plan, ...pl, method, txn, payer: clip(body.payer, 80), at, status: "checking" };
+      b.status = "payment_check";
+      b.clientAnswer = { answer: "accept", at };
+      b.updatedAt = at;
+      (b.history = b.history || []).push({ at, what: `Client paid ${plan === "full" ? "100% (5% off)" : "75%"}: UGX ${pl.due.toLocaleString("en-UG")} by ${method === "bank" ? "bank" : "Airtel Money"}, ID ${txn}` });
+      b._u = now(); b._s = bump(book);
+      out = { status: 200, body: bookingPublic(b, book) };
       return { book };
     });
     return out;

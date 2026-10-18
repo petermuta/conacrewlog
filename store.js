@@ -58,9 +58,12 @@ function dayOf(body, key) {
 // One load = one income line, whichever button recorded it
 function recordJobIncome(db, job, amount, date, method) {
   if (!amount) return null;
-  if ((db.cash || []).some((c) => c.direction === "in" && (c.refId === job.id || c.jobId === job.id) && c.category !== "advance_return")) return null;
+  // only what isn't in yet (a client may already have paid a deposit on the booking)
+  const already = (db.cash || []).filter((c) => c.direction === "in" && (c.refId === job.id || c.jobId === job.id) && c.category !== "advance_return").reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
+  const rest = amount - already;
+  if (rest <= 0) return null;
   const c = (db.contractors || []).find((x) => x.id === job.contractorId);
-  const row = { id: uid("k"), date: date || todayStr(), direction: "in", amountUgx: amount, tag: "trucking", category: "load_income", method: method || "invoice", note: "Load " + (job.code || job.id) + (job.cargo ? " · " + job.cargo : ""), refId: job.id, jobId: job.id, truckId: job.truckId, payeeName: c ? c.name : "" };
+  const row = { id: uid("k"), date: date || todayStr(), direction: "in", amountUgx: rest, tag: "trucking", category: "load_income", method: method || "invoice", note: "Load " + (job.code || job.id) + (job.cargo ? " · " + job.cargo : "") + (already ? " · balance" : ""), refId: job.id, jobId: job.id, truckId: job.truckId, payeeName: c ? c.name : "" };
   db.cash.unshift(row);
   return row;
 }
@@ -344,6 +347,7 @@ function scopedDb(db, user) {
       trustedDevices: user.assistant ? [] : db.trustedDevices || [],
       docs: db.docs || [],
       bookings: db.bookings || [],
+      payInfo: db.payInfo || null,
       dieselDefaultUgx: db.dieselDefaultUgx,
       trucks: db.trucks,
       drivers: db.drivers,
@@ -466,7 +470,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["quote_booking", "decline_booking", "note_booking", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -561,6 +565,45 @@ function applyAction(db, user, body) {
     if (body.driverId && body.driverId !== user.driverId) throw new Error("No access");
   }
 
+  if (action === "save_payinfo") {
+    if (!isMainAdmin(user)) throw new Error("Only the main admin can change payment details");
+    const t = (v, n) => String(v || "").trim().slice(0, n || 80);
+    db.payInfo = { airtel: { number: t(body.airtelNumber, 20), name: t(body.airtelName) }, bank: { bank: t(body.bankName), name: t(body.bankAccountName), account: t(body.bankAccount, 30), code: t(body.bankCode, 20) } };
+  }
+  if (action === "booking_payment") {
+    const bk = (db.bookings || []).find((x) => x.id === body.id);
+    if (!bk) throw new Error("Booking not found");
+    const at = new Date().toISOString();
+    const c = bk.client || {};
+    const job = bk.jobId ? db.jobs.find((j) => j.id === bk.jobId) : null;
+    const cashIn = (amt, what, method, ref) => { db.cash.unshift({ id: uid("k"), date: todayStr(), direction: "in", amountUgx: amt, tag: "trucking", category: "load_income", method: method || "cash", reference: ref || "", note: "Booking " + bk.ref + " · " + what, refId: job ? job.id : bk.id, bookingId: bk.id, jobId: job ? job.id : "", truckId: job ? job.truckId : "", payeeName: c.company || c.name || "", by: user.name }); };
+    bk.history = bk.history || [];
+    const p = bk.payment;
+    if (body.kind === "confirm") {
+      if (!p || p.status !== "checking") throw new Error("No payment to confirm");
+      p.status = "received"; p.receivedAt = at; p.receivedBy = user.name;
+      bk.status = job ? "confirmed" : "accepted";
+      cashIn(p.due, p.plan === "full" ? "paid 100% (5% off)" : "75% deposit", p.method === "bank" ? "bank" : "airtel_money", p.txn);
+      bk.history.push({ at, what: "Payment received · UGX " + p.due.toLocaleString("en-UG"), by: user.name });
+    } else if (body.kind === "reject") {
+      if (!p || p.status !== "checking") throw new Error("No payment to check");
+      p.status = "rejected"; p.note = String(body.note || "We couldn't find this payment.").trim().slice(0, 200);
+      bk.status = "quoted";
+      bk.history.push({ at, what: "Payment not found · " + p.note, by: user.name });
+    } else if (body.kind === "account") {
+      if (!bk.quote) throw new Error("Save a quote first");
+      bk.payment = { plan: "account", total: bk.quote.amountUgx, due: 0, balance: bk.quote.amountUgx, status: "account", at, by: user.name };
+      bk.status = job ? "confirmed" : "accepted";
+      bk.history.push({ at, what: "Booked without payment (pays on delivery)", by: user.name });
+    } else if (body.kind === "balance") {
+      if (!p || !p.balance || p.balancePaidAt) throw new Error("No balance waiting");
+      p.balancePaidAt = at;
+      cashIn(p.balance, p.plan === "account" ? "paid on delivery" : "balance on delivery", body.method || "cash", body.reference || "");
+      if (job) { job.paid = true; job.status = "paid"; job.paidAt = todayStr(); job.paidUgx = p.total; }
+      bk.history.push({ at, what: "Balance received · UGX " + p.balance.toLocaleString("en-UG"), by: user.name });
+    } else throw new Error("Unknown");
+    bk.updatedAt = at;
+  }
   if (action === "quote_booking" || action === "decline_booking" || action === "note_booking") {
     const bk = (db.bookings || []).find((x) => x.id === body.id);
     if (!bk) throw new Error("Booking not found");
@@ -704,6 +747,9 @@ function applyAction(db, user, body) {
         job0.pickupPin = { lat: bk.pickup.lat, lng: bk.pickup.lng }; job0.dropPin = { lat: bk.drop.lat, lng: bk.drop.lng };
         if (bk.notes && !job0.notes) job0.notes = bk.notes;
         bk.status = "confirmed"; bk.jobId = job0.id; bk.updatedAt = new Date().toISOString();
+        if (bk.payment && bk.payment.total) job0.rateUgx = bk.payment.total; // 100% paid gets the 5% off
+        (db.cash || []).forEach((c) => { if (c.bookingId === bk.id) { c.jobId = job0.id; c.truckId = job0.truckId; } });
+        if (bk.payment && bk.payment.status === "received" && !bk.payment.balance) job0.prepaid = true; // marked paid once delivered
         (bk.history = bk.history || []).push({ at: bk.updatedAt, what: "Load " + job0.code + " created", by: user.name });
       }
     }
@@ -940,6 +986,7 @@ function applyAction(db, user, body) {
     }
     if (body.status === "delivered") {
       job.deliveredAt = job.deliveredAt || todayStr();
+      if (job.prepaid && !job.paid) { job.paid = true; job.paidAt = job.deliveredAt; job.paidUgx = job.rateUgx; } // client paid in full when booking
       if (!db.payStubs) db.payStubs = [];
       const drv = db.drivers.find((d) => d.id === job.driverId);
       if (drv && (drv.payType || "trip") === "trip" && !db.payStubs.some((x) => x.refId === job.id)) {

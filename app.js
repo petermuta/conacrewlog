@@ -904,22 +904,43 @@ function viewNewJob() {
 // full international digits: "+44 7700 900123" -> 447700900123, a local "0772..." -> 256772...
 const phoneDigits = (p) => { const raw = String(p || "").trim(); let d = raw.replace(/\D/g, ""); if (!d) return ""; if (raw.startsWith("+")) return d; if (d.startsWith("00")) return d.slice(2); if (d.startsWith("256") && d.length === 12) return d; if (d.length === 9) d = "0" + d; return /^0\d{9}$/.test(d) ? "256" + d.slice(1) : d; };
 const waNumber = (p) => phoneDigits(p);
-function bookingsWaiting() { return (DATA && DATA.bookings || []).filter((b) => ["new", "seen", "accepted"].includes(b.status)); }
-const BK_STATUS = { new: ["gold", "New"], seen: ["gold", "To quote"], quoted: ["blue", "Quote sent"], accepted: ["green", "Client accepted"], confirmed: ["green", "Load created"], declined: ["red", "Declined"], client_declined: ["red", "Client said no"] };
+function bookingsWaiting() { return (DATA && DATA.bookings || []).filter((b) => ["new", "seen", "payment_check", "accepted"].includes(b.status) || (b.payment && b.payment.balance && !b.payment.balancePaidAt && bookingStage(b) === "delivered")); }
+const BK_STATUS = { new: ["gold", "New"], seen: ["gold", "To quote"], quoted: ["blue", "Quote sent"], payment_check: ["gold", "Payment to check"], accepted: ["green", "Confirmed · needs a load"], confirmed: ["green", "Load created"], declined: ["red", "Declined"], client_declined: ["red", "Client said no"] };
+const PLAN_TEXT = { full: "100% (5% off)", deposit: "75% now, 25% on delivery", account: "Pays on delivery (trusted client)" };
+// one WhatsApp message for where the booking is now
+function bookingStage(b) {
+  const job = b.jobId ? (DATA.jobs || []).find((j) => j.id === b.jobId) : null;
+  if (job) return ["delivered", "invoiced", "paid"].includes(job.status) ? "delivered" : job.status === "en_route" ? "on_the_way" : job.status === "loading" ? "loading" : "assigned";
+  return b.status;
+}
 function bookingLink(b) { return location.origin + "/track?r=" + encodeURIComponent(b.ref) + "&k=" + encodeURIComponent(b.key || ""); }
 function bookingWhatsApp(b) {
   const c = b.client || {};
   const first = String(c.name || "").split(" ")[0];
   const route = (b.pickup && b.pickup.name || "pickup") + " to " + (b.drop && b.drop.name || "drop-off");
-  const lines = b.quote
-    ? [`Hello ${first}, this is Conacrew Logistics.`, `Quote for booking ${b.ref}: ${b.cargo}${b.trips > 1 ? ", " + b.trips + " trips" : ""}, ${route}${b.km ? " (" + b.km + " km)" : ""}, ${fmtDay(b.date)}.`, `Price: ${ugx(b.quote.amountUgx)}${b.quote.note ? ". " + b.quote.note : ""}`, `See and accept your quote here: ${bookingLink(b)}`]
-    : [`Hello ${first}, this is Conacrew Logistics about your booking ${b.ref} (${b.cargo}, ${route}).`];
+  const job = b.jobId ? (DATA.jobs || []).find((j) => j.id === b.jobId) : null;
+  const truck = job ? (DATA.trucks || []).find((t) => t.id === job.truckId) : null;
+  const p = b.payment || {};
+  const link = bookingLink(b);
+  const stage = bookingStage(b);
+  const hi = `Hello ${first}, this is Conacrew Logistics about booking ${b.ref}.`;
+  const lines = {
+    quoted: [`Hello ${first}, this is Conacrew Logistics.`, `Quote for booking ${b.ref}: ${b.cargo}${b.trips > 1 ? ", " + b.trips + " trips" : ""}, ${route}${b.km ? " (" + b.km + " km)" : ""}, ${fmtDay(b.date)}.`, `Price: ${ugx(b.quote && b.quote.amountUgx)}${b.quote && b.quote.note ? ". " + b.quote.note : ""}`, `Pay 100% and get 5% off, or pay 75% now and the rest on delivery. Confirm here: ${link}`],
+    payment_check: [hi, `We're checking your payment of ${ugx(p.due)}. We'll confirm shortly.`, link],
+    accepted: [hi, p.plan === "account" ? `Your booking is confirmed. Payment of ${ugx(p.total)} is due on delivery.` : `Payment of ${ugx(p.due)} received, thank you. Your booking is confirmed.`, `We're assigning a truck. Follow your load here: ${link}`],
+    assigned: [hi, `Truck ${truck ? truck.plate : ""} is booked for ${fmtDay(b.date)}${job && job.pickupAt ? " at " + String(job.pickupAt).slice(11, 16) : ""}.`, `Follow your load: ${link}`],
+    loading: [hi, `The truck is at the pickup and loading now.`, `Follow your load: ${link}`],
+    on_the_way: [hi, `Your load is on the way${truck ? " in truck " + truck.plate : ""}.`, `Follow it here: ${link}`],
+    delivered: [hi, `Your load has been delivered. Thank you for choosing Conacrew.`].concat(p.balance && !p.balancePaidAt ? [`Balance due: ${ugx(p.balance)}.`] : []).concat([link]),
+    declined: [hi, `Sorry, we can't take this load${b.declineNote ? ": " + b.declineNote : "."}`],
+  }[stage] || [hi, link];
   return "https://wa.me/" + waNumber(c.phone) + "?text=" + encodeURIComponent(lines.join("\n"));
 }
+const STAGE_BTN = { quoted: "Send quote on WhatsApp", payment_check: "Tell client: checking payment", accepted: "Tell client: booking confirmed", assigned: "Tell client: truck booked", loading: "Tell client: loading", on_the_way: "Tell client: on the way", delivered: "Tell client: delivered" };
 function viewBookings() {
   const all = DATA.bookings || [];
   const tab = sessionStorage.getItem("bkTab") || "open";
-  const groups = { open: ["new", "seen", "quoted", "accepted"], booked: ["confirmed"], closed: ["declined", "client_declined"] };
+  const groups = { open: ["new", "seen", "quoted", "payment_check", "accepted"], booked: ["confirmed"], closed: ["declined", "client_declined"] };
   const list = all.filter((b) => groups[tab].includes(b.status));
   const pageUrl = location.origin + "/book";
   const card = (b) => {
@@ -927,7 +948,7 @@ function viewBookings() {
     const [tone, st] = BK_STATUS[b.status] || ["blue", b.status];
     const job = b.jobId ? (DATA.jobs || []).find((j) => j.id === b.jobId) : null;
     const gmap = `https://www.google.com/maps/dir/?api=1&origin=${b.pickup.lat},${b.pickup.lng}&destination=${b.drop.lat},${b.drop.lng}&travelmode=driving`;
-    const canQuote = ["new", "seen", "quoted", "accepted"].includes(b.status);
+    const canQuote = ["new", "seen", "quoted", "payment_check"].includes(b.status);
     return `<details class="card bk-card" ${list.length === 1 ? "open" : ""}>
       <summary>
         <div style="flex:1;min-width:0"><b>${esc(c.company || c.name)}</b> <span class="muted">${esc(b.ref)}</span>
@@ -945,21 +966,29 @@ function viewBookings() {
           ${b.time ? `<dt>Time</dt><dd>${esc(b.time)}</dd>` : ""}
           ${b.notes ? `<dt>Notes</dt><dd>${esc(b.notes)}</dd>` : ""}
           ${b.quote ? `<dt>Quote</dt><dd><b>${ugx(b.quote.amountUgx)}</b> · valid to ${fmtDay(b.quote.validUntil)}${b.quote.note ? " · " + esc(b.quote.note) : ""}</dd>` : ""}
+          ${b.payment ? `<dt>Payment</dt><dd>${esc(PLAN_TEXT[b.payment.plan] || "")}${b.payment.due ? ` · <b>${ugx(b.payment.due)}</b> by ${b.payment.method === "bank" ? "bank" : "Airtel Money"}${b.payment.txn ? " · ID " + esc(b.payment.txn) : ""}` : ""} · ${{ checking: "to check", received: "received", rejected: "not found", account: "on delivery" }[b.payment.status] || ""}${b.payment.balance ? ` · balance ${ugx(b.payment.balance)}${b.payment.balancePaidAt ? " paid" : " due on delivery"}` : ""}</dd>` : ""}
           ${b.clientAnswer && b.clientAnswer.note ? `<dt>Client said</dt><dd>${esc(b.clientAnswer.note)}</dd>` : ""}
           ${job ? `<dt>Load</dt><dd><a href="#trucks-jobs">${esc(job.code)}</a> · ${esc(label(job.status))}</dd>` : ""}
         </dl>
+        ${b.payment && b.payment.status === "checking" ? `<div class="bk-pay">
+          <b>Check ${b.payment.method === "bank" ? "the Stanbic account" : "Airtel Money"} for ${ugx(b.payment.due)}</b><div class="muted">Transaction ID ${esc(b.payment.txn)}${b.payment.payer ? " · from " + esc(b.payment.payer) : ""}</div>
+          <div class="bk-actions"><button type="button" class="btn btn-primary btn-sm js-bkpay" data-id="${esc(b.id)}" data-kind="confirm">Payment received</button><button type="button" class="btn btn-ghost btn-sm js-bkpay" data-id="${esc(b.id)}" data-kind="reject">Not received</button></div>
+        </div>` : ""}
+        ${b.payment && b.payment.balance && !b.payment.balancePaidAt && b.jobId ? `<div class="bk-pay"><b>Balance on delivery: ${ugx(b.payment.balance)}</b>
+          <div class="bk-actions"><button type="button" class="btn btn-primary btn-sm js-bkpay" data-id="${esc(b.id)}" data-kind="balance">Balance received</button></div></div>` : ""}
         <div class="bk-actions">
-          <a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(b)}" target="_blank" rel="noopener">${b.quote ? "Send quote on WhatsApp" : "Message on WhatsApp"}</a>
+          <a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(b)}" target="_blank" rel="noopener">${STAGE_BTN[bookingStage(b)] || "Message on WhatsApp"}</a>
           <button type="button" class="btn btn-ghost btn-sm js-copylink" data-link="${esc(bookingLink(b))}">Copy client link</button>
         </div>
-        ${canQuote ? `<form data-form="book-quote" class="bk-form">
+        ${b.quote && ["quoted", "payment_check"].includes(b.status) ? `<button type="button" class="btn btn-ghost wide js-bkpay" data-id="${esc(b.id)}" data-kind="account" style="margin-top:10px">Book without payment (trusted client)</button>` : ""}
+        ${canQuote && b.status !== "payment_check" ? `<form data-form="book-quote" class="bk-form">
           <input type="hidden" name="id" value="${esc(b.id)}" />
           <div class="grid g2"><label class="lbl">${b.quote ? "New price" : "Price"} (UGX)<input class="field" name="amountUgx" required inputmode="numeric" value="${b.quote ? b.quote.amountUgx : ""}" /></label>
           <label class="lbl">Valid for<select class="field" name="validDays"><option value="1">1 day</option><option value="3" selected>3 days</option><option value="7">7 days</option></select></label></div>
           <label class="lbl" style="margin-top:10px">Note to client <span class="muted">(optional)</span><input class="field" name="note" maxlength="300" value="${b.quote ? esc(b.quote.note) : ""}" /></label>
           <button class="btn btn-primary wide" style="margin-top:10px">${b.quote ? "Update quote" : "Save quote"}</button>
         </form>` : ""}
-        ${["quoted", "accepted"].includes(b.status) ? `<button type="button" class="btn btn-steel wide js-bk-load" data-id="${esc(b.id)}" style="margin-top:10px">Create load and assign a driver</button>` : ""}
+        ${b.status === "accepted" ? `<button type="button" class="btn btn-steel wide js-bk-load" data-id="${esc(b.id)}" style="margin-top:10px">Create load and assign a driver</button>` : ""}
         ${canQuote ? `<details class="settings" style="margin-top:10px"><summary>Decline this booking</summary><form data-form="book-decline" style="margin-top:8px"><input type="hidden" name="id" value="${esc(b.id)}" /><label class="lbl">Reason the client will see <span class="muted">(optional)</span><input class="field" name="note" maxlength="300" placeholder="e.g. No truck free that day" /></label><button class="btn btn-ghost wide" style="margin-top:8px">Decline</button></form></details>` : ""}
         <p class="eyebrow" style="margin-top:14px">History</p>
         ${(b.history || []).slice().reverse().map((h) => `<div class="pay-line"><div><b>${esc(h.what)}</b><div class="muted">${whenShort(h.at)}${h.by ? " · " + esc(h.by) : ""}</div></div></div>`).join("")}
@@ -974,6 +1003,13 @@ function viewBookings() {
       <div class="row keep" style="align-items:center"><div style="min-width:0"><b>Your booking page</b><div class="muted">${esc(pageUrl)}</div></div>
       <div style="display:flex;gap:6px"><button type="button" class="btn btn-ghost btn-sm js-copylink" data-link="${esc(pageUrl)}">Copy</button><a class="btn btn-whatsapp btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent("Hire a Sinotruk 8×4 tipper from Conacrew Logistics. Pin your pickup and drop-off and get a quote: " + pageUrl)}">Share</a></div></div>
     </div>
+    ${DATA.me.role === "admin" && !DATA.me.assistant ? (() => { const pi = DATA.payInfo || { airtel: { number: "0705139060", name: "Restatuta" }, bank: { bank: "Stanbic Bank Uganda", name: "Conacrew Logistics Ltd", account: "9030025603272", code: "042641" } }; return `<details class="card item settings" style="margin-top:10px"><summary>Where clients pay</summary>
+      <form data-form="payinfo" style="margin-top:10px">
+        <div class="grid g2"><label class="lbl">Airtel Money number<input class="field" name="airtelNumber" value="${esc(pi.airtel.number)}" /></label><label class="lbl">Name on Airtel<input class="field" name="airtelName" value="${esc(pi.airtel.name)}" /></label></div>
+        <div class="grid g2" style="margin-top:10px"><label class="lbl">Bank<input class="field" name="bankName" value="${esc(pi.bank.bank)}" /></label><label class="lbl">Account name<input class="field" name="bankAccountName" value="${esc(pi.bank.name)}" /></label></div>
+        <div class="grid g2" style="margin-top:10px"><label class="lbl">Account number<input class="field" name="bankAccount" value="${esc(pi.bank.account)}" /></label><label class="lbl">Bank code<input class="field" name="bankCode" value="${esc(pi.bank.code)}" /></label></div>
+        <button class="btn btn-steel wide" style="margin-top:10px">Save payment details</button>
+      </form></details>`; })() : ""}
     <div class="seg" style="margin-top:14px">
       ${[["open", "Open"], ["booked", "Booked"], ["closed", "Closed"]].map(([k, t]) => `<button type="button" class="seg-btn ${tab === k ? "on" : ""}" data-bktab="${k}">${t}${n(k) ? ` <span class="count">${n(k)}</span>` : ""}</button>`).join("")}
     </div>
@@ -982,6 +1018,13 @@ function viewBookings() {
 function bindBookings() {
   document.querySelectorAll("[data-bktab]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("bkTab", b.dataset.bktab); route(); }; });
   document.querySelectorAll(".js-copylink").forEach((b) => { b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.link); b.textContent = "Copied"; } catch (e) { prompt("Copy this link", b.dataset.link); } }; });
+  document.querySelectorAll(".js-bkpay").forEach((b) => { b.onclick = () => {
+    const k = b.dataset.kind; const extra = {};
+    if (k === "reject") { const why = prompt("What should the client see?", "We couldn't find this payment. Check the transaction ID and send it again."); if (why === null) return; extra.note = why; }
+    if (k === "account" && !confirm("Book this client without payment? They pay the full price on delivery.")) return;
+    if (k === "balance") { const ref = prompt("Paid how? Type a reference or leave blank for cash.", ""); if (ref === null) return; extra.reference = ref; extra.method = ref ? "airtel_money" : "cash"; }
+    act("booking_payment", { id: b.dataset.id, kind: k, ...extra });
+  }; });
   document.querySelectorAll(".js-bk-load").forEach((b) => { b.onclick = () => { sessionStorage.setItem("jobFromBooking", b.dataset.id); location.hash = "#trucks-new"; }; });
   const drop = document.getElementById("dropBooking");
   if (drop) drop.onclick = () => { sessionStorage.removeItem("jobFromBooking"); route(); };
@@ -2956,6 +2999,8 @@ function bind() {
         location.hash = "#money-pay";
       } else if (kind === "book-quote") {
         await act("quote_booking", fd);
+      } else if (kind === "payinfo") {
+        await act("save_payinfo", fd);
       } else if (kind === "book-decline") {
         await act("decline_booking", fd);
       } else if (kind === "job") {
