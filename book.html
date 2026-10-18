@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Hire a tipper truck · Conacrew Logistics</title>
+  <meta name="description" content="Hire a Sinotruk HOWO 8×4 tipper in Uganda. Pin your pickup and drop-off, see the distance, and get a quote from Conacrew Logistics." />
+  <meta name="theme-color" content="#10243f" />
+  <meta property="og:title" content="Hire a tipper truck · Conacrew Logistics" />
+  <meta property="og:description" content="Pin your pickup and drop-off and get a quote." />
+  <meta property="og:image" content="/truck-8x4.jpg" />
+  <link rel="icon" href="./logo-mark.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="./book.css?v=2" />
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="./book.html"><img src="./logo-mark.png" alt="" /><div><b>Conacrew</b><span>Logistics · Uganda</span></div></a>
+    <a class="bar-link" href="./track.html">Check a booking</a>
+  </header>
+
+  <section class="hero">
+    <div class="hero-photo">
+      <img src="./truck-8x4.jpg" srcset="./truck-8x4-sm.jpg 700w, ./truck-8x4.jpg 1400w" sizes="(max-width: 760px) 100vw, 1140px" alt="Orange Sinotruk HOWO 8×4 tipper truck" />
+      <div class="plate">Sinotruk HOWO 8×4<small>Tipper truck</small></div>
+    </div>
+    <h1>Hire a tipper for your next load</h1>
+    <p class="lede">Sand, stone, murram, hardcore and building materials, delivered to your site anywhere in Uganda.</p>
+    <ul class="specs">
+      <li>8×4, 12 wheels</li>
+      <li>420 hp</li>
+      <li>Tipping body</li>
+      <li>Driver included</li>
+    </ul>
+  </section>
+
+  <main class="wrap" id="start">
+    <form id="bookForm" novalidate>
+      <div class="layout">
+        <section class="sheet route" aria-labelledby="h-route">
+          <h2 id="h-route"><span class="step">1</span>Where is the load?</h2>
+          <p class="sub">Search a place or tap the map. Drag a pin to fine-tune it.</p>
+          <div class="pin-tabs" role="group" aria-label="Which pin to place">
+            <button type="button" class="pin-tab on" data-pin="a" aria-pressed="true"><b><span class="dot a"></span>Pickup</b><span id="aName">Not set</span></button>
+            <button type="button" class="pin-tab" data-pin="b" aria-pressed="false"><b><span class="dot b"></span>Drop-off</b><span id="bName">Not set</span></button>
+          </div>
+          <div class="search">
+            <input class="in" id="q" type="search" autocomplete="off" placeholder="Search pickup, e.g. Kigo sand landing" aria-label="Search a place" />
+            <div class="results" id="results" hidden></div>
+          </div>
+          <div id="map" role="application" aria-label="Map: tap to place the pin"></div>
+          <div class="map-tools">
+            <button type="button" class="btn btn-line btn-sm" id="here">Use my location</button>
+            <button type="button" class="btn btn-line btn-sm" id="clear">Clear pins</button>
+          </div>
+          <div class="trip empty" id="trip" aria-live="polite"><div class="km">Pin both places to see the distance</div><div class="meta"></div></div>
+        </section>
+
+        <section class="sheet" aria-labelledby="h-load">
+          <h2 id="h-load"><span class="step">2</span>The load</h2>
+          <label class="f">What are you moving?
+            <select class="in" name="cargo" required>
+              <option value="">Choose</option>
+              <option>Lake sand</option><option>Plaster sand</option><option>Aggregate / stones</option><option>Stone dust</option>
+              <option>Murram</option><option>Hardcore</option><option>Bricks / blocks</option><option>Other</option>
+            </select>
+          </label>
+          <label class="f" id="otherBox" hidden>Describe it<input class="in" name="cargoOther" maxlength="50" /></label>
+          <div class="row2">
+            <label class="f">Trips<input class="in" name="trips" type="number" inputmode="numeric" min="1" max="200" value="1" /></label>
+            <label class="f">Tonnes <small>(if known)</small><input class="in" name="tonnes" type="number" inputmode="decimal" min="0" max="500" /></label>
+          </div>
+          <div class="row2">
+            <label class="f">Date needed<input class="in" name="date" type="date" required /></label>
+            <label class="f">Time
+              <select class="in" name="time"><option value="">Any time</option><option>Morning</option><option>Afternoon</option><option>Evening</option></select>
+            </label>
+          </div>
+          <label class="f">Anything we should know? <small>(optional)</small><textarea class="in" name="notes" maxlength="600" placeholder="Site access, gate, who receives the load"></textarea></label>
+        </section>
+
+        <section class="sheet" aria-labelledby="h-you">
+          <h2 id="h-you"><span class="step">3</span>Your details</h2>
+          <label class="f">Your name<input class="in" name="name" autocomplete="name" required maxlength="80" /></label>
+          <label class="f">Company <small>(optional)</small><input class="in" name="company" autocomplete="organization" maxlength="80" /></label>
+          <label class="f">Phone<input class="in" name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="0772 123 456" /></label>
+          <label class="check"><input type="checkbox" name="whatsapp" checked /> Send my quote on WhatsApp</label>
+          <label class="f">Email <small>(optional)</small><input class="in" name="email" type="email" autocomplete="email" maxlength="120" /></label>
+          <div class="trap" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off" /></label></div>
+          <p class="err" id="err" role="alert"></p>
+          <button class="btn btn-go" id="send">Request a quote</button>
+          <p class="fine">We reply with your price, usually the same day. No payment now.</p>
+        </section>
+      </div>
+    </form>
+
+    <section class="sheet done" id="done" hidden aria-live="polite">
+      <h2>Request received</h2>
+      <p class="sub">Your booking number</p>
+      <div class="ref" id="ref"></div>
+      <p>We'll send your quote <span id="via">on WhatsApp</span>. Keep this link to check your booking and accept the quote.</p>
+      <div class="linkbox"><input class="in" id="trackLink" readonly aria-label="Your booking link" /><button type="button" class="btn btn-ink" id="copy">Copy link</button></div>
+      <div class="linkbox"><a class="btn btn-go" id="openTrack" href="#">Open my booking</a></div>
+      <p class="fine"><a href="./book.html">Book another load</a></p>
+    </section>
+  </main>
+  <footer>Conacrew Logistics, Uganda</footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="./book.js?v=1"></script>
+</body>
+</html>

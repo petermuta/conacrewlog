@@ -47,7 +47,8 @@ function inspectForm() {
 function cargoSelect(val) {
   const v = val || "";
   const known = cargoOptions();
-  const pick = known.includes(v) ? v : (v ? "Other" : "");
+  const same = known.find((c) => c.toLowerCase() === v.toLowerCase());
+  const pick = same || (v ? "Other" : "");
   return `<select class="field js-cargo" name="cargo" required>
     ${known.map((c) => `<option value="${c}" ${pick===c?"selected":""}>${c}</option>`).join("")}
     <option value="Other" ${pick==="Other"?"selected":""}>Other</option>
@@ -140,7 +141,7 @@ const PAGES = {
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-drivers", "truck-id", "reports", "requests", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pl", "money-pl-q", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-drivers", "truck-id", "reports", "requests", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pl", "money-pl-q", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -242,6 +243,7 @@ function route() {
     "trucks-work": viewTruckWork,
     "trucks-inspect": viewInspectReport,
     "trucks-new": viewNewJob,
+    "trucks-book": viewBookings,
     "trucks-trash": viewJobTrash,
     "trucks-drivers": viewDrivers,
     "truck-id": () => viewTruck(r.id),
@@ -289,6 +291,7 @@ function route() {
     "trucks-work": "trucks",
     "trucks-inspect": "trucks",
     "trucks-new": "trucks",
+    "trucks-book": "trucks",
     "trucks-trash": "trucks",
     "trucks-drivers": "trucks",
     "trucks-spend": "trucks",
@@ -352,7 +355,7 @@ function bizBar() {
   const dot = (n) => n ? ` <span class="attn-dot"></span>` : "";
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
-    fleet: [["#trucks", "Units"], ["#trucks-jobs", "Jobs"], ["#trucks-spend", "Spend", req.trucking], ["#trucks-work", "Work", (DATA.fleetTasks || []).filter((t) => t.status === "done").length], ["#trucks-docs", "Docs"], ["#trucks-inspect", "Reports"], ["#trucks-paid", "Paid"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New job"], ["#trucks-trash", "Trash"]],
+    fleet: [["#trucks", "Units"], ["#trucks-book", "Bookings", bookingsWaiting().length], ["#trucks-jobs", "Jobs"], ["#trucks-spend", "Spend", req.trucking], ["#trucks-work", "Work", (DATA.fleetTasks || []).filter((t) => t.status === "done").length], ["#trucks-docs", "Docs"], ["#trucks-inspect", "Reports"], ["#trucks-paid", "Paid"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New job"], ["#trucks-trash", "Trash"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Spend", req.sugarcane], ["#cane-docs", "Docs"]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-spend", "Spend", req.passion], ["#passion-docs", "Docs"]],
     money: [["#money", "Flow"], ["#money-spend", "Spend"], ["#money-pay", "Pay"]],
@@ -360,7 +363,7 @@ function bizBar() {
   return `<nav class="admin-nav">
     <div class="biz">
       <a class="${biz === "home" ? "on" : ""}" href="#home">Home${dot(phonesWaiting())}</a>
-      <a class="${biz === "fleet" ? "on" : ""}" href="#trucks">Fleet${dot(req.trucking)}</a>
+      <a class="${biz === "fleet" ? "on" : ""}" href="#trucks">Fleet${dot(req.trucking + bookingsWaiting().length)}</a>
       <a class="${biz === "cane" ? "on" : ""}" href="#cane">Cane${dot(req.sugarcane)}</a>
       <a class="${biz === "passion" ? "on" : ""}" href="#passion">Passion${dot(req.passion)}</a>
       <a class="${biz === "money" ? "on" : ""}" href="#money">Money</a>
@@ -849,23 +852,29 @@ function viewJobTrash() {
 }
 
 function viewNewJob() {
+  const bk = (DATA.bookings || []).find((x) => x.id === sessionStorage.getItem("jobFromBooking") && !x.jobId) || null;
+  const cl = bk ? bk.client || {} : {};
+  const known = bk ? (DATA.contractors || []).find((c) => phoneDigits(c.phone) && phoneDigits(c.phone) === phoneDigits(cl.phone)) : null;
+  const newC = bk && !known;
   return `
     <h1>New job</h1>
     ${fleetTabs("trucks-new")}
+    ${bk ? `<div class="card item from-booking" style="margin-top:16px;max-width:560px"><div class="row keep" style="align-items:center"><div><b>From booking ${esc(bk.ref)}</b><div class="muted">${esc(cl.name)}${cl.company ? ", " + esc(cl.company) : ""}</div></div><button type="button" class="btn btn-ghost btn-sm" id="dropBooking">Clear</button></div></div>` : ""}
     <form class="card item" data-form="job" style="margin-top:16px;max-width:560px">
-      <select class="field js-contractor" name="contractorId">${DATA.contractors.map((c) => `<option value="${c.id}">${c.name} ${c.phone||""}</option>`).join("")}<option value="new">New contractor</option></select>
-      <div class="grid g2 js-new-contractor" style="margin-top:10px;display:none">
-        <input class="field" name="contractorName" placeholder="New contractor" />
-        <input class="field" name="contractorPhone" placeholder="Phone" />
+      ${bk ? `<input type="hidden" name="bookingId" value="${esc(bk.id)}" />` : ""}
+      <select class="field js-contractor" name="contractorId">${DATA.contractors.map((c) => `<option value="${c.id}" ${known && known.id === c.id ? "selected" : ""}>${c.name} ${c.phone||""}</option>`).join("")}<option value="new" ${newC ? "selected" : ""}>New contractor</option></select>
+      <div class="grid g2 js-new-contractor" style="margin-top:10px;${newC ? "" : "display:none"}">
+        <input class="field" name="contractorName" placeholder="New contractor" value="${newC ? esc(cl.company || cl.name) : ""}" />
+        <input class="field" name="contractorPhone" placeholder="Phone" value="${newC ? esc(cl.phone) : ""}" />
       </div>
       <div style="height:10px"></div>
-      ${cargoSelect("")}
+      ${cargoSelect(bk ? bk.cargo : "")}
       <div class="grid g2" style="margin-top:10px">
-        <input class="field js-pv" placeholder="Pickup (optional name)" />
-        <input class="field js-dv" placeholder="Drop (optional name)" />
+        <input class="field js-pv" placeholder="Pickup (optional name)" value="${bk ? esc(bk.pickup.name) : ""}" />
+        <input class="field js-dv" placeholder="Drop (optional name)" value="${bk ? esc(bk.drop.name) : ""}" />
       </div>
       <div class="grid g2" style="margin-top:10px">
-        <input class="field" type="datetime-local" name="pickupAt" placeholder="Pickup date" />
+        <input class="field" type="datetime-local" name="pickupAt" placeholder="Pickup date" value="${bk && bk.date ? bk.date + "T" + ({ Morning: "08:00", Afternoon: "13:00", Evening: "17:00" }[bk.time] || "08:00") : ""}" />
         <input class="field" type="datetime-local" name="dropAt" placeholder="Drop date" />
       </div>
       <input type="hidden" name="origin" class="js-origin" />
@@ -874,10 +883,10 @@ function viewNewJob() {
       <button type="button" class="btn btn-ghost" id="useGps" style="margin-top:8px">Add truck GPS (optional)</button>
       <input type="hidden" name="kmToPickup" class="js-dead" />
       <input type="hidden" name="kmHaul" class="js-haul" />
-      <div id="routeMap" style="height:220px;margin-top:8px;border-radius:14px"></div>
+      <div id="routeMap" style="height:220px;margin-top:8px;border-radius:14px" ${bk ? `data-pick="${bk.pickup.lat},${bk.pickup.lng}" data-drop="${bk.drop.lat},${bk.drop.lng}"` : ""}></div>
       <div class="grid g3" style="margin-top:10px">
-        <input class="field js-km" name="km" placeholder="Km" />
-        <input class="field" name="rateUgx" required placeholder="Pay UGX" />
+        <input class="field js-km" name="km" placeholder="Km" value="${bk && bk.km ? bk.km : ""}" />
+        <input class="field" name="rateUgx" required placeholder="Pay UGX" value="${bk && bk.quote ? bk.quote.amountUgx : ""}" />
         <input class="field js-diesel" name="dieselUgxPerLitre" value="${DATA.dieselDefaultUgx||5200}" placeholder="UGX per litre" />
         <input class="field js-litres" name="fuelLitres" readonly placeholder="Needed litres" />
         <input class="field js-fuel" name="fuelCostUgx" readonly placeholder="Total fuel cost" />
@@ -888,6 +897,92 @@ function viewNewJob() {
       </div>
       <button class="btn btn-steel wide" style="margin-top:14px">Save job</button>
     </form>`;
+}
+
+// ───────────── Client bookings (from the public booking page) ─────────────
+const phoneDigits = (p) => { let d = String(p || "").replace(/\D/g, ""); if (d.startsWith("256")) d = d.slice(3); if (d.length === 9) d = "0" + d; return d; };
+const waNumber = (p) => { const d = phoneDigits(p); return d ? "256" + d.replace(/^0/, "") : ""; };
+function bookingsWaiting() { return (DATA && DATA.bookings || []).filter((b) => ["new", "seen", "accepted"].includes(b.status)); }
+const BK_STATUS = { new: ["gold", "New"], seen: ["gold", "To quote"], quoted: ["blue", "Quote sent"], accepted: ["green", "Client accepted"], confirmed: ["green", "Load created"], declined: ["red", "Declined"], client_declined: ["red", "Client said no"] };
+function bookingLink(b) { return location.origin + "/track?r=" + encodeURIComponent(b.ref) + "&k=" + encodeURIComponent(b.key || ""); }
+function bookingWhatsApp(b) {
+  const c = b.client || {};
+  const first = String(c.name || "").split(" ")[0];
+  const route = (b.pickup && b.pickup.name || "pickup") + " to " + (b.drop && b.drop.name || "drop-off");
+  const lines = b.quote
+    ? [`Hello ${first}, this is Conacrew Logistics.`, `Quote for booking ${b.ref}: ${b.cargo}${b.trips > 1 ? ", " + b.trips + " trips" : ""}, ${route}${b.km ? " (" + b.km + " km)" : ""}, ${fmtDay(b.date)}.`, `Price: ${ugx(b.quote.amountUgx)}${b.quote.note ? ". " + b.quote.note : ""}`, `See and accept your quote here: ${bookingLink(b)}`]
+    : [`Hello ${first}, this is Conacrew Logistics about your booking ${b.ref} (${b.cargo}, ${route}).`];
+  return "https://wa.me/" + waNumber(c.phone) + "?text=" + encodeURIComponent(lines.join("\n"));
+}
+function viewBookings() {
+  const all = DATA.bookings || [];
+  const tab = sessionStorage.getItem("bkTab") || "open";
+  const groups = { open: ["new", "seen", "quoted", "accepted"], booked: ["confirmed"], closed: ["declined", "client_declined"] };
+  const list = all.filter((b) => groups[tab].includes(b.status));
+  const pageUrl = location.origin + "/book";
+  const card = (b) => {
+    const c = b.client || {};
+    const [tone, st] = BK_STATUS[b.status] || ["blue", b.status];
+    const job = b.jobId ? (DATA.jobs || []).find((j) => j.id === b.jobId) : null;
+    const gmap = `https://www.google.com/maps/dir/?api=1&origin=${b.pickup.lat},${b.pickup.lng}&destination=${b.drop.lat},${b.drop.lng}&travelmode=driving`;
+    const canQuote = ["new", "seen", "quoted", "accepted"].includes(b.status);
+    return `<details class="card bk-card" ${list.length === 1 ? "open" : ""}>
+      <summary>
+        <div style="flex:1;min-width:0"><b>${esc(c.company || c.name)}</b> <span class="muted">${esc(b.ref)}</span>
+          <div class="muted">${esc(b.cargo)}${b.trips > 1 ? ", " + b.trips + " trips" : ""} · ${fmtDay(b.date)}${b.km ? " · " + b.km + " km" : ""}</div></div>
+        <span class="badge ${tone}">${st}</span>
+      </summary>
+      <div class="bk-body">
+        <div class="bk-route"><div><span class="pin-dot a"></span>${esc(b.pickup.name || "Pinned pickup")}</div><div><span class="pin-dot b"></span>${esc(b.drop.name || "Pinned drop-off")}</div>
+          <a class="btn btn-ghost btn-sm" href="${gmap}" target="_blank" rel="noopener">Open route in Google Maps</a></div>
+        <dl class="bk-facts">
+          <dt>Client</dt><dd>${esc(c.name)}${c.company ? ", " + esc(c.company) : ""}</dd>
+          <dt>Phone</dt><dd><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>${c.whatsapp ? " · prefers WhatsApp" : ""}</dd>
+          ${c.email ? `<dt>Email</dt><dd>${esc(c.email)}</dd>` : ""}
+          ${b.tonnes ? `<dt>Tonnes</dt><dd>${b.tonnes}</dd>` : ""}
+          ${b.time ? `<dt>Time</dt><dd>${esc(b.time)}</dd>` : ""}
+          ${b.notes ? `<dt>Notes</dt><dd>${esc(b.notes)}</dd>` : ""}
+          ${b.quote ? `<dt>Quote</dt><dd><b>${ugx(b.quote.amountUgx)}</b> · valid to ${fmtDay(b.quote.validUntil)}${b.quote.note ? " · " + esc(b.quote.note) : ""}</dd>` : ""}
+          ${b.clientAnswer && b.clientAnswer.note ? `<dt>Client said</dt><dd>${esc(b.clientAnswer.note)}</dd>` : ""}
+          ${job ? `<dt>Load</dt><dd><a href="#trucks-jobs">${esc(job.code)}</a> · ${esc(label(job.status))}</dd>` : ""}
+        </dl>
+        <div class="bk-actions">
+          <a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(b)}" target="_blank" rel="noopener">${b.quote ? "Send quote on WhatsApp" : "Message on WhatsApp"}</a>
+          <button type="button" class="btn btn-ghost btn-sm js-copylink" data-link="${esc(bookingLink(b))}">Copy client link</button>
+        </div>
+        ${canQuote ? `<form data-form="book-quote" class="bk-form">
+          <input type="hidden" name="id" value="${esc(b.id)}" />
+          <div class="grid g2"><label class="lbl">${b.quote ? "New price" : "Price"} (UGX)<input class="field" name="amountUgx" required inputmode="numeric" value="${b.quote ? b.quote.amountUgx : ""}" /></label>
+          <label class="lbl">Valid for<select class="field" name="validDays"><option value="1">1 day</option><option value="3" selected>3 days</option><option value="7">7 days</option></select></label></div>
+          <label class="lbl" style="margin-top:10px">Note to client <span class="muted">(optional)</span><input class="field" name="note" maxlength="300" value="${b.quote ? esc(b.quote.note) : ""}" /></label>
+          <button class="btn btn-primary wide" style="margin-top:10px">${b.quote ? "Update quote" : "Save quote"}</button>
+        </form>` : ""}
+        ${["quoted", "accepted"].includes(b.status) ? `<button type="button" class="btn btn-steel wide js-bk-load" data-id="${esc(b.id)}" style="margin-top:10px">Create load and assign a driver</button>` : ""}
+        ${canQuote ? `<details class="settings" style="margin-top:10px"><summary>Decline this booking</summary><form data-form="book-decline" style="margin-top:8px"><input type="hidden" name="id" value="${esc(b.id)}" /><label class="lbl">Reason the client will see <span class="muted">(optional)</span><input class="field" name="note" maxlength="300" placeholder="e.g. No truck free that day" /></label><button class="btn btn-ghost wide" style="margin-top:8px">Decline</button></form></details>` : ""}
+        <p class="eyebrow" style="margin-top:14px">History</p>
+        ${(b.history || []).slice().reverse().map((h) => `<div class="pay-line"><div><b>${esc(h.what)}</b><div class="muted">${whenShort(h.at)}${h.by ? " · " + esc(h.by) : ""}</div></div></div>`).join("")}
+      </div>
+    </details>`;
+  };
+  const n = (g) => all.filter((b) => groups[g].includes(b.status)).length;
+  return `
+    <h1>Fleet</h1>
+    ${fleetTabs("trucks-book")}
+    <div class="card item share-card" style="margin-top:14px">
+      <div class="row keep" style="align-items:center"><div style="min-width:0"><b>Your booking page</b><div class="muted">${esc(pageUrl)}</div></div>
+      <div style="display:flex;gap:6px"><button type="button" class="btn btn-ghost btn-sm js-copylink" data-link="${esc(pageUrl)}">Copy</button><a class="btn btn-whatsapp btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent("Hire a Sinotruk 8×4 tipper from Conacrew Logistics. Pin your pickup and drop-off and get a quote: " + pageUrl)}">Share</a></div></div>
+    </div>
+    <div class="seg" style="margin-top:14px">
+      ${[["open", "Open"], ["booked", "Booked"], ["closed", "Closed"]].map(([k, t]) => `<button type="button" class="seg-btn ${tab === k ? "on" : ""}" data-bktab="${k}">${t}${n(k) ? ` <span class="count">${n(k)}</span>` : ""}</button>`).join("")}
+    </div>
+    <div class="list" style="margin-top:12px">${list.length ? list.map(card).join("") : `<div class="card item muted">${tab === "open" ? "No client requests waiting." : "Nothing here yet."}</div>`}</div>`;
+}
+function bindBookings() {
+  document.querySelectorAll("[data-bktab]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("bkTab", b.dataset.bktab); route(); }; });
+  document.querySelectorAll(".js-copylink").forEach((b) => { b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.link); b.textContent = "Copied"; } catch (e) { prompt("Copy this link", b.dataset.link); } }; });
+  document.querySelectorAll(".js-bk-load").forEach((b) => { b.onclick = () => { sessionStorage.setItem("jobFromBooking", b.dataset.id); location.hash = "#trucks-new"; }; });
+  const drop = document.getElementById("dropBooking");
+  if (drop) drop.onclick = () => { sessionStorage.removeItem("jobFromBooking"); route(); };
 }
 
 function mediaBlock(issue) {
@@ -1023,7 +1118,8 @@ function viewDrive(page, taskId) {
         const c = DATA.contractors.find((x) => x.id === j.contractorId);
         const n = next[j.status];
         const income = j.incomeUgx || ((j.tonnesDelivered || 0) * (j.payPerTonne || 0)) || j.rateUgx;
-        return `<div class="card item"><div class="row"><div><b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p><p class="muted">${c?.name || ""} · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}</p></div>${badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
+        const dir = j.pickupPin && j.dropPin ? `https://www.google.com/maps/dir/?api=1&origin=${j.pickupPin.lat},${j.pickupPin.lng}&destination=${j.dropPin.lat},${j.dropPin.lng}&travelmode=driving` : "";
+        return `<div class="card item"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">From office</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""} · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}</p></div>${badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
         ${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : `<form data-form="scale" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><input class="field" name="tonnes" required placeholder="Tonnes after scale" /><input class="field" name="ticket" type="file" accept="image/*" required /></div><button class="btn btn-steel wide" style="margin-top:8px">Save scale ticket</button></form>`}
         ${j.scaleTicket && !j.invoice ? `<form data-form="invoice" data-id="${j.id}" style="margin-top:8px"><input class="field" name="amountUgx" required placeholder="Amount UGX" value="${income || ""}" /><input class="field" name="invoice" type="file" accept="image/*" required style="margin-top:8px" /><select class="field" name="paidNow" style="margin-top:8px"><option value="0">Pay later</option><option value="1">Paid now</option></select><button class="btn btn-primary wide" style="margin-top:8px">Send invoice</button></form>` : ""}
         ${j.invoice ? `<img src="${j.invoice}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : ""}
@@ -1611,6 +1707,8 @@ function viewHome() {
   [["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].forEach(([t, n]) => { if (req[t]) attn.push([FUND_HOME[t], "gold", `${req[t]} money request${req[t] > 1 ? "s" : ""}`, n]); });
   if (replies) attn.push(["#trucks-work", "blue", `${replies} task repl${replies > 1 ? "ies" : "y"} to check`, "Fleet"]);
   if (phones) attn.push(["#team", "gold", `${phones} new phone${phones > 1 ? "s" : ""} to approve`, "Team"]);
+  const bkN = bookingsWaiting().length;
+  if (bkN) attn.push(["#trucks-book", "gold", `${bkN} client booking${bkN > 1 ? "s" : ""} to answer`, "Fleet"]);
   if (payN) attn.push(["#money-pay", "purple", `${payN} payment${payN > 1 ? "s" : ""} waiting`, "Payroll"]);
   (DATA.alerts || []).forEach((a) => attn.push([a.href || "#trucks", a.tone === "bad" ? "red" : "gold", a.text, ""]));
   const [mFrom] = periodRange("month");
@@ -2763,6 +2861,7 @@ function viewPL(mode) {
 }
 
 function bind() {
+  bindBookings();
   document.querySelectorAll("form[data-form=inspect] .mark").forEach((lab) => {
     lab.onclick = () => {
       const box = lab.closest(".inspect-part");
@@ -2835,9 +2934,15 @@ function bind() {
         if (!fd.amountUgx) { alert("Enter the pay amount"); return; }
         await act("pay_stub", { id: form.dataset.id, jobId: form.dataset.id, amountUgx: fd.amountUgx, phone: fd.phone, status: "paid" });
         location.hash = "#money-pay";
+      } else if (kind === "book-quote") {
+        await act("quote_booking", fd);
+      } else if (kind === "book-decline") {
+        await act("decline_booking", fd);
       } else if (kind === "job") {
         await act("create_job", fd);
-        location.hash = "#trucks";
+        const fromBk = !!fd.bookingId;
+        sessionStorage.removeItem("jobFromBooking");
+        location.hash = fromBk ? "#trucks-book" : "#trucks";
       } else if (kind === "save-truck") {
         await act("save_truck", fd);
         location.hash = "#trucks-drivers";
@@ -3591,6 +3696,15 @@ function bindRouteCalc() {
       measure();
     }
   });
+  if (box.dataset.pick && box.dataset.drop) {
+    const [pa, pb] = box.dataset.pick.split(",").map(Number); const [da, db] = box.dataset.drop.split(",").map(Number);
+    pick = { lat: pa, lon: pb }; drop = { lat: da, lon: db };
+    m1 = L.marker([pa, pb]).addTo(map).bindPopup("Pickup");
+    m2 = L.marker([da, db]).addTo(map).bindPopup("Drop");
+    map.fitBounds([[pa, pb], [da, db]], { padding: [30, 30] });
+    nextPin = "pick";
+    measure();
+  }
   const pv = document.querySelector(".js-pv");
   const dv = document.querySelector(".js-dv");
   if (pv) {

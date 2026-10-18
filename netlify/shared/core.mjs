@@ -13,6 +13,7 @@ const TOMBSTONE_DAYS = 180;
 const LOCAL_ONLY = new Set(["updatedAt", "mediaTrimmedAt", "_meta"]);
 const SERVER_ONLY = new Set(["loginLog"]); // phones can't write these
 const MAIN_ADMIN_ONLY = new Set(["users", "trustedDevices"]); // only the main admin can change logins
+const ADMIN_ONLY = new Set(["bookings"]); // client booking requests: admin and Admin II only
 
 export const isMainAdmin = (u) => !!u && u.role === "admin" && !u.assistant;
 export function phoneKey(v) {
@@ -137,6 +138,7 @@ async function fromWholeBook(kv, whole) {
 
 function mayWrite(user, coll, rec, prev) {
   if (SERVER_ONLY.has(coll)) return false;
+  if (ADMIN_ONLY.has(coll) && user.role !== "admin") return false;
   if (MAIN_ADMIN_ONLY.has(coll) && !isMainAdmin(user)) {
     // Admin II can add a new driver (its login has no PIN until the main admin sets one)
     if (coll === "users" && user.role === "admin" && !prev && rec && rec.role === "driver") return true;
@@ -218,6 +220,7 @@ function delta(book, viewer, since, refused) {
     if (k === "_meta") continue;
     if (isRecList(v) && !(m.top[k])) {
       const want = refused && refused[k] ? new Set(refused[k]) : null;
+      if (ADMIN_ONLY.has(k) && viewer.role !== "admin") continue;
       const recs = v.filter((r) => full || r._s > since || (want && want.has(r.id))).map((r) => viewRecord(viewer, k, r));
       if (recs.length || full) out.set[k] = recs;
     } else {
@@ -372,4 +375,98 @@ export async function handleMedia(kv, { method, token, body, query }) {
   if (!data.startsWith("data:")) return { status: 400, body: { error: "not a file" } };
   if (data.length > 4.5e6) return { status: 413, body: { error: "File too big (max about 3 MB)" } };
   return { status: 200, body: { url: await liftMedia(kv, data) } };
+}
+
+// ---------- public booking page (clients, no sign-in) ----------
+// Clients can only add a new request and read their own request with its private key. Nothing else.
+const BOOK_PER_PHONE_DAY = 4;
+const BOOK_PER_DAY = 150;
+const clip = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
+const inArea = (p) => p && isFinite(p.lat) && isFinite(p.lng) && p.lat > -12 && p.lat < 6 && p.lng > 28 && p.lng < 42;
+const place = (p) => ({ name: clip(p && p.name, 140), lat: Math.round(Number(p.lat) * 1e6) / 1e6, lng: Math.round(Number(p.lng) * 1e6) / 1e6 });
+const ymd = (d) => d.toISOString().slice(0, 10);
+const JOB_STEP = { booked: "assigned", loading: "loading", en_route: "on_the_way", delivered: "delivered", invoiced: "delivered", paid: "delivered" };
+export function bookingPublic(b, book) {
+  const job = b.jobId ? (book.jobs || []).find((j) => j.id === b.jobId) : null;
+  const truck = job ? (book.trucks || []).find((t) => t.id === job.truckId) : null;
+  let step = b.status;
+  if (job) step = JOB_STEP[job.status] || "assigned";
+  return {
+    ref: b.ref, step, createdAt: b.createdAt, updatedAt: b.updatedAt || b.createdAt,
+    name: b.client && b.client.name, cargo: b.cargo, tonnes: b.tonnes, trips: b.trips, date: b.date,
+    pickup: b.pickup, drop: b.drop, km: b.km,
+    quote: b.quote && ["quoted", "accepted", "confirmed"].includes(b.status) || (b.quote && job) ? { amountUgx: b.quote.amountUgx, note: b.quote.note || "", at: b.quote.at, validUntil: b.quote.validUntil || "" } : null,
+    declineNote: b.status === "declined" ? b.declineNote || "" : "",
+    truck: truck ? { plate: truck.plate } : null,
+    clientAnswer: b.clientAnswer || null,
+  };
+}
+export async function handleBook(kv, { method, body, query }) {
+  if (method === "GET") {
+    const { book } = await loadBook(kv);
+    const b = book && (book.bookings || []).find((x) => x.ref === String(query.r || "") && x.key === String(query.k || ""));
+    if (!b) return { status: 404, body: { error: "We couldn't find this booking. Check the link." } };
+    return { status: 200, body: bookingPublic(b, book) };
+  }
+  if (method !== "POST") return { status: 405, body: { error: "method" } };
+  const op = body && body.op;
+  if (op === "request") {
+    if (body.website) return { status: 200, body: { ref: "CR-0000-00", key: "x" } }; // spam trap: pretend it worked
+    if (Number(body.openedAt) && now() - Number(body.openedAt) < 4000) return { status: 400, body: { error: "Please check the form and send again." } };
+    const name = clip(body.name, 80), company = clip(body.company, 80), phone = phoneKey(body.phone), email = clip(body.email, 120);
+    if (name.length < 2) return { status: 400, body: { error: "Enter your name." } };
+    if (!/^0\d{9}$/.test(phone)) return { status: 400, body: { error: "Enter a valid phone number, e.g. 0772 123 456." } };
+    if (!inArea(body.pickup) || !inArea(body.drop)) return { status: 400, body: { error: "Pin the pickup and drop-off on the map." } };
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || "")) ? String(body.date) : "";
+    if (!date || date < ymd(new Date(now() - 864e5))) return { status: 400, body: { error: "Choose the date you need the truck." } };
+    const cargo = clip(body.cargo, 60);
+    if (!cargo) return { status: 400, body: { error: "Choose what you're moving." } };
+    let out;
+    await updateBook(kv, async (book) => {
+      if (!book) { out = { status: 503, body: { error: "Booking is not open yet. Please call us." } }; return { write: false }; }
+      const list = Array.isArray(book.bookings) ? book.bookings : (book.bookings = []);
+      const today = ymd(new Date());
+      const todays = list.filter((x) => String(x.createdAt || "").slice(0, 10) === today);
+      if (todays.length >= BOOK_PER_DAY || todays.filter((x) => x.client && x.client.phone === phone).length >= BOOK_PER_PHONE_DAY) {
+        out = { status: 429, body: { error: "We already have your requests for today. We'll get back to you soon." } };
+        return { write: false };
+      }
+      const s = bump(book);
+      const md = today.slice(5, 7) + today.slice(8, 10);
+      let n = todays.length + 1, ref;
+      do { ref = "CR-" + md + "-" + String(n++).padStart(2, "0"); } while (list.some((x) => x.ref === ref));
+      const rec = {
+        id: "bk-" + crypto.randomBytes(5).toString("hex"), ref, key: crypto.randomBytes(12).toString("hex"),
+        status: "new", createdAt: new Date().toISOString(),
+        client: { name, company, phone, email, whatsapp: body.whatsapp !== false },
+        cargo, tonnes: Math.max(0, Math.min(500, Number(body.tonnes) || 0)), trips: Math.max(0, Math.min(200, Math.round(Number(body.trips) || 0))),
+        date, time: clip(body.time, 20), pickup: place(body.pickup), drop: place(body.drop),
+        km: Math.max(0, Math.min(3000, Math.round(Number(body.km) || 0))), notes: clip(body.notes, 600),
+        history: [{ at: new Date().toISOString(), what: "Request received" }], _u: now(), _s: s,
+      };
+      list.unshift(rec);
+      out = { status: 200, body: { ref: rec.ref, key: rec.key } };
+      return { book };
+    });
+    return out;
+  }
+  if (op === "answer") {
+    // the client accepts or turns down the quote from their link
+    let out;
+    await updateBook(kv, async (book) => {
+      const b = book && (book.bookings || []).find((x) => x.ref === String(body.r || "") && x.key === String(body.k || ""));
+      if (!b) { out = { status: 404, body: { error: "Booking not found." } }; return { write: false }; }
+      if (b.status !== "quoted") { out = { status: 409, body: { error: "This quote can't be changed now.", ...bookingPublic(b, book) } }; return { write: false }; }
+      const yes = body.answer === "accept";
+      b.status = yes ? "accepted" : "client_declined";
+      b.clientAnswer = { answer: yes ? "accept" : "decline", note: clip(body.note, 300), at: new Date().toISOString() };
+      b.updatedAt = b.clientAnswer.at;
+      (b.history = b.history || []).push({ at: b.updatedAt, what: yes ? "Client accepted the quote" : "Client turned down the quote" });
+      b._u = now(); b._s = bump(book);
+      out = { status: 200, body: bookingPublic(b, book) };
+      return { book };
+    });
+    return out;
+  }
+  return { status: 400, body: { error: "unknown" } };
 }

@@ -116,7 +116,7 @@ function storeBook(db) {
 }
 const hasAdmin = (db) => !!(db && (db.users || []).some((u) => u.role === "admin"));
 function pruneFleet(db) {
-  ["users", "trucks", "drivers", "jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "contractors", "sellers", "mills", "caneBuys", "caneSales", "caneExpenses", "blocks", "farmWorks", "fruitSales", "cash", "payStubs", "notifications", "moneyRequests", "receivables", "harvests", "fieldLogs", "farmInputs", "docs"].forEach((k) => {
+  ["users", "trucks", "drivers", "jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "contractors", "sellers", "mills", "caneBuys", "caneSales", "caneExpenses", "blocks", "farmWorks", "fruitSales", "cash", "payStubs", "notifications", "moneyRequests", "receivables", "harvests", "fieldLogs", "farmInputs", "docs", "bookings"].forEach((k) => {
     if (!db[k]) db[k] = [];
   });
   if (!db.blocks.length) {
@@ -343,6 +343,7 @@ function scopedDb(db, user) {
       loginLog: user.assistant ? [] : (db.loginLog || []).slice(0, 60),
       trustedDevices: user.assistant ? [] : db.trustedDevices || [],
       docs: db.docs || [],
+      bookings: db.bookings || [],
       dieselDefaultUgx: db.dieselDefaultUgx,
       trucks: db.trucks,
       drivers: db.drivers,
@@ -465,7 +466,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["quote_booking", "decline_booking", "note_booking", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -560,6 +561,29 @@ function applyAction(db, user, body) {
     if (body.driverId && body.driverId !== user.driverId) throw new Error("No access");
   }
 
+  if (action === "quote_booking" || action === "decline_booking" || action === "note_booking") {
+    const bk = (db.bookings || []).find((x) => x.id === body.id);
+    if (!bk) throw new Error("Booking not found");
+    const at = new Date().toISOString();
+    bk.history = bk.history || [];
+    if (action === "quote_booking") {
+      const amt = Number(body.amountUgx) || 0;
+      if (amt <= 0) throw new Error("Enter the quote amount");
+      const days = Math.max(1, Math.min(30, Number(body.validDays) || 3));
+      bk.quote = { amountUgx: amt, note: String(body.note || "").trim().slice(0, 300), at, by: user.name, validUntil: new Date(Date.now() + days * 864e5).toISOString().slice(0, 10) };
+      bk.status = "quoted";
+      bk.clientAnswer = null;
+      bk.history.push({ at, what: "Quote sent · UGX " + amt.toLocaleString("en-UG"), by: user.name });
+    } else if (action === "decline_booking") {
+      bk.status = "declined";
+      bk.declineNote = String(body.note || "").trim().slice(0, 300);
+      bk.history.push({ at, what: "Declined" + (bk.declineNote ? " · " + bk.declineNote : ""), by: user.name });
+    } else {
+      bk.history.push({ at, what: String(body.note || "Contacted client").trim().slice(0, 200), by: user.name });
+      if (bk.status === "new") bk.status = "seen";
+    }
+    bk.updatedAt = at;
+  }
   if (action === "save_truck") {
     if (!db.trucks) db.trucks = [];
     let t = body.id ? db.trucks.find((x) => x.id === body.id) : null;
@@ -673,6 +697,17 @@ function applyAction(db, user, body) {
       kmHaul: Number(body.kmHaul) || 0,
     });
     const job0 = db.jobs[0];
+    if (body.bookingId && user.role === "admin") {
+      const bk = (db.bookings || []).find((x) => x.id === body.bookingId);
+      if (bk) {
+        job0.bookingId = bk.id; job0.bookingRef = bk.ref; job0.fromOffice = true;
+        job0.pickupPin = { lat: bk.pickup.lat, lng: bk.pickup.lng }; job0.dropPin = { lat: bk.drop.lat, lng: bk.drop.lng };
+        if (bk.notes && !job0.notes) job0.notes = bk.notes;
+        bk.status = "confirmed"; bk.jobId = job0.id; bk.updatedAt = new Date().toISOString();
+        (bk.history = bk.history || []).push({ at: bk.updatedAt, what: "Load " + job0.code + " created", by: user.name });
+      }
+    }
+    if (user.role === "admin") job0.fromOffice = true;
     if (job0 && job0.km && !job0.fuelLitres) {
       const truck = db.trucks.find((t) => t.id === job0.truckId) || {};
       const diesel = job0.dieselUgxPerLitre || db.dieselDefaultUgx;

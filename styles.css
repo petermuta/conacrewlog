@@ -559,3 +559,18 @@ details.led-row > summary::-webkit-details-marker { display: none; }
 .pick-row { width: 100%; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; font: inherit; }
 .pick-row:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,.08); }
 .worker-head .js-paydone { align-self: flex-start; }
+
+/* client bookings */
+.bk-card summary { display: flex; gap: 10px; align-items: center; cursor: pointer; list-style: none; padding: 14px; }
+.bk-card summary::-webkit-details-marker { display: none; }
+.bk-body { padding: 0 14px 14px; }
+.bk-route { display: grid; gap: 6px; padding: 12px; border-radius: 12px; background: rgba(255,255,255,.05); }
+.bk-route .btn { justify-self: start; margin-top: 4px; }
+.pin-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+.pin-dot.a { background: #f29a12; } .pin-dot.b { background: #c4602d; }
+.bk-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; }
+.bk-facts dt { color: #9fb2c8; } .bk-facts dd { margin: 0; }
+.bk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.bk-form { margin-top: 12px; }
+.btn-whatsapp { background: #1fa855; color: #fff; border: 0; text-decoration: none; }
+.share-card .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
