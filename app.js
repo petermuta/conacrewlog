@@ -926,6 +926,8 @@ function bookingWhatsApp(b) {
   const hi = `Hello ${first}, this is Conacrew Logistics about booking ${b.ref}.`;
   const lines = {
     quoted: [`Hello ${first}, this is Conacrew Logistics.`, `Quote for booking ${b.ref}: ${b.cargo}${b.trips > 1 ? ", " + b.trips + " trips" : ""}, ${route}${b.km ? " (" + b.km + " km)" : ""}, ${fmtDay(b.date)}.`, `Price: ${ugx(b.quote && b.quote.amountUgx)}${b.quote && b.quote.note ? ". " + b.quote.note : ""}`, `Pay 100% and get 5% off, or pay 75% now and the rest on delivery. Confirm here: ${link}`],
+    new: [hi, `We've received your request and will send your quote shortly.`, `Your booking: ${link}`],
+    seen: [hi, `We've received your request and will send your quote shortly.`, `Your booking: ${link}`],
     payment_check: [hi, `We're checking your payment of ${ugx(p.due)}. We'll confirm shortly.`, link],
     accepted: [hi, p.plan === "account" ? `Your booking is confirmed. Payment of ${ugx(p.total)} is due on delivery.` : `Payment of ${ugx(p.due)} received, thank you. Your booking is confirmed.`, `We're assigning a truck. Follow your load here: ${link}`],
     assigned: [hi, `Truck ${truck ? truck.plate : ""} is booked for ${fmtDay(b.date)}${job && job.pickupAt ? " at " + String(job.pickupAt).slice(11, 16) : ""}.`, `Follow your load: ${link}`],
@@ -936,7 +938,7 @@ function bookingWhatsApp(b) {
   }[stage] || [hi, link];
   return "https://wa.me/" + waNumber(c.phone) + "?text=" + encodeURIComponent(lines.join("\n"));
 }
-const STAGE_BTN = { quoted: "Send quote on WhatsApp", payment_check: "Tell client: checking payment", accepted: "Tell client: booking confirmed", assigned: "Tell client: truck booked", loading: "Tell client: loading", on_the_way: "Tell client: on the way", delivered: "Tell client: delivered" };
+const STAGE_BTN = { new: "Tell client: request received", seen: "Tell client: request received", quoted: "Send quote on WhatsApp", payment_check: "Tell client: checking payment", accepted: "Tell client: booking confirmed", assigned: "Tell client: truck booked", loading: "Tell client: loading", on_the_way: "Tell client: on the way", delivered: "Tell client: delivered" };
 function viewBookings() {
   const all = DATA.bookings || [];
   const tab = sessionStorage.getItem("bkTab") || "open";

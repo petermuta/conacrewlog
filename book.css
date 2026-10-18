@@ -272,3 +272,9 @@ div.f { display: block; font-weight: 600; font-size: 14px; margin-top: 14px; }
 .list-bk a { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px; border-radius: var(--r-md); border: 1.5px solid var(--line); text-decoration: none; color: var(--ink); }
 .list-bk a b { font-variation-settings: "wdth" 112; }
 .list-bk a span { color: var(--ink-2); font-size: 14px; }
+
+.cc-pick { position: relative; display: block; margin-top: 6px; }
+.cc-show { display: flex; align-items: center; gap: 6px; height: 100%; min-height: 48px; padding: 0 28px 0 12px; border: 1.5px solid var(--line); border-radius: var(--r-sm); background: var(--paper); font-weight: 600; white-space: nowrap; position: relative; }
+.cc-show::after { content: ""; position: absolute; right: 12px; top: 50%; width: 7px; height: 7px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: translateY(-70%) rotate(45deg); }
+.cc-pick select { position: absolute; inset: 0; opacity: 0; margin: 0; width: 100%; height: 100%; cursor: pointer; }
+.cc-pick select:focus-visible + .cc-show, .cc-pick:focus-within .cc-show { box-shadow: 0 0 0 3px rgba(242, 154, 18, .35); border-color: var(--ink); }
