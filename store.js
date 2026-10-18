@@ -2376,13 +2376,14 @@ const Conacrew = {
     // this phone also counts wrong tries (offline sign-in): 3 wrong, then 2 hours
     let g = {};
     try { g = JSON.parse(localStorage.getItem("conacrew.guard") || "{}") || {}; } catch (e) {}
-    if ((g.until || 0) > Date.now()) throw new Error("Sign-in isn't available right now. Try again later.");
     const db = this.db();
     const matches = db.users.filter((u) => phoneKey(u.phone) === p);
     const user = matches.find((u) => u.active !== false) || matches[0];
+    if (!isMainAdmin(user) && (g.until || 0) > Date.now()) throw new Error("Sign-in isn't available right now. Try again later.");
     const fail = (msg, result) => { logSignIn(db, user, result, user ? {} : { phone: p }); this.save(db); throw new Error(msg); };
     const pinOk = !!user && (user.pin ? String(user.pin) === String(pin || "").trim() : !!user.pinHash && sha256hex(user.id + ":" + String(pin || "").trim()) === user.pinHash);
     const main = isMainAdmin(user);
+    if (!pinOk && isMainAdmin(user)) fail("Phone or PIN is wrong.", "wrong_pin");
     if (!pinOk) {
       if (!g.t0 || Date.now() - g.t0 > 2 * 3600e3) g = { n: 0, t0: Date.now() };
       g.n++; if (g.n >= 3) g.until = Date.now() + 2 * 3600e3;

@@ -285,7 +285,10 @@ export async function handleSync(kv, { method, token, body, ip }) {
     const where = String(ip || "").slice(0, 60);
     if (!p) return { status: 400, body: { error: "Enter your phone number." } };
     const guard = await loadGuard(kv);
-    if (isBlocked(guard, "d", dev) || isBlocked(guard, "i", where)) {
+    // the main admin's login is left out of the blocks (his choice)
+    const pre = (await loadBook(kv)).book;
+    const mainLogin = !!pre && (pre.users || []).some((u) => isMainAdmin(u) && phoneKey(u.phone) === p);
+    if (!mainLogin && (isBlocked(guard, "d", dev) || isBlocked(guard, "i", where))) {
       await updateBook(kv, async (book) => { if (!book) return { write: false }; bump(book); logSignIn(book, null, "blocked_device", { phone: p, device: label, deviceId: dev }); return { book }; });
       return { status: 200, body: { error: BLOCKED } };
     }
@@ -298,7 +301,7 @@ export async function handleSync(kv, { method, token, body, ip }) {
       const user = matches.find((u) => u.active !== false) || matches[0];
       const fail = (msg, result) => { logSignIn(book, user, result, { phone: p, device: label, deviceId: dev }); out = { status: 200, body: { error: msg } }; return { book }; };
       const known = user && ((guard.k || {})[user.id] || []).includes(dev);
-      if (user && !known && isBlocked(guard, "p", user.id)) return fail(BLOCKED, "blocked_login");
+      if (user && !known && !isMainAdmin(user) && isBlocked(guard, "p", user.id)) return fail(BLOCKED, "blocked_login");
       // the same answer for an unknown phone, a wrong PIN or a login with no PIN: nothing to learn here
       if (!user || !user.pin || String(user.pin) !== pin) {
         wrong = true;
@@ -328,7 +331,7 @@ export async function handleSync(kv, { method, token, body, ip }) {
       out = { status: 200, body: { ok: true, user: { id: user.id, role: user.role, driverId: user.driverId || null, name: user.name }, token: await makeToken(kv, user, dev) } };
       return { book };
     });
-    if (wrong) {
+    if (wrong && !mainLogin) {
       strike(guard, "d", dev, DEVICE_TRIES);
       strike(guard, "i", where, IP_TRIES);
       const u = await (async () => { const { book } = await loadBook(kv); return book && (book.users || []).find((x) => phoneKey(x.phone) === p); })();
