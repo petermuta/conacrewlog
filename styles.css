@@ -651,3 +651,15 @@ audio.voice-play::-webkit-media-controls-panel { background: #ffd6d2; }
 .voice-box.on .btn-rec, .btn-rec.rec-on { background: #1fbf5a; color: #fff; opacity: 1; animation: lightblink 1.2s ease-in-out infinite; }
 .voice-box.on { border-color: #1fbf5a; box-shadow: 0 0 0 3px rgba(31,191,90,.3); }
 .voice-box.on .voice-bar span { background: #1fbf5a; }
+
+/* driver load lists: ID + material, tap to open */
+.load-fold { padding: 0; overflow: hidden; }
+.lf-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 16px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.lf-id { font-weight: 800; letter-spacing: .02em; }
+.lf-mat { flex: 1; min-width: 0; color: rgba(244,247,251,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lf-head .amt { white-space: nowrap; }
+.lf-chev { font-size: 22px; line-height: 1; color: rgba(244,247,251,.5); transition: transform .15s; }
+.load-fold.open { border-color: #f5c400; }
+.load-fold.open .lf-chev { transform: rotate(90deg); color: #f5c400; }
+.lf-body { margin: 0; padding: 4px 16px 14px; border-top: 1px solid var(--line); }
+.lf-body[hidden] { display: none !important; }

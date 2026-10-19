@@ -1328,10 +1328,7 @@ function viewDrive(page, taskId) {
   const paidPanel = `
     <h1>Paid loads</h1>
     <div class="list" style="margin-top:14px">
-      ${jobs.filter(isPaid).length ? jobs.filter(isPaid).map((j) => {
-        const c = DATA.contractors.find((x) => x.id === j.contractorId);
-        return `<div class="card item"><div class="row"><div><b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p><p class="muted">${j.pickupAt||""}${j.dropAt?" → "+j.dropAt:""}</p><p class="muted">${c?.name || ""} · ${j.km || 0} km · paid ${j.paidAt || ""} · ${ugx(j.paidUgx || j.rateUgx || 0)}</p></div>${badge("paid")}</div></div>`;
-      }).join("") : `<div class="card item">None saved</div>`}
+      ${jobs.filter(isPaid).length ? jobs.filter(isPaid).map((j) => loadFold(j, badge("paid"))).join("") : `<div class="card item">None saved</div>`}
     </div>`;
 
   const payPanel = `<h1>My pay</h1>${myPayView("driver")}`;
@@ -2938,7 +2935,39 @@ function profileForm(kind, person) {
       <button class="btn btn-steel wide" style="margin-top:10px">Save pay settings</button>
     </form></details>`;
 }
+// driver lists: load ID + material only; tap to see the whole load, tap again (or another load) to close
+function loadFold(j, right, more) {
+  const c = (DATA.contractors || []).find((x) => x.id === j.contractorId);
+  const facts = [
+    ["Route", esc((j.origin || "") + " → " + (j.destination || ""))],
+    j.pickupAt ? ["Pickup", esc(String(j.pickupAt).replace("T", " "))] : null,
+    j.dropAt ? ["Drop-off", esc(String(j.dropAt).replace("T", " "))] : null,
+    c ? ["Client", esc(c.name)] : j.bookingRef ? ["Client", "Booking " + esc(j.bookingRef)] : null,
+    j.km ? ["Distance", j.km + " km"] : null,
+    j.tonnesDelivered ? ["Tonnes", j.tonnesDelivered + " t"] : null,
+    j.deliveredAt ? ["Delivered", fmtDay(j.deliveredAt)] : null,
+    isPaid(j) ? ["Client paid", (j.paidAt ? fmtDay(j.paidAt) + " · " : "") + ugx(j.paidUgx || j.rateUgx || 0)] : null,
+    j.notes ? ["Notes", esc(j.notes)] : null,
+  ].filter(Boolean).concat(more || []);
+  return `<div class="card load-fold js-fold">
+    <button type="button" class="lf-head js-fold-btn" aria-expanded="false"><span class="lf-id">${esc(j.code || "Load")}</span><span class="lf-mat">${esc(j.cargo || "")}</span>${right || ""}<span class="lf-chev" aria-hidden="true">›</span></button>
+    <dl class="lf-body bk-facts" hidden>${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+  </div>`;
+}
+function bindFolds() {
+  document.querySelectorAll(".js-fold-btn").forEach((b) => { b.onclick = () => {
+    const card = b.closest(".js-fold"), body = card.querySelector(".lf-body"), open = body.hidden;
+    document.querySelectorAll(".js-fold").forEach((c) => { c.querySelector(".lf-body").hidden = true; c.classList.remove("open"); c.querySelector(".js-fold-btn").setAttribute("aria-expanded", "false"); });
+    if (open) { body.hidden = false; card.classList.add("open"); b.setAttribute("aria-expanded", "true"); }
+  }; });
+}
+function jobOfStub(s) { return (DATA.jobs || []).find((j) => (s.refId && j.id === s.refId) || (s.loadId && j.code === s.loadId)); }
 function paidLine(s) {
+  const j = DATA.me.role === "driver" ? jobOfStub(s) : null;
+  if (j) {
+    const how = (METHOD_LABEL[s.method] || "Paid") + (s.reference ? " · Ref " + esc(s.reference) : "");
+    return loadFold(j, `<b class="amt">${ugx(s.amountUgx || 0)}</b>`, [["My pay", ugx(s.amountUgx || 0) + " · paid " + fmtDay(s.paidAt) + " · " + how]]);
+  }
   const how = (METHOD_LABEL[s.method] || "Paid") + (s.payeePhone || s.phone ? " · " + esc(s.payeePhone || s.phone) : s.bankAccount ? " · " + esc(s.bankName || "") + " " + esc(s.bankAccount) : "");
   return `<div class="pay-line paid">
     <div><b>${esc(s.loadId ? "Load " + s.loadId : (s.refLabel || "Pay").replace(/^Trip allowance · /, ""))}</b>
@@ -3042,15 +3071,15 @@ function myPayView(kind) {
     </div>
     <h2 style="margin:18px 0 0">Waiting to be paid</h2>
     <div class="list" style="margin-top:8px">
-      ${o.waiting.length ? o.waiting.map((w) => `<div class="card pay-line due">
+      ${o.waiting.length ? o.waiting.map((w) => { const j = kind === "driver" && w.kind === "trip" ? (DATA.jobs || []).find((x) => x.id === w.refId) : null; return j ? loadFold(j, `<span class="badge gold">Waiting</span>`, [["My pay", (w.amount ? ugx(w.amount) + " · " : "") + "waiting"]]) : `<div class="card pay-line due">
         <div><b>${esc(w.title)}</b><div class="muted">${esc(w.sub)}${w.date ? " · " + (w.kind === "trip" ? "delivered " : "") + fmtDay(w.date) : ""}</div></div>
         <div class="due-right"><span class="badge gold">Waiting</span>${w.amount ? `<b class="amt">${ugx(w.amount)}</b>` : ""}</div>
-      </div>`).join("") : `<div class="card item muted">Nothing waiting. ${kind === "driver" ? "" : kind === "cane" ? "" : ""}</div>`}
+      </div>`; }).join("") : `<div class="card item muted">Nothing waiting. ${kind === "driver" ? "" : kind === "cane" ? "" : ""}</div>`}
     </div>
     <h2 style="margin:18px 0 0">Payments received</h2>
     ${Object.keys(byMonth).length ? Object.entries(byMonth).map(([m, list]) => `
       <div class="month-head"><b>${m === "—" ? "Earlier" : monthName(m)}</b><span>${ugx(list.reduce((s, x) => s + (x.amountUgx || 0), 0))}</span></div>
-      <div class="card" style="padding:4px 14px">${list.map(paidLine).join("")}</div>`).join("") : `<div class="card item muted" style="margin-top:8px">No payments yet.</div>`}`;
+      ${kind === "driver" ? `<div class="list">${list.map((s) => { const l = paidLine(s); return l.includes("js-fold") ? l : `<div class="card" style="padding:4px 14px">${l}</div>`; }).join("")}</div>` : `<div class="card" style="padding:4px 14px">${list.map(paidLine).join("")}</div>`}`).join("") : `<div class="card item muted" style="margin-top:8px">No payments yet.</div>`}`;
 }
 function viewCanePay() {
   return `<h1>Cane</h1>${caneTabs("cane-pay")}<h2 style="margin:16px 0 0">My pay</h2>${myPayView("cane")}`;
@@ -3186,6 +3215,7 @@ function viewPL(mode) {
 
 function bind() {
   bindBookings();
+  bindFolds();
   document.querySelectorAll("[data-jobsrc]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("jobSrc", b.dataset.jobsrc); route(); }; });
   document.querySelectorAll(".js-openbk").forEach((b) => { b.onclick = () => {
     const bk = (DATA.bookings || []).find((x) => x.ref === b.dataset.ref);
