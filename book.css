@@ -308,3 +308,6 @@ div.f { display: block; font-weight: 600; font-size: 14px; margin-top: 14px; }
 .svc-pick { margin-top: 14px; }
 #svcBook { margin-top: 10px; min-height: 48px; font-size: 16px; }
 #svcBook[disabled] { opacity: .45; cursor: default; }
+.services > summary img { width: 64px; height: 44px; border-radius: 10px; }
+.services > summary b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.services > summary div > span { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
