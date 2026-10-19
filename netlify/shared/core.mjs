@@ -493,7 +493,7 @@ export function bookingPublic(b, book) {
     plans: b.quote ? { full: payPlan(b.quote.amountUgx, "full"), deposit: payPlan(b.quote.amountUgx, "deposit") } : null,
   };
 }
-export async function handleBook(kv, { method, body, query }) {
+export async function handleBook(kv, { method, body, query, ip }) {
   if (method === "GET" && query.list === "cargo") {
     const { book } = await loadBook(kv);
     const all = [...CARGO_BASE];
@@ -572,6 +572,23 @@ export async function handleBook(kv, { method, body, query }) {
       return { book };
     });
     return out;
+  }
+  if (op === "find") {
+    // a returning client on a new phone: their phone number + one booking number opens all their bookings
+    const where = "find:" + String(ip || "").slice(0, 60);
+    const guard = await loadGuard(kv);
+    if (isBlocked(guard, "i", where)) return { status: 429, body: { error: "Too many tries. Try again later." } };
+    const phone = intlPhone(body.phone);
+    const ref = clip(body.ref, 20).toUpperCase().replace(/\s+/g, "");
+    const { book } = await loadBook(kv);
+    const hit = book && (book.bookings || []).find((x) => x.ref === ref && x.client && x.client.phone === phone);
+    if (!hit) {
+      strike(guard, "i", where, 10); await saveGuard(kv, guard);
+      return { status: 404, body: { error: "No booking matches that phone and booking number." } };
+    }
+    const list = (book.bookings || []).filter((x) => x.client && x.client.phone === phone).slice(0, 30)
+      .map((x) => ({ ref: x.ref, key: x.key, cargo: x.cargo, date: x.date, from: x.pickup && x.pickup.name, to: x.drop && x.drop.name, step: bookingPublic(x, book).step }));
+    return { status: 200, body: { bookings: list, client: { name: hit.client.name, company: hit.client.company || "", phone } } };
   }
   if (op === "answer") {
     // the client accepts or turns down the quote from their link

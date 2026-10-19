@@ -5,17 +5,46 @@
   const q = new URLSearchParams(location.search);
   let r = q.get("r") || "", k = q.get("k") || "";
   if (!r) { try { const saved = new URL(localStorage.getItem("conacrew.myBooking") || ""); r = saved.searchParams.get("r"); k = saved.searchParams.get("k"); } catch (e) {} }
+  const OFFICE_WA = "14043768549"; // Conacrew WhatsApp Business
+  const waBtn = (text) => `<a class="btn btn-wa wide" href="https://wa.me/${OFFICE_WA}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.6.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.6-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7a2.8 2.8 0 0 0 1.8-1.3 2.3 2.3 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>Chat with us on WhatsApp</a>`;
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const ugx = (n) => "UGX " + Math.round(Number(n) || 0).toLocaleString("en-UG");
   const day = (s) => { if (!s) return ""; const d = new Date(String(s).length === 10 ? s + "T12:00:00" : s); return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" }); };
   let mine = [];
   try { mine = JSON.parse(localStorage.getItem("conacrew.myBookings") || "[]") || []; } catch (e) {}
   if (!q.get("r")) {
-    // My bookings: every booking made on this phone
-    box.innerHTML = `<h2 class="screen-title">My bookings</h2>
-      ${mine.length ? `<div class="list-bk">${mine.map((x) => `<a href="${esc(x.link)}"><span><b>${esc(x.ref)}</b><br/>${esc(x.cargo || "")}, ${esc(String(x.from || "").split(",")[0])} to ${esc(String(x.to || "").split(",")[0])}</span><span>${day(x.date)}</span></a>`).join("")}</div>`
-        : `<p class="sub">Bookings you make on this phone show here. Or open the link we sent you on WhatsApp.</p>`}
-      <a class="btn btn-go" href="./book.html" style="margin-top:16px">Book a truck</a>`;
+    // My bookings: every booking made on this phone, plus a way in from a new phone
+    const draw0 = () => {
+      box.innerHTML = `<h2 class="screen-title">My bookings</h2>
+      ${mine.length ? `<div class="list-bk">${mine.map((x) => `<a href="${esc(x.link)}"><span><b>${esc(x.ref)}</b><br/>${esc(x.cargo || "")}, ${esc(String(x.from || "").split(",")[0])} to ${esc(String(x.to || "").split(",")[0])}</span><span>${day(x.date)}</span></a>`).join("")}</div>` : ""}
+      <form class="find" id="find">
+        <b>${mine.length ? "Booked on another phone?" : "Find my bookings"}</b>
+        <label class="f">Phone number<input class="in" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0772 123 456 or +44…" required /></label>
+        <label class="f">Booking number<input class="in" name="ref" autocomplete="off" placeholder="CR-1018-03" required /></label>
+        <p class="err" id="findErr"></p>
+        <button class="btn btn-ink wide">Find my bookings</button>
+      </form>
+      <a class="btn btn-go" href="./book.html" style="margin-top:16px">Book a truck</a>
+      ${waBtn("Hello Conacrew, I need help with a booking.")}`;
+      document.getElementById("find").onsubmit = async (e) => {
+        e.preventDefault();
+        const f = e.target, er = document.getElementById("findErr"); er.textContent = "";
+        const btn = f.querySelector("button"); btn.disabled = true; btn.textContent = "Looking…";
+        try {
+          const res = await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "find", phone: f.phone.value, ref: f.ref.value }) });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || "Not found");
+          const list = j.bookings.map((x) => ({ ref: x.ref, link: location.origin + "/track.html?r=" + encodeURIComponent(x.ref) + "&k=" + encodeURIComponent(x.key), cargo: x.cargo, date: x.date, from: x.from, to: x.to, at: Date.now() }));
+          mine = list.concat(mine.filter((m) => !list.some((x) => x.ref === m.ref)));
+          try {
+            localStorage.setItem("conacrew.myBookings", JSON.stringify(mine));
+            if (!localStorage.getItem("conacrew.client")) localStorage.setItem("conacrew.client", JSON.stringify({ name: j.client.name, company: j.client.company, phone: j.client.phone, whatsapp: true }));
+          } catch (x) {}
+          draw0();
+        } catch (x) { er.textContent = x.message; btn.disabled = false; btn.textContent = "Find my bookings"; }
+      };
+    };
+    draw0();
     return;
   }
   const STEPS = [
@@ -105,7 +134,8 @@
       </dl>
       <div id="mini"></div>${closeNote}
       <div class="again"><b>Book another load</b><div class="again-btns"><button type="button" class="btn btn-line" id="againSame">Same route</button><a class="btn btn-line" href="./book.html">New route</a></div></div>
-      ${mine.length > 1 ? `<p class="center" style="margin-top:14px"><a href="./track.html">All my bookings</a></p>` : ""}`;
+      ${waBtn("Hello Conacrew, about my booking " + b.ref + ".")}
+      <p class="center" style="margin-top:14px"><a href="./track.html">All my bookings</a></p>`;
     if (typeof L !== "undefined" && b.pickup && b.drop) {
       mini = L.map("mini", { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false });
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mini);

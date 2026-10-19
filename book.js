@@ -201,6 +201,7 @@
       $("#ref").textContent = j.ref;
       $("#via").textContent = form.whatsapp.checked ? "We'll send your quote on WhatsApp." : "We'll call you with your quote.";
       $("#trackLink").value = link; $("#openTrack").href = link;
+      $("#waOffice").href = "https://wa.me/14043768549?text=" + encodeURIComponent("Hello Conacrew, I just sent booking " + j.ref + ".");
       go(4);
       saveDraft({ done: { ref: j.ref, link, via: $("#via").textContent } });
     } catch (x) { err(x.message); }

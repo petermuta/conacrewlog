@@ -284,3 +284,8 @@ div.f { display: block; font-weight: 600; font-size: 14px; margin-top: 14px; }
 .appbar .icon-btn#reload { flex: none; }
 
 .steps .when { font-weight: 500; color: var(--ink-2); font-size: 13px; margin-left: 4px; }
+
+.btn-wa { background: #1fa855; color: #fff; margin-top: 12px; gap: 10px; }
+.btn-wa:hover { background: #178a45; }
+.find { margin-top: 16px; padding: 16px; border-radius: var(--r-md); background: var(--sky); }
+.find .btn { margin-top: 12px; }
