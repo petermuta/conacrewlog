@@ -648,3 +648,6 @@ html.going .login-page::after { content: ""; position: fixed; left: 50%; top: 60
 .btn-rec:hover { background: #c92f2f; }
 audio.voice-play { display: block; border-radius: 999px; background: #e23b3b; outline: 2px solid #e23b3b; }
 audio.voice-play::-webkit-media-controls-panel { background: #ffd6d2; }
+.voice-box.on .btn-rec, .btn-rec.rec-on { background: #1fbf5a; color: #fff; opacity: 1; animation: lightblink 1.2s ease-in-out infinite; }
+.voice-box.on { border-color: #1fbf5a; box-shadow: 0 0 0 3px rgba(31,191,90,.3); }
+.voice-box.on .voice-bar span { background: #1fbf5a; }

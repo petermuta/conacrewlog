@@ -1577,10 +1577,10 @@ function applyAction(db, user, body) {
     const parts = task.parts || [];
     for (const p of parts) if (!items[p]) throw new Error("Mark every part: OK, needs attention, or not OK");
     if (task.needPhoto) {
-      if (parts.length) { for (const p of parts) if (!photos[p]) throw new Error("Add a photo for " + ((task.partNames || {})[p] || p)); }
+      if (parts.length) { for (const p of parts) if (items[p] !== "pass" && !photos[p]) throw new Error("Add a photo for " + ((task.partNames || {})[p] || p)); }
       else if (!photos.work) throw new Error("Add a photo of the work");
     }
-    if (task.needVoice && !body.voice) throw new Error("Record a voice note");
+    if (task.needVoice && !body.voice && (!parts.length || parts.some((p) => items[p] !== "pass"))) throw new Error("Record a voice note");
     const now = new Date().toISOString();
     const reply = { at: now, by: user.name, items, photos, voice: body.voice || "", voiceSec: Number(body.voiceSec) || 0, note: String(body.driverNote || body.note || "").trim(), odometerKm: Number(body.odometerKm) || 0 };
     task.reply = reply;

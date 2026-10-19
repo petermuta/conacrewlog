@@ -650,11 +650,11 @@ function bindVoice(root) {
         };
         rec.start(1000);
         sec = 0; show();
-        recB.disabled = true; stopB.disabled = false; box.classList.add("on");
+        recB.disabled = true; stopB.disabled = false; box.classList.add("on"); recB.textContent = "● Recording";
         tick = setInterval(() => { sec += 1; show(); if (sec >= CAP) stopB.click(); }, 1000);
       } catch (e) { alert("Microphone not allowed. Allow the microphone for this site, or add a written note."); }
     };
-    stopB.onclick = () => { if (tick) clearInterval(tick); tick = null; if (rec && rec.state !== "inactive") rec.stop(); recB.disabled = false; stopB.disabled = true; box.classList.remove("on"); };
+    stopB.onclick = () => { if (tick) clearInterval(tick); tick = null; if (rec && rec.state !== "inactive") rec.stop(); recB.disabled = false; stopB.disabled = true; box.classList.remove("on"); recB.textContent = "● Record"; };
     redo.onclick = () => { out.value = ""; outSec.value = 0; play.removeAttribute("src"); play.style.display = "none"; redo.style.display = "none"; recB.style.display = ""; stopB.style.display = ""; sec = 0; show(); };
   });
 }
@@ -788,15 +788,21 @@ function driverTaskReply(id) {
           <label class="mark warn"><input type="radio" name="r_${esc(p)}" value="warn" hidden />NEEDS ATTENTION</label>
           <label class="mark fail"><input type="radio" name="r_${esc(p)}" value="fail" hidden />NOT OK</label>
         </div>
-        <label class="lbl" style="margin-top:8px">📷 Photo${t.needPhoto ? "" : " (optional)"}<input class="field js-part-photo" type="file" accept="image/*" capture="environment" data-part="${esc(p)}" /></label>
-        <div class="thumbs js-part-prev"></div>
+        <div class="js-if-bad" hidden><label class="lbl" style="margin-top:8px">📷 Photo${t.needPhoto ? "" : " (optional)"}<input class="field js-part-photo" type="file" accept="image/*" capture="environment" data-part="${esc(p)}" /></label>
+        <div class="thumbs js-part-prev"></div></div>
       </div>`).join("")}
       ${!parts.length ? `<label class="lbl">📷 Photo of the work${t.needPhoto ? "" : " (optional)"}<input class="field js-part-photo" type="file" accept="image/*" capture="environment" data-part="work" /></label><div class="thumbs js-part-prev"></div>` : ""}
       ${parts.length ? `<label class="lbl" style="margin-top:12px">Odometer (optional)<input class="field" name="odometerKm" inputmode="numeric" value="${DATA.truck ? DATA.truck.odometerKm || "" : ""}" /></label>` : ""}
-      <div style="margin-top:12px">${voiceBox(t.needVoice ? "🎙 Voice note (required, up to 3 minutes)" : "🎙 Voice note (optional, up to 3 minutes)")}</div>
+      <div style="margin-top:12px" class="${parts.length ? "js-voice-if-bad" : ""}" ${parts.length ? "hidden" : ""}>${voiceBox(t.needVoice ? "🎙 Voice note (required, up to 3 minutes)" : "🎙 Voice note (optional, up to 3 minutes)")}</div>
       <label class="lbl" style="margin-top:12px">Written note (optional)<input class="field" name="driverNote" placeholder="e.g. Rear left brake line was leaking, tightened it" /></label>
       <button class="btn btn-primary wide" style="margin-top:14px">Send to office</button>
     </form>`;
+}
+// photos and the voice note are only asked for when something needs attention or is not OK
+function showVoiceIfBad(form) {
+  const v = form && form.querySelector(".js-voice-if-bad");
+  if (!v) return;
+  v.hidden = ![...form.querySelectorAll("input[type=radio]:checked")].some((i) => i.value !== "pass");
 }
 function bindTasks() {
   const kind = document.getElementById("taskKind"), parts = document.getElementById("taskParts");
@@ -810,7 +816,12 @@ function bindTasks() {
     kind.onchange = sync; sync();
   }
   document.querySelectorAll("form[data-form=task-reply] .mark").forEach((lab) => {
-    lab.onclick = () => { const box = lab.closest(".task-part"); box.querySelectorAll(".mark").forEach((c) => c.classList.remove("on")); lab.classList.add("on"); lab.querySelector("input").checked = true; };
+    lab.onclick = () => {
+      const box = lab.closest(".task-part"); box.querySelectorAll(".mark").forEach((c) => c.classList.remove("on")); lab.classList.add("on"); lab.querySelector("input").checked = true;
+      const bad = lab.querySelector("input").value !== "pass";
+      const extra = box.querySelector(".js-if-bad"); if (extra) extra.hidden = !bad;
+      showVoiceIfBad(lab.closest("form"));
+    };
   });
   document.querySelectorAll(".js-part-photo").forEach((inp) => {
     inp.onchange = async () => {
@@ -1253,7 +1264,7 @@ function viewDrive(page, taskId) {
       <input class="field" name="odometerKm" placeholder="Odometer km" style="margin-top:8px" value="${DATA.truck ? DATA.truck.odometerKm : ""}" />
       ${inspectForm()}
       <input class="field" name="note" placeholder="Note" style="margin-top:12px" />
-      <div style="margin-top:12px">${voiceBox()}</div>
+      <div style="margin-top:12px" class="js-voice-if-bad" hidden>${voiceBox("🎙 Voice note about the problem (optional, up to 3 minutes)")}</div>
       <button class="btn btn-primary wide" style="margin-top:12px">Send inspect</button>
     </form>
     <div class="list" style="margin-top:14px">
@@ -3194,7 +3205,9 @@ function bind() {
       lab.classList.add("on");
       const val = lab.querySelector("input").value;
       const shot = box.querySelector(".js-shot");
-      if (shot) shot.style.display = (val === "warn" || val === "fail") ? "" : "none";
+      if (shot) { shot.style.display = (val === "warn" || val === "fail") ? "" : "none"; if (val === "pass") shot.value = ""; }
+      lab.querySelector("input").checked = true;
+      showVoiceIfBad(lab.closest("form"));
     };
   });
   document.querySelectorAll("[data-act]").forEach((btn) => {
@@ -3309,7 +3322,7 @@ function bind() {
             compressPhoto(inp.files[0]).then(res, rej); // small photos keep the books light
           });
         }
-        const voice = fd.voice || "";
+        const voice = need.length ? fd.voice || "" : "";
         await act("submit_inspect", { truckId: DATA.truck?.id, odometerKm: fd.odometerKm, note: fd.note, items, photos, voice, voiceSec: fd.voiceSec });
         window.__issueMedia = { photos: [], voice: "", sec: 0 };
         location.hash = "#drive-report";
@@ -3406,12 +3419,14 @@ function bind() {
         }
         for (const inp of form.querySelectorAll(".js-part-photo")) {
           const p = inp.dataset.part;
+          if (p !== "work" && items[p] === "pass") continue;
           let src = inp.dataset.src || "";
           if (!src && inp.files && inp.files[0]) src = await compressPhoto(inp.files[0]);
           if (src) photos[p] = src;
           else if (form.dataset.needphoto === "1") { alert("Add a photo" + (p === "work" ? " of the work" : " for " + (inp.closest(".task-part").querySelector(".tp-name").textContent))); return; }
         }
-        try { await act("complete_fleet_task", { id: form.dataset.id, items, photos, voice: fd.voice || "", voiceSec: fd.voiceSec, driverNote: fd.driverNote, odometerKm: fd.odometerKm }); } catch (err) { return; }
+        const vb = form.querySelector(".js-voice-if-bad"), voiceOn = !vb || !vb.hidden;
+        try { await act("complete_fleet_task", { id: form.dataset.id, items, photos, voice: voiceOn ? fd.voice || "" : "", voiceSec: voiceOn ? fd.voiceSec : 0, driverNote: fd.driverNote, odometerKm: fd.odometerKm }); } catch (err) { return; }
         location.hash = "#drive-tasks";
       } else if (kind === "service") {
         await act("log_service", fd);
