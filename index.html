@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./logo-mark.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" href="./logo-mark.png" />
-  <link rel="stylesheet" href="./styles.css?v=138" />
+  <link rel="stylesheet" href="./styles.css?v=139" />
   <script>
     // Runs before the page is drawn, so a signed-in phone never sees the sign-in form flash.
     (function () {
@@ -37,21 +37,23 @@
     </div>
     <div class="login-panel">
       <form class="card" id="login" style="padding:22px;width:min(420px,100%)">
-        <h2 id="loginTitle">Sign in</h2>
+        <div class="who-tag team"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>Team</div>
+        <h2 id="loginTitle">Sign in as a team</h2>
         <input class="field" name="name" placeholder="Your name" style="display:none" />
         <input class="field" name="phone" placeholder="Phone" style="margin-top:10px" />
         <input class="field" name="pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" style="margin-top:10px" />
         <p class="err" id="err" style="margin:10px 0 0"></p>
         <button class="btn btn-primary wide" style="margin-top:14px" id="loginBtn">Enter Conacrew</button>
       </form>
+      <div class="or-line" aria-hidden="true"><span>or</span></div>
       <a class="client-entry" href="./book.html">
         <img src="./truck-8x4-sm.jpg" alt="" />
-        <span><b>Hire a dump truck</b><small>No login</small></span>
+        <span class="ce-text"><em>Continue as a client</em><b>Hire a dump truck</b><small>No login</small></span>
         <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </a>
     </div>
   </div>
-  <script src="./store.js?v=138"></script>
+  <script src="./store.js?v=139"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>

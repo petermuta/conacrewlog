@@ -608,3 +608,14 @@ html.going .login-page::after { content: ""; position: fixed; left: 50%; top: 60
 .client-entry small { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(16,36,63,.12); color: #10243f; font-size: 12px; font-weight: 700; }
 .client-entry .go { width: 36px; height: 36px; border-radius: 50%; background: #10243f; color: #fff; display: grid; place-items: center; }
 .client-entry:active { transform: translateY(1px); }
+
+/* sign-in page: team vs client */
+.who-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.who-tag.team { background: rgba(58,160,255,.15); color: #9fd0ff; border: 1px solid rgba(58,160,255,.35); }
+#login h2 { margin-top: 0; }
+.or-line { width: min(420px, 100%); display: flex; align-items: center; gap: 12px; margin: 18px 0 2px; color: rgba(244,247,251,.55); font-size: 13px; font-weight: 600; }
+.or-line::before, .or-line::after { content: ""; flex: 1; height: 1px; background: rgba(244,247,251,.18); }
+.client-entry { margin-top: 12px; }
+.client-entry .ce-text { display: block; min-width: 0; }
+.client-entry em { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: rgba(16,36,63,.7); margin-bottom: 1px; }
+.client-entry b { line-height: 1.15; }
