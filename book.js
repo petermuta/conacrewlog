@@ -89,7 +89,24 @@
     const keep = form.cargo.value;
     form.cargo.innerHTML = `<option value="">Choose</option>` + j.cargo.map((c) => `<option>${esc(c)}</option>`).join("") + `<option value="Other">Other</option>`;
     form.cargo.value = keep;
+    fillServices(j.cargo);
   }).catch(() => {});
+
+  // ---- our services: the same material list, pick one and book it ----
+  function fillServices(list) {
+    const sel = $("#svcMaterial");
+    sel.innerHTML = `<option value="">See the list</option>` + list.map((c) => `<option>${esc(c)}</option>`).join("") + `<option value="Other">Something else</option>`;
+  }
+  fillServices([...form.cargo.options].map((o) => o.value).filter((v) => v && v !== "Other"));
+  $("#svcMaterial").onchange = () => { $("#svcBook").disabled = !$("#svcMaterial").value; $("#svcBook").textContent = $("#svcMaterial").value ? "Book " + ($("#svcMaterial").value === "Other" ? "another material" : $("#svcMaterial").value) : "Book this material"; };
+  $("#svcBook").onclick = () => {
+    const v = $("#svcMaterial").value; if (!v) return;
+    form.cargo.value = v; $("#otherBox").hidden = v !== "Other";
+    $("#services").open = false;
+    if (pins.a && pins.b) go(2); else { err(""); info("—", v === "Other" ? "Now tap the map for pickup" : v + ": now tap the map for pickup"); }
+    if (typeof saveDraft === "function") saveDraft();
+  };
+  $("#services").addEventListener("toggle", () => { if (!$("#services").open && map) setTimeout(() => map.invalidateSize(), 60); else if (map) setTimeout(() => map.invalidateSize(), 60); });
 
   // ---- map ----
   let map = null;

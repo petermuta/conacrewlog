@@ -289,3 +289,22 @@ div.f { display: block; font-weight: 600; font-size: 14px; margin-top: 14px; }
 .btn-wa:hover { background: #178a45; }
 .find { margin-top: 16px; padding: 16px; border-radius: var(--r-md); background: var(--sky); }
 .find .btn { margin-top: 12px; }
+
+/* our services: opens from the truck card */
+.services { margin: 0 12px 10px; border-radius: var(--r-md); border: 1.5px solid var(--line); background: var(--paper); overflow: hidden; }
+.services > summary { list-style: none; cursor: pointer; margin: 0; padding: 8px; display: flex; gap: 12px; align-items: center; }
+.services > summary::-webkit-details-marker { display: none; }
+.services > summary > div { flex: 1; min-width: 0; }
+.services .svc-btn { display: inline-flex; align-items: center; gap: 4px; padding: 7px 10px; border-radius: 999px; background: var(--ink); color: #fff; font-weight: 700; font-size: 13px; flex: none; }
+.svc-btn svg { transition: transform .15s; }
+.services[open] .svc-btn svg { transform: rotate(180deg); }
+.services[open] { border-color: var(--ink); }
+.svc-body { padding: 4px 14px 14px; border-top: 1px solid var(--line); }
+.svc-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.svc-list li { display: flex; gap: 12px; align-items: flex-start; }
+.svc-list svg { flex: none; color: var(--orange-deep); margin-top: 2px; }
+.svc-list b { display: block; font-size: 15px; }
+.svc-list span { color: var(--ink-2); font-size: 13.5px; line-height: 1.35; }
+.svc-pick { margin-top: 14px; }
+#svcBook { margin-top: 10px; min-height: 48px; font-size: 16px; }
+#svcBook[disabled] { opacity: .45; cursor: default; }
