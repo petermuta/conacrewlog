@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./logo-mark.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" href="./logo-mark.png" />
-  <link rel="stylesheet" href="./styles.css?v=137" />
+  <link rel="stylesheet" href="./styles.css?v=138" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
@@ -38,33 +38,8 @@
   </header>
   <div class="sync-bar" id="syncBar" hidden></div>
   <main class="wrap" id="app">
-    <h1 id="bootTitle">Home</h1>
-    <div class="page-links" id="bootLinks">
-      <a href="#trucks">Fleet</a>
-      <a href="#cane">Cane</a>
-      <a href="#passion">Passion</a>
-      <a href="#money">Money</a>
-    </div>
+    <div class="boot-load" aria-label="Opening"><span class="boot-spin"></span></div>
   </main>
-  <script>
-    try {
-      const s = JSON.parse(localStorage.getItem("conacrew.user.v2") || sessionStorage.getItem("conacrew.user.v2") || "null");
-      const box = document.getElementById("bootLinks");
-      const title = document.getElementById("bootTitle");
-      if (sessionStorage.getItem("conacrew.viewAs")) {
-      } else if (s && s.role === "driver" && box) {
-        title.textContent = "Driver";
-        box.innerHTML = '<a href="#drive">Desk</a><a href="#drive-jobs">Jobs</a><a href="#drive-pay">My pay</a><a href="#drive-report">Inspect</a>';
-        if (!location.hash || location.hash === "#home") location.hash = "drive";
-      } else if (s && s.role === "cane_manager" && box) {
-        title.textContent = "Cane";
-        box.innerHTML = '<a href="#cane">Board</a><a href="#cane-new">New buy</a><a href="#cane-sell">Sell</a>';
-      } else if (s && s.role === "passion_manager" && box) {
-        title.textContent = "Passion";
-        box.innerHTML = '<a href="#passion">Blocks</a><a href="#field">Work</a><a href="#passion-sell">Sell</a><a href="#passion-spend">Spend</a>';
-      }
-    } catch (e) {}
-  </script>
   <script>
     try {
       const s = JSON.parse(localStorage.getItem("conacrew.user.v2") || sessionStorage.getItem("conacrew.user.v2") || "null");
@@ -94,7 +69,7 @@
       if (window.route) route();
     }
   </script>
-  <script src="./store.js?v=137"></script>
-  <script src="./app.js?v=137"></script>
+  <script src="./store.js?v=138"></script>
+  <script src="./app.js?v=138"></script>
 </body>
 </html>

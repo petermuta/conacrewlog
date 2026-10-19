@@ -196,9 +196,11 @@ async function boot() {
       $("#app").innerHTML = `<div class="card item"><h1>Could not open</h1><p>${String(err.message || err)}</p><p><a href="./index.html" onclick="Conacrew.logout()">Back to sign in</a></p></div>`;
       return;
     }
-    location.href = "./index.html";
+    Conacrew.logout(); // not signed in after all: clear it so the sign-in page shows the form
+    location.replace("./index.html");
     return;
   }
+  try { sessionStorage.removeItem("conacrew.bounce"); } catch (e) {}
   $("#who").textContent = DATA.viewingAs ? DATA.viewingAs.by + " → " + DATA.me.name : DATA.me.name;
   $("#role").textContent = DATA.viewingAs ? "Look only" : DATA.me.assistant ? "Admin II" : ROLE[DATA.me.role] || DATA.me.role;
   document.body.classList.toggle("is-driver", DATA.me.role === "driver");

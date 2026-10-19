@@ -594,3 +594,17 @@ details.led-row > summary::-webkit-details-marker { display: none; }
 .src-chip.office { background: rgba(255,255,255,.08); color: #c9d6e4; border-color: rgba(255,255,255,.18); }
 .src-chip.driver { background: rgba(58,160,255,.15); color: #9fd0ff; border-color: rgba(58,160,255,.35); }
 .src-seg { grid-template-columns: repeat(4, 1fr); }
+
+/* while the app opens: a quiet spinner instead of placeholder pages */
+.boot-load { min-height: 50vh; display: grid; place-items: center; }
+.boot-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.25); border-top-color: #f5c400; animation: bootspin .8s linear infinite; }
+@keyframes bootspin { to { transform: rotate(360deg); } }
+html.going .login-panel { visibility: hidden; }
+html.going .login-page::after { content: ""; position: fixed; left: 50%; top: 60%; width: 34px; height: 34px; margin-left: -17px; border-radius: 50%; border: 3px solid rgba(255,255,255,.3); border-top-color: #f5c400; animation: bootspin .8s linear infinite; }
+/* client entry on the sign-in page */
+.client-entry { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 14px; width: min(420px, 100%); margin-top: 16px; padding: 10px 14px 10px 10px; border-radius: 20px; background: linear-gradient(135deg, #ffb52e, #f29a12); color: #10243f; text-decoration: none; border: 0; box-shadow: 0 10px 24px rgba(0,0,0,.25); }
+.client-entry img { width: 96px; height: 68px; object-fit: cover; border-radius: 14px; box-shadow: 0 0 0 2px rgba(255,255,255,.6); }
+.client-entry b { display: block; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.client-entry small { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(16,36,63,.12); color: #10243f; font-size: 12px; font-weight: 700; }
+.client-entry .go { width: 36px; height: 36px; border-radius: 50%; background: #10243f; color: #fff; display: grid; place-items: center; }
+.client-entry:active { transform: translateY(1px); }

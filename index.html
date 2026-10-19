@@ -10,8 +10,24 @@
   <link rel="apple-touch-icon" href="./logo-mark.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" href="./logo-mark.png" />
-  <link rel="stylesheet" href="./styles.css?v=137" />
-  <style>html.going .login-panel { visibility: hidden; }</style>
+  <link rel="stylesheet" href="./styles.css?v=138" />
+  <script>
+    // Runs before the page is drawn, so a signed-in phone never sees the sign-in form flash.
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem("conacrew.user.v2") || "null");
+        if (!s || !s.role || !s.at) return;
+        var maxAge = (s.role === "admin" ? 30 * 24 : 24) * 3600e3;
+        if (Date.now() - s.at > maxAge) return;
+        var last = Number(sessionStorage.getItem("conacrew.bounce") || 0);
+        if (Date.now() - last < 8000) return; // the app just sent us back: show the form
+        sessionStorage.setItem("conacrew.bounce", String(Date.now()));
+        document.documentElement.classList.add("going");
+        var home = { admin: "home", driver: "drive", cane_manager: "cane", passion_manager: "passion" }[s.role] || "home";
+        location.replace("./app.html#" + home);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="login-page">
@@ -30,11 +46,12 @@
       </form>
       <a class="client-entry" href="./book.html">
         <img src="./truck-8x4-sm.jpg" alt="" />
-        <span><b>Continue as a client</b><small>Hire a tipper truck, no sign-in needed</small></span>
+        <span><b>Hire a dump truck</b><small>No login</small></span>
+        <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </a>
     </div>
   </div>
-  <script src="./store.js?v=137"></script>
+  <script src="./store.js?v=138"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>
