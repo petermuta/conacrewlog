@@ -2600,7 +2600,7 @@ function bindDriverAdvance() {
 
 // ───────────── Team & logins (admin) ─────────────
 const ROLE_NAMES = { admin: "Admin", driver: "Driver", cane_manager: "Cane manager", passion_manager: "Passion manager" };
-const LOG_TEXT = { ok: ["green", "Signed in"], wrong_pin: ["gold", "Wrong PIN"], locked_now: ["red", "Locked (5 wrong PINs)"], locked: ["red", "Tried while locked"], new_phone: ["gold", "New phone, waiting approval"], phone_approved: ["green", "Phone approved"], phone_removed: ["gold", "Phone removed"], unlocked: ["green", "Unlocked"], unknown_phone: ["red", "Unknown phone number"], computer_trusted: ["blue", "Computer trusted"], computer_untrusted: ["gold", "Computer untrusted"], turned_off: ["red", "Login is off"], no_pin: ["gold", "No PIN set"], blocked_device: ["red", "Blocked device tried"], blocked_login: ["red", "Blocked: too many tries"], office_book_started: ["blue", "Office book started"] };
+const LOG_TEXT = { ok: ["green", "Signed in"], wrong_pin: ["gold", "Wrong PIN"], locked_now: ["red", "Locked (5 wrong PINs)"], locked: ["red", "Tried while locked"], new_phone: ["gold", "New phone, waiting approval"], phone_approved: ["green", "Phone approved"], phone_removed: ["gold", "Phone removed"], unlocked: ["green", "Unlocked"], unknown_phone: ["red", "Unknown phone number"], computer_trusted: ["blue", "Computer trusted"], computer_untrusted: ["gold", "Computer untrusted"], turned_off: ["red", "Login is off"], no_pin: ["gold", "No PIN set"], blocked_device: ["red", "Blocked device tried"], blocked_login: ["red", "Blocked: too many tries"], office_book_started: ["blue", "Office book started"], fresh_start: ["blue", "Started fresh for launch"] };
 // main admin: devices and connections blocked after wrong tries (they only ever see "try again later")
 async function loadBlocks(op, extra) {
   const box = document.getElementById("blocksBox");
@@ -2692,6 +2692,23 @@ function viewTeam() {
       ${trusted.filter((d) => d.id !== myDev).map((d) => `<div class="pay-line"><div><b>${esc(d.label)}</b><div class="muted">Trusted ${whenShort(d.addedAt)}</div></div><button type="button" class="btn btn-ghost btn-sm" data-act="untrust_device" data-device="${esc(d.id)}">Remove</button></div>`).join("")}
     </div>` : ""}
     ${isMain ? `<div id="blocksBox"></div>` : ""}
+    ${isMain ? `<details class="card item fresh-card" style="margin-top:12px">
+      <summary><b>Start fresh for launch</b><div class="muted">Clear all test records. Logins and phones stay.</div></summary>
+      <form id="freshForm" style="margin-top:12px">
+        <p class="eyebrow">Keep</p>
+        <label class="check"><input type="checkbox" name="trucks" checked /> Trucks and drivers</label>
+        <label class="check"><input type="checkbox" name="blocks" checked /> Passion fruit blocks</label>
+        <label class="check"><input type="checkbox" name="contractors" /> Clients / contractors list</label>
+        <label class="check"><input type="checkbox" name="sellers" /> Cane sellers and mills</label>
+        <p class="muted" style="margin-top:10px">Cleared: loads, bookings, money, pay, advances, requests, tasks, inspections, fuel, docs, cane and passion records, sign-in history, GPS.</p>
+        <div class="grid g2" style="margin-top:10px">
+          <label class="lbl">Your PIN<input class="field" name="pin" type="password" inputmode="numeric" autocomplete="off" required /></label>
+          <label class="lbl">Type START FRESH<input class="field" name="confirm" autocomplete="off" required /></label>
+        </div>
+        <p class="err" id="freshErr"></p>
+        <button class="btn btn-danger wide" style="margin-top:10px">Clear test records</button>
+      </form>
+    </details>` : ""}
     <div class="grid g3" style="margin-top:14px">
       <div class="card kpi"><span class="eyebrow">People</span><b>${users.length}</b></div>
       <div class="card kpi steel"><span class="eyebrow">Ready to sign in</span><b>${ok}</b></div>
@@ -2722,6 +2739,24 @@ function viewTeam() {
 }
 function bindTeam() {
   loadBlocks();
+  const ff = document.getElementById("freshForm");
+  if (ff) ff.onsubmit = async (e) => {
+    e.preventDefault();
+    const er = document.getElementById("freshErr"); er.textContent = "";
+    if (!Conacrew.token()) { er.textContent = "Connect to the office first (sync light green)."; return; }
+    if (!confirm("Clear all test records for everyone? A backup copy is kept on the server.")) return;
+    const btn = ff.querySelector("button"); btn.disabled = true; btn.textContent = "Clearing…";
+    try {
+      await Conacrew.syncNow();
+      const res = await fetch("/.netlify/functions/sync", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ op: "reset", pin: ff.pin.value, confirm: ff.confirm.value, keep: { trucks: ff.trucks.checked, blocks: ff.blocks.checked, contractors: ff.contractors.checked, sellers: ff.sellers.checked } }) });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "Couldn't clear");
+      await Conacrew.syncNow();
+      const n = Object.values(j.cleared || {}).reduce((a, b) => a + b, 0);
+      alert("Done. " + n + " test records cleared. The app is ready for launch.");
+      location.hash = "home"; location.reload();
+    } catch (x) { er.textContent = x.message; btn.disabled = false; btn.textContent = "Clear test records"; }
+  };
   const role = document.getElementById("newRole");
   const truck = document.getElementById("newTruck");
   if (role && truck) {

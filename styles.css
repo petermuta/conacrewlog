@@ -619,3 +619,8 @@ html.going .login-page::after { content: ""; position: fixed; left: 50%; top: 60
 .client-entry .ce-text { display: block; min-width: 0; }
 .client-entry em { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: rgba(16,36,63,.7); margin-bottom: 1px; }
 .client-entry b { line-height: 1.15; }
+
+.fresh-card { border: 1px solid rgba(255,90,90,.45); }
+.fresh-card summary { cursor: pointer; list-style: none; }
+.fresh-card summary::-webkit-details-marker { display: none; }
+.btn-danger { background: #c62828; color: #fff; border: 0; }

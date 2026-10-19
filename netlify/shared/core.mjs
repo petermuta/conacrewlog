@@ -347,6 +347,49 @@ export async function handleSync(kv, { method, token, body, ip }) {
     return out;
   }
 
+  if (op === "reset") {
+    // Start fresh for launch: main admin only, PIN again, typed confirmation. A full copy is kept first.
+    const { book: cur } = await loadBook(kv);
+    const who = await readToken(kv, cur, token);
+    if (!who || !isMainAdmin(who.user)) return { status: 403, body: { error: "Only the main admin can do this." } };
+    if (String(body.pin || "") !== String(who.user.pin)) return { status: 400, body: { error: "Wrong PIN." } };
+    if (String(body.confirm || "").trim().toUpperCase() !== "START FRESH") return { status: 400, body: { error: 'Type START FRESH to confirm.' } };
+    const keep = body.keep || {};
+    const WIPE = ["jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "moneyRequests", "cash", "payStubs", "notifications", "receivables", "docs", "bookings", "caneBuys", "caneSales", "caneExpenses", "farmWorks", "fruitSales", "harvests", "fieldLogs", "farmInputs"];
+    if (!keep.contractors) WIPE.push("contractors");
+    if (!keep.sellers) WIPE.push("sellers", "mills");
+    if (!keep.trucks) WIPE.push("trucks", "drivers");
+    if (!keep.blocks) WIPE.push("blocks");
+    let out;
+    await updateBook(kv, async (book) => {
+      const stamp = new Date().toISOString();
+      await kv.set("backup/" + stamp, JSON.stringify(book), {});
+      const m = meta(book);
+      const s = bump(book);
+      const counts = {};
+      for (const coll of WIPE) {
+        const list = Array.isArray(book[coll]) ? book[coll] : [];
+        counts[coll] = list.length;
+        m.del[coll] = m.del[coll] || {};
+        list.forEach((r) => { if (r && r.id != null) m.del[coll][r.id] = { at: now(), s }; });
+        book[coll] = [];
+        if (m.top[coll]) m.top[coll] = { u: now(), s };
+      }
+      // keep logins, phones, trucks; clear what was test activity on them
+      const touch = (r) => { r._u = now(); r._s = s; };
+      (book.trucks || []).forEach((t) => { t.status = "idle"; touch(t); });
+      (book.drivers || []).forEach((d) => { d.advanceUgx = 0; touch(d); });
+      (book.users || []).forEach((u) => { if (u.failCount || u.lockedAt) { u.failCount = 0; delete u.lockedAt; touch(u); } });
+      book.loginLog = []; m.top.loginLog = { u: now(), s };
+      logSignIn(book, who.user, "fresh_start", { device: "", deviceId: who.dev });
+      out = { status: 200, body: { ok: true, cleared: counts, backup: stamp } };
+      return { book };
+    });
+    await kv.set("live", "{}", {});
+    await kv.set("guard", "{}", {});
+    return out;
+  }
+
   if (op === "blocks" || op === "unblock") {
     // main admin: see and lift sign-in blocks
     const { book } = await loadBook(kv);

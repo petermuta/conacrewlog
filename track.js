@@ -98,6 +98,7 @@
     try {
       const res = await fetch(API + "?r=" + encodeURIComponent(r) + "&k=" + encodeURIComponent(k), { cache: "no-store" });
       const b = await res.json();
+      if (res.status === 404) { try { localStorage.setItem("conacrew.myBookings", JSON.stringify(mine.filter((x) => x.ref !== r))); } catch (e) {} } // gone: drop it from My bookings
       if (!res.ok) throw new Error(b.error || "We couldn't load this booking.");
       draw(b);
     } catch (e) { box.innerHTML = `<h2>Booking not found</h2><p class="sub">${esc(e.message)}</p><a class="btn btn-go" href="./book.html">Book a truck</a>`; }

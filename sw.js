@@ -1,4 +1,4 @@
-const CACHE = "conacrew-v141";
+const CACHE = "conacrew-v142";
 const SHELL = [
   "./index.html",
   "./app.html",
@@ -8,6 +8,10 @@ const SHELL = [
   "./seed.json",
   "./logo.png",
   "./logo-mark.png",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./apple-touch-icon.png",
+  "./favicon.png",
   "./manifest.webmanifest",
 ];
 
