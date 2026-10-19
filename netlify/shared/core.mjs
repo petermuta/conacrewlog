@@ -541,7 +541,14 @@ export async function handleBook(kv, { method, body, query, ip }) {
     const { book } = await loadBook(kv);
     const all = [...CARGO_BASE];
     ((book && book.cargoTypes) || []).forEach((x) => { const v = clip(x, 50); if (v && !all.some((a) => a.toLowerCase() === v.toLowerCase())) all.push(v); });
-    return { status: 200, body: { cargo: all.filter((x) => !/sugar\s*cane/i.test(x)) } }; // clients don't book sugarcane
+    // clients see one murram entry (dirt, murram and bumba are the same thing) and no sugarcane
+    const list = [];
+    all.forEach((x) => {
+      if (/sugar\s*cane/i.test(x)) return;
+      const v = /murram|bumba|dirt/i.test(x) ? "Murram (bumba)" : x;
+      if (!list.some((a) => a.toLowerCase() === v.toLowerCase())) list.push(v);
+    });
+    return { status: 200, body: { cargo: list } };
   }
   if (method === "GET") {
     const { book } = await loadBook(kv);
