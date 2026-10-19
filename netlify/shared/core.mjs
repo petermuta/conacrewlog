@@ -541,12 +541,13 @@ export async function handleBook(kv, { method, body, query, ip }) {
     const { book } = await loadBook(kv);
     const all = [...CARGO_BASE];
     ((book && book.cargoTypes) || []).forEach((x) => { const v = clip(x, 50); if (v && !all.some((a) => a.toLowerCase() === v.toLowerCase())) all.push(v); });
-    // clients see one murram entry (dirt, murram and bumba are the same thing) and no sugarcane
+    // clients see murram (dirt) once, bumba once, and no sugarcane
     const list = [];
     all.forEach((x) => {
       if (/sugar\s*cane/i.test(x)) return;
-      const v = /murram|bumba|dirt/i.test(x) ? "Murram (bumba)" : x;
-      if (!list.some((a) => a.toLowerCase() === v.toLowerCase())) list.push(v);
+      // murram and dirt are one material; bumba is its own
+      const vs = /murram|dirt/i.test(x) ? ["Murram (dirt)"].concat(/bumba/i.test(x) ? ["Bumba"] : []) : /bumba/i.test(x) ? ["Bumba"] : [x];
+      vs.forEach((v) => { if (!list.some((a) => a.toLowerCase() === v.toLowerCase())) list.push(v); });
     });
     return { status: 200, body: { cargo: list } };
   }

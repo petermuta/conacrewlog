@@ -87,7 +87,7 @@
   fetch(API + "?list=cargo", { cache: "no-store" }).then((r) => r.json()).then((j) => {
     if (!j || !Array.isArray(j.cargo) || !j.cargo.length) return;
     j.cargo = j.cargo.filter((c) => !/sugar\s*cane/i.test(c)); // sugarcane is our own business, not a client service
-    j.cargo = j.cargo.map((c) => (/murram|bumba|dirt/i.test(c) ? "Murram (bumba)" : c)).filter((c, i, a) => a.indexOf(c) === i); // one murram entry
+    j.cargo = j.cargo.flatMap((c) => (/murram|dirt/i.test(c) ? ["Murram (dirt)"].concat(/bumba/i.test(c) ? ["Bumba"] : []) : /bumba/i.test(c) ? ["Bumba"] : [c])).filter((c, i, a) => a.indexOf(c) === i); // murram (dirt) once, bumba once
     const keep = form.cargo.value;
     form.cargo.innerHTML = `<option value="">Choose</option>` + j.cargo.map((c) => `<option>${esc(c)}</option>`).join("") + `<option value="Other">Other</option>`;
     form.cargo.value = keep;
