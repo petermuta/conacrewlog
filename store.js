@@ -470,7 +470,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -569,6 +569,16 @@ function applyAction(db, user, body) {
     if (!isMainAdmin(user)) throw new Error("Only the main admin can change payment details");
     const t = (v, n) => String(v || "").trim().slice(0, n || 80);
     db.payInfo = { airtel: { number: t(body.airtelNumber, 20), name: t(body.airtelName) }, bank: { bank: t(body.bankName), name: t(body.bankAccountName), account: t(body.bankAccount, 30), code: t(body.bankCode, 20) } };
+  }
+  // a closed booking that never became a load can go to the trash; restore or delete it from there
+  if (action === "trash_booking" || action === "restore_booking" || action === "purge_booking") {
+    const bk = (db.bookings || []).find((x) => x.id === body.id);
+    if (!bk) throw new Error("Booking not found");
+    if (bk.jobId || !["declined", "client_declined"].includes(bk.status)) throw new Error("Only closed bookings without a load can be removed");
+    if (action === "trash_booking") bk.trashed = { at: todayStr(), by: user.name };
+    if (action === "restore_booking") delete bk.trashed;
+    if (action === "purge_booking") { if (!bk.trashed) throw new Error("Move it to trash first"); db.bookings = db.bookings.filter((x) => x.id !== bk.id); }
+    if (action !== "purge_booking") bk.updatedAt = new Date().toISOString();
   }
   if (action === "booking_payment") {
     const bk = (db.bookings || []).find((x) => x.id === body.id);

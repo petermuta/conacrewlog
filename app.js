@@ -511,7 +511,7 @@ function viewTruckJobs() {
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-jobs")}
     <div class="seg src-seg" style="margin-top:14px">
-      ${[["", "All", all.length], ["client", "Client", cnt("client")], ["office", "Office", cnt("office")], ["driver", "Driver", cnt("driver")]].map(([k, t, n]) => `<button type="button" class="seg-btn ${src === k ? "on" : ""}" data-jobsrc="${k}">${t}${n ? ` <span class="count">${n}</span>` : ""}</button>`).join("")}
+      ${[["", "All", all.length], ["client", "Client loads", cnt("client")], ["office", "Office", cnt("office")], ["driver", "Driver", cnt("driver")]].map(([k, t, n]) => `<button type="button" class="seg-btn ${src === k ? "on" : ""}" data-jobsrc="${k}">${t}${n ? ` <span class="count">${n}</span>` : ""}</button>`).join("")}
     </div>
     <div class="card" style="margin-top:12px;overflow:auto">
       <table>
@@ -527,7 +527,7 @@ function viewTruckJobs() {
               <td>${j.km || 0} km<div class="muted">${j.fuelLitres||0} L · ${ugx(j.fuelCostUgx||0)}</div></td>
               <td>${ugx(j.rateUgx||0)}<div class="muted">${j.tonnesDelivered ? j.tonnesDelivered + " t" : ""}</div>${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="width:72px;border-radius:8px" />` : ""}${j.invoice ? `<img src="${j.invoice}" alt="" style="width:72px;border-radius:8px" />` : ""}</td>
               <td>${badge(j.status)}${tripTime(j, j.status) ? `<div class="muted">${tripTime(j, j.status)}${(j.steps || {})[j.status] && j.steps[j.status].office ? " · office" : ""}</div>` : ""}${tripControls(j)}</td>
-              <td>${badge("not paid")}<button class="btn btn-primary" data-act="mark_job_paid" data-id="${j.id}" style="margin-left:8px">Paid</button>
+              <td>${(() => { const bk = j.bookingId && (DATA.bookings || []).find((x) => x.id === j.bookingId); if (!bk) return ""; const due = bk.payment && bk.payment.balance && !bk.payment.balancePaidAt; return `<div class="bk-actions" style="margin:0 0 8px"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>`; })()}${badge("not paid")}<button class="btn btn-primary" data-act="mark_job_paid" data-id="${j.id}" style="margin-left:8px">Paid</button>
               <button class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></td>
             </tr>`;
           }).join("") : `<tr><td colspan="7" class="muted">No open loads</td></tr>`}
@@ -878,6 +878,7 @@ function viewTruck(id) {
 
 function viewJobTrash() {
   const trash = DATA.jobsTrash || [];
+  const bks = (DATA.bookings || []).filter((b) => b.trashed);
   return `
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-trash")}
@@ -893,7 +894,21 @@ function viewJobTrash() {
           </tr>`).join("") : `<tr><td colspan="3" class="muted">Empty</td></tr>`}
         </tbody>
       </table>
-    </div>`;
+    </div>
+    ${bks.length ? `<h2 style="margin-top:18px">Closed bookings</h2>
+    <div class="card" style="margin-top:10px;overflow:auto">
+      <table>
+        <thead><tr><th>Booking</th><th>Removed</th><th></th></tr></thead>
+        <tbody>
+          ${bks.map((b) => `<tr>
+            <td><b>${esc(b.ref)} ${esc(b.cargo)}</b><div class="muted">${esc((b.client || {}).company || (b.client || {}).name || "")} · ${esc(BK_STATUS[b.status] ? BK_STATUS[b.status][1] : b.status)}</div></td>
+            <td>${esc(b.trashed.at || "")} · ${esc(b.trashed.by || "")}</td>
+            <td><button class="btn btn-ghost" data-act="restore_booking" data-id="${esc(b.id)}">Restore</button>
+            <button class="btn btn-ghost" data-act="purge_booking" data-id="${esc(b.id)}">Delete</button></td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>` : ""}`;
 }
 
 // A load from a client booking: everything the client gave stays as it is; the office picks driver, truck and fuel
@@ -1005,7 +1020,7 @@ function viewNewJob() {
 // full international digits: "+44 7700 900123" -> 447700900123, a local "0772..." -> 256772...
 const phoneDigits = (p) => { const raw = String(p || "").trim(); let d = raw.replace(/\D/g, ""); if (!d) return ""; if (raw.startsWith("+")) return d; if (d.startsWith("00")) return d.slice(2); if (d.startsWith("256") && d.length === 12) return d; if (d.length === 9) d = "0" + d; return /^0\d{9}$/.test(d) ? "256" + d.slice(1) : d; };
 const waNumber = (p) => phoneDigits(p);
-function bookingsWaiting() { return (DATA && DATA.bookings || []).filter((b) => ["new", "seen", "payment_check", "accepted"].includes(b.status) || (b.payment && b.payment.balance && !b.payment.balancePaidAt && bookingStage(b) === "delivered")); }
+function bookingsWaiting() { return (DATA && DATA.bookings || []).filter((b) => !b.trashed && ["new", "seen", "payment_check", "accepted"].includes(b.status)); }
 const BK_STATUS = { new: ["gold", "New"], seen: ["gold", "To quote"], quoted: ["blue", "Quote sent"], payment_check: ["gold", "Payment to check"], accepted: ["green", "Confirmed · needs a load"], confirmed: ["green", "Load created"], declined: ["red", "Declined"], client_declined: ["red", "Client said no"] };
 const PLAN_TEXT = { full: "100% (5% off)", deposit: "75% now, 25% on delivery", account: "Pays on delivery (trusted client)" };
 // one WhatsApp message for where the booking is now
@@ -1043,9 +1058,11 @@ function bookingWhatsApp(b) {
 const STAGE_BTN = { new: "Tell client: request received", seen: "Tell client: request received", quoted: "Send quote on WhatsApp", payment_check: "Tell client: checking payment", accepted: "Tell client: booking confirmed", assigned: "Tell client: truck assigned", heading: "Tell client: heading to pickup", loading: "Tell client: loading", on_the_way: "Tell client: in transit", delivered: "Tell client: delivered" };
 function viewBookings() {
   const all = DATA.bookings || [];
-  const tab = sessionStorage.getItem("bkTab") || "open";
-  const groups = { open: ["new", "seen", "quoted", "payment_check", "accepted"], booked: ["confirmed"], closed: ["declined", "client_declined"] };
-  const list = all.filter((b) => groups[tab].includes(b.status));
+  const only = sessionStorage.getItem("bkOnly");
+  const one = only ? all.find((b) => b.ref === only) : null;
+  const tab = sessionStorage.getItem("bkTab") === "closed" ? "closed" : "open";
+  const groups = { open: ["new", "seen", "quoted", "payment_check", "accepted"], closed: ["declined", "client_declined"] };
+  const list = one ? [one] : all.filter((b) => !b.trashed && groups[tab].includes(b.status));
   const pageUrl = location.origin + "/book";
   const card = (b) => {
     const c = b.client || {};
@@ -1094,12 +1111,18 @@ function viewBookings() {
         </form>` : ""}
         ${b.status === "accepted" ? `<button type="button" class="btn btn-steel wide js-bk-load" data-id="${esc(b.id)}" style="margin-top:10px">Create load and assign a driver</button>` : ""}
         ${canQuote ? `<details class="settings" style="margin-top:10px"><summary>Decline this booking</summary><form data-form="book-decline" style="margin-top:8px"><input type="hidden" name="id" value="${esc(b.id)}" /><label class="lbl">Reason the client will see <span class="muted">(optional)</span><input class="field" name="note" maxlength="300" placeholder="e.g. No truck free that day" /></label><button class="btn btn-ghost wide" style="margin-top:8px">Decline</button></form></details>` : ""}
+        ${["declined", "client_declined"].includes(b.status) && !b.jobId ? `<button type="button" class="btn btn-ghost wide" data-act="trash_booking" data-id="${esc(b.id)}" style="margin-top:10px">Move to trash</button>` : ""}
         <p class="eyebrow" style="margin-top:14px">History</p>
         ${(b.history || []).slice().reverse().map((h) => `<div class="pay-line"><div><b>${esc(h.what)}</b><div class="muted">${whenShort(h.at)}${h.by ? " · " + esc(h.by) : ""}</div></div></div>`).join("")}
       </div>
     </details>`;
   };
-  const n = (g) => all.filter((b) => groups[g].includes(b.status)).length;
+  const n = (g) => all.filter((b) => !b.trashed && groups[g].includes(b.status)).length;
+  if (one) return `
+    <h1>Fleet</h1>
+    ${fleetTabs("trucks-jobs")}
+    <button type="button" class="btn btn-ghost btn-sm" id="bkBack" style="margin-top:14px">‹ Client loads</button>
+    <div class="list" style="margin-top:12px">${card(one)}</div>`;
   return `
     <h1>Fleet</h1>
     ${fleetTabs("trucks-book")}
@@ -1115,11 +1138,14 @@ function viewBookings() {
         <button class="btn btn-steel wide" style="margin-top:10px">Save payment details</button>
       </form></details>`; })() : ""}
     <div class="seg" style="margin-top:14px">
-      ${[["open", "Open"], ["booked", "Booked"], ["closed", "Closed"]].map(([k, t]) => `<button type="button" class="seg-btn ${tab === k ? "on" : ""}" data-bktab="${k}">${t}${n(k) ? ` <span class="count">${n(k)}</span>` : ""}</button>`).join("")}
+      ${[["open", "Open"], ["closed", "Closed"]].map(([k, t]) => `<button type="button" class="seg-btn ${tab === k ? "on" : ""}" data-bktab="${k}">${t}${n(k) ? ` <span class="count">${n(k)}</span>` : ""}</button>`).join("")}
     </div>
     <div class="list" style="margin-top:12px">${list.length ? list.map(card).join("") : `<div class="card item muted">${tab === "open" ? "No client requests waiting." : "Nothing here yet."}</div>`}</div>`;
 }
 function bindBookings() {
+  document.querySelectorAll('a[href="#trucks-book"]').forEach((l) => { l.addEventListener("click", () => { if (sessionStorage.getItem("bkOnly")) { sessionStorage.removeItem("bkOnly"); if (location.hash === "#trucks-book") setTimeout(route, 0); } }); });
+  const bkBack = document.getElementById("bkBack");
+  if (bkBack) bkBack.onclick = () => { sessionStorage.removeItem("bkOnly"); sessionStorage.setItem("jobSrc", "client"); location.hash = "#trucks-jobs"; };
   document.querySelectorAll("[data-bktab]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("bkTab", b.dataset.bktab); route(); }; });
   document.querySelectorAll(".js-copylink").forEach((b) => { b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.link); b.textContent = "Copied"; } catch (e) { prompt("Copy this link", b.dataset.link); } }; });
   document.querySelectorAll(".js-bkpay").forEach((b) => { b.onclick = () => {
@@ -3120,7 +3146,9 @@ function bind() {
   document.querySelectorAll("[data-jobsrc]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("jobSrc", b.dataset.jobsrc); route(); }; });
   document.querySelectorAll(".js-openbk").forEach((b) => { b.onclick = () => {
     const bk = (DATA.bookings || []).find((x) => x.ref === b.dataset.ref);
-    const tab = !bk ? "open" : ["confirmed"].includes(bk.status) ? "booked" : ["declined", "client_declined"].includes(bk.status) ? "closed" : "open";
+    if (bk && bk.jobId) { sessionStorage.setItem("bkOnly", bk.ref); if (location.hash === "#trucks-book") route(); else location.hash = "#trucks-book"; return; }
+    sessionStorage.removeItem("bkOnly");
+    const tab = bk && ["declined", "client_declined"].includes(bk.status) ? "closed" : "open";
     sessionStorage.setItem("bkTab", tab); sessionStorage.setItem("bkOpen", b.dataset.ref); location.hash = "#trucks-book";
   }; });
   const bkOpen = sessionStorage.getItem("bkOpen");
@@ -3786,7 +3814,7 @@ function bindMedia() {
 }
 
 window.route = route;
-window.addEventListener("hashchange", () => DATA && route());
+window.addEventListener("hashchange", () => { if (location.hash !== "#trucks-book") sessionStorage.removeItem("bkOnly"); if (DATA) route(); });
 document.addEventListener("change", (e) => { const s = e.target.closest && e.target.closest(".js-pagepick"); if (s && s.value) location.hash = s.value; });
 // ---- office sync light, and fresh data from other phones ----
 function syncLight() {
