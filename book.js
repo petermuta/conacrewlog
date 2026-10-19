@@ -35,7 +35,7 @@
     }
     if (step === 2) {
       if (!form.cargo.value) { form.cargo.focus(); return err("Choose the material."); }
-      if (Number(form.tonnes.value) > 42) { form.tonnes.focus(); return err("Max 42 tonnes per trip. Add trips instead."); }
+      if (Number(form.tonnes.value) > 40) { form.tonnes.focus(); return err("Max 40 tonnes per trip. Add trips instead."); }
       if (!form.date.value) return err("Choose the day.");
       return go(3);
     }
@@ -86,6 +86,7 @@
   // same material list as the office uses on New job
   fetch(API + "?list=cargo", { cache: "no-store" }).then((r) => r.json()).then((j) => {
     if (!j || !Array.isArray(j.cargo) || !j.cargo.length) return;
+    j.cargo = j.cargo.filter((c) => !/sugar\s*cane/i.test(c)); // sugarcane is our own business, not a client service
     const keep = form.cargo.value;
     form.cargo.innerHTML = `<option value="">Choose</option>` + j.cargo.map((c) => `<option>${esc(c)}</option>`).join("") + `<option value="Other">Other</option>`;
     form.cargo.value = keep;

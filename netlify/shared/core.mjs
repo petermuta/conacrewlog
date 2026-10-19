@@ -450,7 +450,7 @@ export async function handleMedia(kv, { method, token, body, query }) {
 // ---------- public booking page (clients, no sign-in) ----------
 // Clients can only add a new request and read their own request with its private key. Nothing else.
 const BOOK_PER_PHONE_DAY = 4;
-const MAX_TONNES = 42; // one Sinotruk 8x4 trip
+const MAX_TONNES = 40; // one Sinotruk 8x4 trip
 // where clients pay (the main admin can change this on Fleet › Bookings)
 export const PAY_INFO = {
   airtel: { number: "0705139060", name: "Restatuta" },
@@ -498,7 +498,7 @@ export async function handleBook(kv, { method, body, query, ip }) {
     const { book } = await loadBook(kv);
     const all = [...CARGO_BASE];
     ((book && book.cargoTypes) || []).forEach((x) => { const v = clip(x, 50); if (v && !all.some((a) => a.toLowerCase() === v.toLowerCase())) all.push(v); });
-    return { status: 200, body: { cargo: all } };
+    return { status: 200, body: { cargo: all.filter((x) => !/sugar\s*cane/i.test(x)) } }; // clients don't book sugarcane
   }
   if (method === "GET") {
     const { book } = await loadBook(kv);
@@ -518,8 +518,8 @@ export async function handleBook(kv, { method, body, query, ip }) {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || "")) ? String(body.date) : "";
     if (!date || date < ymd(new Date(now() - 864e5))) return { status: 400, body: { error: "Choose the date you need the truck." } };
     const cargo = clip(body.cargo, 60);
-    if (!cargo) return { status: 400, body: { error: "Choose what you're moving." } };
-    if (Number(body.tonnes) > MAX_TONNES) return { status: 400, body: { error: "Our truck carries up to 42 tonnes per trip. Add more trips instead." } };
+    if (!cargo || /sugar\s*cane/i.test(cargo)) return { status: 400, body: { error: "Choose what you're moving." } };
+    if (Number(body.tonnes) > MAX_TONNES) return { status: 400, body: { error: "Our truck carries up to 40 tonnes per trip. Add more trips instead." } };
     let out;
     await updateBook(kv, async (book) => {
       if (!book) { out = { status: 503, body: { error: "Booking is not open yet. Please call us." } }; return { write: false }; }
