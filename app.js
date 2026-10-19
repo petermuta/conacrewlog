@@ -176,7 +176,7 @@ const PAGES = {
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-drivers", "truck-id", "reports", "requests", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pl", "money-pl-q", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-drivers", "truck-id", "reports", "requests", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pl", "money-pl-q", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -286,6 +286,7 @@ function route() {
     "trucks-drivers": viewDrivers,
     "truck-id": () => viewTruck(r.id),
     reports: viewReports,
+    "trucks-issues": viewReports,
     drive: () => viewDrive("drive"),
     "drive-money": () => viewDrive("drive-money"),
     "drive-tasks": () => viewDrive("drive-tasks"),
@@ -331,6 +332,7 @@ function route() {
     "trucks-new": "trucks",
     "trucks-book": "trucks",
     "trucks-trash": "trucks",
+    "trucks-issues": "trucks",
     "trucks-drivers": "trucks",
     "trucks-spend": "trucks",
     "trucks-docs": "trucks",
@@ -391,20 +393,21 @@ function bizBar() {
   const h = location.hash || "#home";
   const req = { trucking: openRequests("trucking").length, sugarcane: openRequests("sugarcane").length, passion: openRequests("passion").length };
   const dot = (n) => n ? ` <span class="attn-dot"></span>` : "";
+  const work = (DATA.fleetTasks || []).filter((t) => t.status === "done").length, iss = issuesWaiting(), pay = payWaiting(), phones = DATA.me.assistant ? 0 : phonesWaiting();
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
-    fleet: [["#trucks", "Units"], ["#trucks-book", "Bookings", bookingsWaiting().length], ["#trucks-jobs", "Jobs"], ["#trucks-spend", "Spend", req.trucking], ["#trucks-work", "Work", (DATA.fleetTasks || []).filter((t) => t.status === "done").length], ["#trucks-docs", "Docs"], ["#trucks-inspect", "Reports"], ["#trucks-paid", "Paid"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New job"], ["#trucks-trash", "Trash"]],
+    fleet: [["#trucks", "Units"], ["#trucks-book", "Bookings", bookingsWaiting().length], ["#trucks-jobs", "Jobs"], ["#trucks-spend", "Spend", req.trucking], ["#trucks-work", "Work", work], ["#trucks-issues", "Issues", iss], ["#trucks-docs", "Docs"], ["#trucks-inspect", "Reports"], ["#trucks-paid", "Paid"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New job"], ["#trucks-trash", "Trash"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Spend", req.sugarcane], ["#cane-docs", "Docs"]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-spend", "Spend", req.passion], ["#passion-docs", "Docs"]],
-    money: [["#money", "Flow"], ["#money-spend", "Spend"], ["#money-pay", "Pay"]],
+    money: [["#money", "Flow"], ["#money-spend", "Spend", req.trucking + req.sugarcane + req.passion], ["#money-pay", "Pay", pay]],
   }[biz] || [];
   return `<nav class="admin-nav">
     <div class="biz">
-      <a class="${biz === "home" ? "on" : ""}" href="#home">Home${dot(phonesWaiting())}</a>
-      <a class="${biz === "fleet" ? "on" : ""}" href="#trucks">Fleet${dot(req.trucking + bookingsWaiting().length)}</a>
+      <a class="${biz === "home" ? "on" : ""}" href="#home">Home${dot(phones)}</a>
+      <a class="${biz === "fleet" ? "on" : ""}" href="#trucks">Fleet${dot(req.trucking + bookingsWaiting().length + work + iss)}</a>
       <a class="${biz === "cane" ? "on" : ""}" href="#cane">Cane${dot(req.sugarcane)}</a>
       <a class="${biz === "passion" ? "on" : ""}" href="#passion">Passion${dot(req.passion)}</a>
-      <a class="${biz === "money" ? "on" : ""}" href="#money">Money</a>
+      <a class="${biz === "money" ? "on" : ""}" href="#money">Money${dot(pay)}</a>
     </div>
     ${subs.length ? `<div class="sub">${subs.map(([href, label, n]) => `<a class="${h === href ? "on" : ""} ${n ? "attn" : ""}" href="${href}">${label}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>${pagePick(subs, h)}` : ""}
   </nav>`;
@@ -527,7 +530,7 @@ function viewTruckJobs() {
               <td>${j.km || 0} km<div class="muted">${j.fuelLitres||0} L · ${ugx(j.fuelCostUgx||0)}</div></td>
               <td>${ugx(j.rateUgx||0)}<div class="muted">${j.tonnesDelivered ? j.tonnesDelivered + " t" : ""}</div>${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="width:72px;border-radius:8px" />` : ""}${j.invoice ? `<img src="${j.invoice}" alt="" style="width:72px;border-radius:8px" />` : ""}</td>
               <td>${badge(j.status)}${tripTime(j, j.status) ? `<div class="muted">${tripTime(j, j.status)}${(j.steps || {})[j.status] && j.steps[j.status].office ? " · office" : ""}</div>` : ""}${tripControls(j)}</td>
-              <td>${(() => { const bk = j.bookingId && (DATA.bookings || []).find((x) => x.id === j.bookingId); if (!bk) return ""; const due = bk.payment && bk.payment.balance && !bk.payment.balancePaidAt; return `<div class="bk-actions" style="margin:0 0 8px"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>`; })()}${badge("not paid")}<button class="btn btn-primary" data-act="mark_job_paid" data-id="${j.id}" style="margin-left:8px">Paid</button>
+              <td>${(() => { const bk = j.bookingId && (DATA.bookings || []).find((x) => x.id === j.bookingId); if (!bk) return ""; const due = bk.payment && bk.payment.balance && !bk.payment.balancePaidAt; return `<div class="bk-actions" style="margin:0 0 8px"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay flash" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>`; })()}${badge("not paid")}<button class="btn btn-primary" data-act="mark_job_paid" data-id="${j.id}" style="margin-left:8px">Paid</button>
               <button class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></td>
             </tr>`;
           }).join("") : `<tr><td colspan="7" class="muted">No open loads</td></tr>`}
@@ -575,7 +578,7 @@ function viewInspectReport() {
         return `<div class="card item">
           <div class="row"><div><b>${r.date}</b><p class="muted">${t?.plate || ""} · ${d?.name || r.by || ""} · ${r.odometerKm||0} km</p></div>${badge(r.status === "fail" ? "fail" : r.status === "warn" ? "warning" : "pass")}</div>
           ${bad.map((k) => `<div style="margin-top:10px"><p>${names[k]||k} · ${label(r.items[k])}</p>${(r.photos&&r.photos[k])?`<img src="${r.photos[k]}" alt="" style="max-width:220px;border-radius:10px;margin-top:6px" />`:""}</div>`).join("")}
-          ${r.note ? `<p class="muted" style="margin-top:8px">${r.note}</p>` : ""}${r.voice ? `<audio controls src="${r.voice}" style="width:100%;margin-top:8px"></audio>` : ""}
+          ${r.note ? `<p class="muted" style="margin-top:8px">${r.note}</p>` : ""}${r.voice ? `<audio class="voice-play" controls src="${r.voice}" style="width:100%;margin-top:8px"></audio>` : ""}
         </div>`;
       }).join("") : `<div class="card item">None</div>`}
     </div>`;
@@ -609,12 +612,12 @@ function voiceBox(label) {
     <input type="hidden" name="voice" value="" /><input type="hidden" name="voiceSec" value="0" />
     <p class="lbl" style="margin:0">${label || "Voice note (max 3 min)"}</p>
     <div class="voice-row">
-      <button type="button" class="btn btn-steel js-rec">● Record</button>
+      <button type="button" class="btn btn-rec js-rec">● Record</button>
       <button type="button" class="btn btn-ghost js-stop" disabled>■ Stop</button>
       <span class="voice-time js-time">0:00 / 3:00</span>
     </div>
     <div class="voice-bar"><span class="js-bar"></span></div>
-    <audio class="js-play" controls style="width:100%;margin-top:8px;display:none"></audio>
+    <audio class="js-play voice-play" controls style="width:100%;margin-top:8px;display:none"></audio>
     <button type="button" class="linkbtn js-redo" style="display:none">Record again</button>
   </div>`;
 }
@@ -666,7 +669,7 @@ function replyView(t, reply) {
     <p class="eyebrow">Driver's reply · ${whenShort(r.at)}${r.odometerKm ? " · " + Number(r.odometerKm).toLocaleString() + " km" : ""}</p>
     ${parts.map((p) => { const res = RESULT[(r.items || {})[p]] || ["blue", "—"]; return `<div class="reply-part"><div><b>${esc((t.partNames || {})[p] || partName(p))}</b> <span class="badge ${res[0]}">${res[1]}</span></div>${(r.photos || {})[p] ? `<img class="reply-photo js-zoom" src="${r.photos[p]}" alt="Photo of ${esc(partName(p))}" />` : `<span class="muted">No photo</span>`}</div>`; }).join("")}
     ${!parts.length && (r.photos || {}).work ? `<img class="reply-photo js-zoom" src="${r.photos.work}" alt="Photo of the work" />` : ""}
-    ${r.voice ? `<div style="margin-top:8px"><p class="muted">Voice note · ${fmtSec(r.voiceSec)}</p><audio controls preload="metadata" src="${r.voice}" style="width:100%"></audio></div>` : ""}
+    ${r.voice ? `<div style="margin-top:8px"><p class="muted">Voice note · ${fmtSec(r.voiceSec)}</p><audio class="voice-play" controls preload="metadata" src="${r.voice}" style="width:100%"></audio></div>` : ""}
     ${r.note ? `<p style="margin-top:8px">“${esc(r.note)}”</p>` : ""}
     ${t.mediaRemoved || (r && r.mediaRemoved) ? `<p class="muted">Old photos/voice removed to save phone space.</p>` : ""}
   </div>`;
@@ -683,7 +686,7 @@ function viewTruckWork() {
     const truck = trucks.find((x) => x.id === t.truckId);
     const [tone, st] = taskStatus(t);
     const parts = taskParts(t);
-    return `<details class="card task-card" ${withReview ? "open" : ""}>
+    return `<details class="card task-card ${t.status === "done" ? "flash" : ""}" ${withReview ? "open" : ""}>
       <summary>
         <div style="min-width:0"><b>${esc(taskTitle(t))}</b>${t.priority === "urgent" ? ` <span class="badge red">Urgent</span>` : ""}
           <div class="muted">${esc(truck ? truck.plate : "")} · ${esc(dname(t.driverId))} · sent ${fmtDay(t.createdAt)}${t.dueDate ? " · due " + fmtDay(t.dueDate) : ""}</div></div>
@@ -740,7 +743,7 @@ function driverTasksView() {
   const done = all.filter((t) => t.status === "closed").slice(0, 6);
   const tcard = (t, action) => {
     const parts = taskParts(t);
-    return `<div class="card task-card driver ${t.priority === "urgent" ? "urgent" : ""}">
+    return `<div class="card task-card driver ${t.priority === "urgent" ? "urgent" : ""} ${action && t.status === "open" ? "flash" : ""}">
       <div class="row"><div style="min-width:0">
         ${t.priority === "urgent" ? `<span class="badge red">Urgent</span> ` : ""}${t.sentBack && action ? `<span class="badge red">Sent back</span>` : ""}
         <h2 class="task-title">${esc(taskTitle(t))}</h2>
@@ -1070,7 +1073,7 @@ function viewBookings() {
     const job = b.jobId ? (DATA.jobs || []).find((j) => j.id === b.jobId) : null;
     const gmap = `https://www.google.com/maps/dir/?api=1&origin=${b.pickup.lat},${b.pickup.lng}&destination=${b.drop.lat},${b.drop.lng}&travelmode=driving`;
     const canQuote = ["new", "seen", "quoted", "payment_check"].includes(b.status);
-    return `<details class="card bk-card" ${list.length === 1 || sessionStorage.getItem("bkOpen") === b.ref ? "open" : ""} id="bk-${esc(b.ref)}">
+    return `<details class="card bk-card ${["new", "seen", "payment_check", "accepted"].includes(b.status) ? "flash" : ""}" ${list.length === 1 || sessionStorage.getItem("bkOpen") === b.ref ? "open" : ""} id="bk-${esc(b.ref)}">
       <summary>
         <div style="flex:1;min-width:0"><b>${esc(c.company || c.name)}</b> <span class="muted">${esc(b.ref)}</span>
           <div class="muted">${esc(b.cargo)}${b.trips > 1 ? ", " + b.trips + " trips" : ""} · ${fmtDay(b.date)}${b.km ? " · " + b.km + " km" : ""}</div></div>
@@ -1165,7 +1168,7 @@ function mediaBlock(issue) {
   const voice = issue.voice;
   return `
     ${photos.length ? `<div class="thumbs">${photos.map((src) => `<img src="${src}" alt="" />`).join("")}</div>` : ""}
-    ${voice ? `<audio controls src="${voice}" style="width:100%;margin-top:8px"></audio>${issue.voiceSec ? `<p class="muted">${issue.voiceSec}s</p>` : ""}` : ""}
+    ${voice ? `<audio class="voice-play" controls src="${voice}" style="width:100%;margin-top:8px"></audio>${issue.voiceSec ? `<p class="muted">${issue.voiceSec}s</p>` : ""}` : ""}
   `;
 }
 
@@ -1173,14 +1176,14 @@ function viewReports() {
   const list = DATA.issues || [];
   const incoming = list.filter((i) => i.status !== "closed");
   return `
-    <h1>Money</h1>
-    ${moneyTabs("reports")}
-    <p class="muted" style="margin-top:10px">${incoming.length} incoming</p>
+    <h1>Fleet</h1>
+    ${fleetTabs("trucks-issues")}
+    <p class="muted" style="margin-top:10px">${incoming.length ? incoming.length + " to answer" : "All answered"}</p>
     <div class="list" style="margin-top:14px">
       ${list.length ? list.map((i) => {
         const t = DATA.trucks.find((x) => x.id === i.truckId);
         const d = DATA.drivers.find((x) => x.id === i.driverId);
-        return `<div class="card item">
+        return `<div class="card item ${i.status === "open" ? "flash" : ""}">
           <div class="row"><div><p class="eyebrow">${i.date} · ${t?.plate || ""} · ${d?.name || i.by}</p><b>${i.title}</b></div>${badge(i.status)}${i.severity === "urgent" ? badge("urgent") : ""}</div>
           ${i.note ? `<p style="margin-top:8px">${i.note}</p>` : ""}
           ${mediaBlock(i)}
@@ -1200,12 +1203,13 @@ function viewDrive(page, taskId) {
   const notes = (DATA.notifications || []).filter((n) => n.status === "unread");
   const floats = DATA.disbursements || [];
   const pendingMoney = floats.filter((f) => f.status === "sent").length;
+  const dw = driverWaiting();
   const side = tabMenu([
-    ["#drive", "Desk", "drive"],
-    ["#drive-jobs", "Jobs", "drive-jobs"],
+    ["#drive", "Desk", "drive", dw.notes],
+    ["#drive-jobs", "Jobs", "drive-jobs", dw.jobs],
     ["#drive-paid", "Paid loads", "drive-paid"],
     ["#drive-pay", "My pay", "drive-pay"],
-    ["#drive-tasks", "Tasks", "drive-tasks"],
+    ["#drive-tasks", "Tasks", "drive-tasks", dw.tasks],
     ["#drive-report", "Inspect", "drive-report"],
     ["#drive-fuel", "Fuel", "drive-fuel"],
     ["#drive-money", "Advance", "drive-money", toConfirm("trucking").length],
@@ -1215,7 +1219,7 @@ function viewDrive(page, taskId) {
     <h1>Desk</h1>
     <div class="notice-bar">
       <p class="eyebrow">From the office</p>
-      ${notes.length ? notes.map((n) => `<p>${n.text || n.title || "New notice"}</p>`).join("") : ""}
+      ${notes.length ? notes.map((n) => n.taskId ? `<p>${n.text || n.title || "New notice"}</p>` : `<div class="note-line flash"><p>${esc(n.text || n.title || "New notice")}</p><button type="button" class="btn btn-ghost btn-sm" data-act="read_note" data-id="${esc(n.id)}">Got it</button></div>`).join("") : ""}
       ${tasks.length ? `<a href="#drive-tasks">${tasks.length} task${tasks.length === 1 ? "" : "s"} from the office</a>` : ""}
       ${pendingMoney ? `<a href="#drive-money">${pendingMoney} payment${pendingMoney === 1 ? "" : "s"} to confirm</a>` : ""}
       ${!notes.length && !tasks.length && !pendingMoney ? `<p class="muted">No new notices</p>` : ""}
@@ -1249,7 +1253,7 @@ function viewDrive(page, taskId) {
     </form>
     <div class="list" style="margin-top:14px">
       ${(DATA.inspections || []).map((r) => `<div class="card item"><div class="row"><div><b>${r.date}</b><p class="muted">${r.odometerKm || 0} km</p></div>${badge(r.status === "fail" ? "fail" : r.status === "warn" ? "warning" : "pass")}</div>
-        ${r.voice ? `<audio controls src="${r.voice}" style="width:100%;margin-top:8px"></audio>` : ""}
+        ${r.voice ? `<audio class="voice-play" controls src="${r.voice}" style="width:100%;margin-top:8px"></audio>` : ""}
       </div>`).join("")}
     </div>`;
 
@@ -1295,7 +1299,7 @@ function viewDrive(page, taskId) {
         const n = next[j.status];
         const income = j.incomeUgx || ((j.tonnesDelivered || 0) * (j.payPerTonne || 0)) || j.rateUgx;
         const dir = j.pickupPin && j.dropPin ? `https://www.google.com/maps/dir/?api=1&origin=${j.pickupPin.lat},${j.pickupPin.lng}&destination=${j.dropPin.lat},${j.dropPin.lng}&travelmode=driving` : "";
-        return `<div class="card item"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">${j.bookingRef ? "Client booking " + esc(j.bookingRef) : "From office"}</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""} · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}</p></div>${badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
+        return `<div class="card item ${newOfficeLoad(j) ? "flash" : ""}"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">${j.bookingRef ? "Client booking " + esc(j.bookingRef) : "From office"}</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""} · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}</p></div>${badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
         ${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : `<form data-form="scale" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><input class="field" name="tonnes" required placeholder="Tonnes after scale" /><input class="field" name="ticket" type="file" accept="image/*" required /></div><button class="btn btn-steel wide" style="margin-top:8px">Save scale ticket</button></form>`}
         ${j.scaleTicket && !j.invoice ? `<form data-form="invoice" data-id="${j.id}" style="margin-top:8px"><input class="field" name="amountUgx" required placeholder="Amount UGX" value="${income || ""}" /><input class="field" name="invoice" type="file" accept="image/*" required style="margin-top:8px" /><select class="field" name="paidNow" style="margin-top:8px"><option value="0">Pay later</option><option value="1">Paid now</option></select><button class="btn btn-primary wide" style="margin-top:8px">Send invoice</button></form>` : ""}
         ${j.invoice ? `<img src="${j.invoice}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : ""}
@@ -1924,15 +1928,11 @@ function viewHome() {
   const req = { trucking: openRequests("trucking").length, sugarcane: openRequests("sugarcane").length, passion: openRequests("passion").length };
   const replies = (DATA.fleetTasks || []).filter((t) => t.status === "done").length;
   const phones = DATA.me.assistant ? 0 : phonesWaiting();
-  let payN = 0;
-  if (typeof owedTo === "function") {
-    (DATA.drivers || []).forEach((d) => { payN += owedTo("driver", d, DATA.payStubs, DATA).waiting.length; });
-    (DATA.users || []).filter((u) => u.role === "cane_manager").forEach((u) => { payN += owedTo("cane", u, DATA.payStubs, DATA).waiting.length; });
-    (DATA.users || []).filter((u) => u.role === "passion_manager").forEach((u) => { payN += owedTo("passion", u, DATA.payStubs, DATA).waiting.length; });
-  }
+  const payN = payWaiting(), issN = issuesWaiting();
   const attn = [];
   [["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].forEach(([t, n]) => { if (req[t]) attn.push([FUND_HOME[t], "gold", `${req[t]} money request${req[t] > 1 ? "s" : ""}`, n]); });
   if (replies) attn.push(["#trucks-work", "blue", `${replies} task repl${replies > 1 ? "ies" : "y"} to check`, "Fleet"]);
+  if (issN) attn.push(["#trucks-issues", "red", `${issN} driver issue${issN > 1 ? "s" : ""} to answer`, "Fleet"]);
   if (phones) attn.push(["#team", "gold", `${phones} new phone${phones > 1 ? "s" : ""} to approve`, "Team"]);
   const bkN = bookingsWaiting().length;
   if (bkN) attn.push(["#trucks-book", "gold", `${bkN} client booking${bkN > 1 ? "s" : ""} to answer`, "Fleet"]);
@@ -2254,7 +2254,7 @@ function advanceCard(f, admin) {
   const [tone, st] = advanceStatus(f);
   const via = (METHOD_LABEL[f.method] || "Cash") + (f.payeePhone ? " " + esc(f.payeePhone) : f.bankAccount ? " · " + esc(f.bankName || "") + " " + esc(f.bankAccount) : "") + (f.reference ? " · Ref " + esc(f.reference) : "");
   const link = linkText(f);
-  return `<section class="card adv-card">
+  return `<section class="card adv-card ${!admin && f.status === "sent" ? "flash" : ""}">
     <div class="adv-head">
       <div style="min-width:0">
         <b class="adv-title">${esc(catLabel(tag, f.activity) || "Advance")}</b>
@@ -2369,7 +2369,7 @@ function viewFundsAdmin(tag) {
   return `
     <div class="row" style="align-items:center"><h1>${title} · Spend</h1></div>
     <h2 style="margin:16px 0 0">Requests ${reqs.length ? `<span class="attn-n big">${reqs.length}</span>` : ""}</h2>
-    ${reqs.length ? reqs.map((r) => { const p = requesterOf(r); const link = linkText(r); const [tone, st] = reqStatusText(r); return `<details class="card req-card" ${reqs.length === 1 ? "open" : ""}>
+    ${reqs.length ? reqs.map((r) => { const p = requesterOf(r); const link = linkText(r); const [tone, st] = reqStatusText(r); return `<details class="card req-card flash" ${reqs.length === 1 ? "open" : ""}>
       <summary>
         <div style="min-width:0"><b>${esc(p ? p.name : r.by)}</b> · <b>${ugx(reqAsked(r))}</b>
           <div class="muted">${esc(reqWhat(tag, r))}${link ? " · " + esc(link) : ""} · asked ${fmtDay(r.date)}${r.neededBy ? " · <b>needed by " + fmtDay(r.neededBy) + "</b>" : ""}</div>
@@ -2643,6 +2643,25 @@ async function loadBlocks(op, extra) {
     box.querySelectorAll(".js-unblock").forEach((b) => { b.onclick = () => loadBlocks("unblock", { kind: b.dataset.kind, id: b.dataset.id }); });
   } catch (e) {}
 }
+// what is waiting on someone: it flashes until they respond
+function issuesWaiting() { return (DATA.issues || []).filter((i) => i.status === "open").length; }
+function payWaiting() {
+  if (typeof owedTo !== "function") return 0;
+  let n = 0;
+  (DATA.drivers || []).forEach((d) => { n += owedTo("driver", d, DATA.payStubs, DATA).waiting.length; });
+  (DATA.users || []).filter((u) => u.role === "cane_manager").forEach((u) => { n += owedTo("cane", u, DATA.payStubs, DATA).waiting.length; });
+  (DATA.users || []).filter((u) => u.role === "passion_manager").forEach((u) => { n += owedTo("passion", u, DATA.payStubs, DATA).waiting.length; });
+  return n;
+}
+function newOfficeLoad(j) { return j.fromOffice && j.status === "booked" && !isPaid(j); }
+function driverWaiting() {
+  const my = DATA.me.driverId;
+  return {
+    tasks: (DATA.fleetTasks || []).filter((t) => t.driverId === my && t.status === "open").length,
+    jobs: (DATA.jobs || []).filter((j) => j.driverId === my && newOfficeLoad(j)).length,
+    notes: (DATA.notifications || []).filter((n) => n.status === "unread" && !n.taskId).length,
+  };
+}
 function phonesWaiting() {
   return (DATA.users || []).reduce((n, u) => n + ((u.pendingDevices || []).length), 0);
 }
@@ -2669,7 +2688,7 @@ function viewTeam() {
     const state = u.active === false ? ["red", "Turned off"] : u.locked ? ["red", "Locked"] : pend.length ? ["gold", "Phone waiting"] : !u.phone ? ["gold", "No phone"] : !u.hasPin ? ["gold", "No PIN"] : !main && !devs.length ? ["gold", "No phone approved"] : ["green", "Can sign in"];
     const pinText = !u.hasPin ? "not set" : u.pinLen === 6 ? "set (6 digits)" : `set (${u.pinLen} digits) · <span class="warn-t">set a new 6-digit PIN</span>`;
     const canEdit = !(iAmII && u.role === "admin" && u.id !== DATA.me.id);
-    return `<details class="card team-row ${pend.length ? "attn-row" : ""}" ${pend.length ? "open" : ""}>
+    return `<details class="card team-row ${pend.length ? "attn-row flash" : ""}" ${pend.length ? "open" : ""}>
       <summary>
         <div class="avatar">${esc((u.name || "?").charAt(0).toUpperCase())}</div>
         <div style="flex:1;min-width:0"><b>${esc(u.name)}</b>
@@ -2977,7 +2996,7 @@ function payPicker(g) {
       <option value="">— Choose ${who} —</option>
       ${g.people.map((p) => { const o = owed(p); return `<option value="${esc(p.id)}" ${p.id === pick ? "selected" : ""}>${esc(p.name)}${o.n ? ` · ${o.n} waiting${o.amt ? " · " + ugx(o.amt) : ""}` : " · paid up"}</option>`; }).join("")}
     </select></label>
-    ${person ? `<div class="list" style="margin-top:12px">${workerCard(g.kind, person, DATA)}</div>` : `<div class="card" style="padding:4px 14px;margin-top:12px">${g.people.map((p) => { const o = owed(p); return `<button type="button" class="pay-line pick-row js-pickpay" data-id="${esc(p.id)}" data-key="${key}"><div><b>${esc(p.name)}</b><div class="muted">${o.n ? o.n + " waiting" : "Paid up"}</div></div><b class="amt">${o.amt ? ugx(o.amt) : ""}</b></button>`; }).join("")}</div>`}`;
+    ${person ? `<div class="list" style="margin-top:12px">${workerCard(g.kind, person, DATA)}</div>` : `<div class="card" style="padding:4px 14px;margin-top:12px">${g.people.map((p) => { const o = owed(p); return `<button type="button" class="pay-line pick-row js-pickpay ${o.n ? "flash" : ""}" data-id="${esc(p.id)}" data-key="${key}"><div><b>${esc(p.name)}</b><div class="muted">${o.n ? o.n + " waiting" : "Paid up"}</div></div><b class="amt">${o.amt ? ugx(o.amt) : ""}</b></button>`; }).join("")}</div>`}`;
 }
 
 // ───────────── Worker "My pay" (driver, cane manager, passion manager) ─────────────

@@ -624,3 +624,27 @@ html.going .login-page::after { content: ""; position: fixed; left: 50%; top: 60
 .fresh-card summary { cursor: pointer; list-style: none; }
 .fresh-card summary::-webkit-details-marker { display: none; }
 .btn-danger { background: #c62828; color: #fff; border: 0; }
+
+/* ---- waiting on you: a red light flashes until someone responds ---- */
+@keyframes navflash { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,59,.85); } 60% { box-shadow: 0 0 0 7px rgba(255,59,59,0); } }
+@keyframes lightblink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.8); } }
+@keyframes cardflash { 0%, 100% { box-shadow: inset 4px 0 0 #ff3b3b, 0 0 0 0 rgba(255,59,59,.55); } 50% { box-shadow: inset 4px 0 0 #ff3b3b, 0 0 0 6px rgba(255,59,59,0); } }
+.admin-nav .sub a.attn, .page-links a.attn { animation: navflash 1.6s ease-out infinite; }
+.attn-n { background: #ff3b3b !important; color: #fff !important; animation: lightblink 1.2s ease-in-out infinite; }
+.attn-dot { background: #ff3b3b; box-shadow: 0 0 6px 1px rgba(255,59,59,.9); animation: lightblink 1.2s ease-in-out infinite; }
+.pick-attn { background: #ff3b3b !important; color: #fff !important; animation: navflash 1.6s ease-out infinite; }
+.attn-line .dot { animation: lightblink 1.2s ease-in-out infinite; }
+.kpi.attn-kpi, .flash { animation: cardflash 1.6s ease-in-out infinite; border-color: rgba(255,59,59,.75) !important; }
+.btn.flash { animation: navflash 1.6s ease-out infinite; }
+.note-line { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 8px 10px; margin-top: 6px; border-radius: 10px; border: 1px solid transparent; }
+.note-line p { margin: 0; flex: 1; }
+
+/* ---- voice notes are red, so they're easy to spot ---- */
+.voice-box { background: #2a0e12; border: 1.5px solid #e23b3b; }
+.voice-box.on { border-color: #ff6b5e; box-shadow: 0 0 0 3px rgba(226,59,59,.3); }
+.voice-box .lbl { color: #ffb4ab; font-weight: 700; }
+.voice-bar span { background: #ff3b3b; }
+.btn-rec { background: #e23b3b; color: #fff; border: 0; font-weight: 700; }
+.btn-rec:hover { background: #c92f2f; }
+audio.voice-play { display: block; border-radius: 999px; background: #e23b3b; outline: 2px solid #e23b3b; }
+audio.voice-play::-webkit-media-controls-panel { background: #ffd6d2; }

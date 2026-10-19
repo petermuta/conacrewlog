@@ -471,7 +471,7 @@ function scopedDb(db, user) {
 function roleAllowedAction(role, action) {
   const map = {
     admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
-    driver: ["request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
+    driver: ["read_note", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
   };
@@ -1505,6 +1505,12 @@ function applyAction(db, user, body) {
     if (!task) throw new Error("Task not found");
     if (body.status) task.status = body.status;
     if (body.note != null && body.note !== "") task.note = body.note;
+  }
+
+  if (action === "read_note") {
+    const n = (db.notifications || []).find((x) => x.id === body.id);
+    if (!n || (user.role === "driver" && n.toDriverId !== user.driverId)) throw new Error("Notice not found");
+    n.status = "read"; n.readAt = new Date().toISOString();
   }
 
   if (action === "ack_fleet_task") {
