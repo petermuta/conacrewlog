@@ -152,6 +152,7 @@ const NAV = {
     ["#drive-report", "Inspect"],
     ["#drive-fuel", "Fuel"],
     ["#drive-money", "Advance"],
+    ["#drive-docs", "Docs"],
   ],
   cane_manager: [
     ["#cane", "Board"],
@@ -177,7 +178,7 @@ const PAGES = {
 function setupNav() {}
 const ALLOWED = {
   admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-drivers", "truck-id", "reports", "requests", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pl", "money-pl-q", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
-  driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel"],
+  driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
 };
@@ -296,6 +297,7 @@ function route() {
     "drive-pay": () => viewDrive("drive-pay"),
     "drive-task": () => viewDrive("drive-task", r.id),
     "drive-fuel": () => viewDrive("drive-fuel"),
+    "drive-docs": () => viewDrive("drive-docs"),
     cane: viewCane,
     "cane-new": viewNewCane,
     "cane-id": () => viewCaneId(r.id),
@@ -350,6 +352,7 @@ function route() {
     "drive-paid": "drive",
     "drive-pay": "drive",
     "drive-fuel": "drive",
+    "drive-docs": "drive",
     cane: "cane",
     "cane-new": "cane",
     "cane-id": "cane",
@@ -396,17 +399,17 @@ function bizBar() {
   const work = (DATA.fleetTasks || []).filter((t) => t.status === "done").length, iss = issuesWaiting(), pay = payWaiting(), phones = DATA.me.assistant ? 0 : phonesWaiting();
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
-    fleet: [["#trucks", "Units"], ["#trucks-book", "Bookings", bookingsWaiting().length], ["#trucks-jobs", "Jobs"], ["#trucks-spend", "Spend", req.trucking], ["#trucks-work", "Work", work], ["#trucks-issues", "Issues", iss], ["#trucks-docs", "Docs"], ["#trucks-inspect", "Reports"], ["#trucks-paid", "Paid"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New job"], ["#trucks-trash", "Trash"]],
-    cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Spend", req.sugarcane], ["#cane-docs", "Docs"]],
-    passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-spend", "Spend", req.passion], ["#passion-docs", "Docs"]],
+    fleet: [["#trucks", "Units"], ["#trucks-book", "Bookings", bookingsWaiting().length], ["#trucks-jobs", "Jobs"], ["#trucks-spend", "Spend", req.trucking], ["#trucks-work", "Work", work], ["#trucks-issues", "Issues", iss], ["#trucks-docs", "Docs", docsWaiting("trucking")], ["#trucks-inspect", "Reports"], ["#trucks-paid", "Paid"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New job"], ["#trucks-trash", "Trash"]],
+    cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Spend", req.sugarcane], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
+    passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-spend", "Spend", req.passion], ["#passion-docs", "Docs", docsWaiting("passion")]],
     money: [["#money", "Flow"], ["#money-spend", "Spend", req.trucking + req.sugarcane + req.passion], ["#money-pay", "Pay", pay]],
   }[biz] || [];
   return `<nav class="admin-nav">
     <div class="biz">
       <a class="${biz === "home" ? "on" : ""}" href="#home">Home${dot(phones)}</a>
-      <a class="${biz === "fleet" ? "on" : ""}" href="#trucks">Fleet${dot(req.trucking + bookingsWaiting().length + work + iss)}</a>
-      <a class="${biz === "cane" ? "on" : ""}" href="#cane">Cane${dot(req.sugarcane)}</a>
-      <a class="${biz === "passion" ? "on" : ""}" href="#passion">Passion${dot(req.passion)}</a>
+      <a class="${biz === "fleet" ? "on" : ""}" href="#trucks">Fleet${dot(req.trucking + bookingsWaiting().length + work + iss + docsWaiting("trucking"))}</a>
+      <a class="${biz === "cane" ? "on" : ""}" href="#cane">Cane${dot(req.sugarcane + docsWaiting("sugarcane"))}</a>
+      <a class="${biz === "passion" ? "on" : ""}" href="#passion">Passion${dot(req.passion + docsWaiting("passion"))}</a>
       <a class="${biz === "money" ? "on" : ""}" href="#money">Money${dot(pay)}</a>
     </div>
     ${subs.length ? `<div class="sub">${subs.map(([href, label, n]) => `<a class="${h === href ? "on" : ""} ${n ? "attn" : ""}" href="${href}">${label}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>${pagePick(subs, h)}` : ""}
@@ -1212,6 +1215,7 @@ function viewDrive(page, taskId) {
     ["#drive-tasks", "Tasks", "drive-tasks", dw.tasks],
     ["#drive-report", "Inspect", "drive-report"],
     ["#drive-fuel", "Fuel", "drive-fuel"],
+    ["#drive-docs", "Docs", "drive-docs"],
     ["#drive-money", "Advance", "drive-money", toConfirm("trucking").length],
   ], page);
 
@@ -1235,6 +1239,7 @@ function viewDrive(page, taskId) {
       <a class="card item" href="#drive-pay"><b>My pay</b><p class="muted">${ugx(paySums(DATA.payStubs).ytd)} YTD · ${owedTo("driver", { ...(DATA.driver || {}), id: DATA.me.driverId }, DATA.payStubs, DATA).waiting.length} waiting</p></a>
       <a class="card item" href="#drive-tasks"><b>Tasks</b><p class="muted">${tasks.length} open</p></a>
       <a class="card item" href="#drive-money"><b>Advance</b><p class="muted">${pendingMoney} to confirm</p></a>
+      <a class="card item" href="#drive-docs"><b>Docs</b><p class="muted">Receipts, licence, papers</p></a>
     </div>`;
 
   const money = driverAdvanceView();
@@ -1322,7 +1327,7 @@ function viewDrive(page, taskId) {
 
   const fuel = driverFuelView();
 
-  const panel = page === "drive-task" ? driverTaskReply(taskId) : { drive: desk, "drive-money": money, "drive-tasks": taskPanel, "drive-report": report, "drive-jobs": jobPanel, "drive-paid": paidPanel, "drive-pay": payPanel, "drive-fuel": fuel }[page] || desk;
+  const panel = page === "drive-task" ? driverTaskReply(taskId) : { drive: desk, "drive-money": money, "drive-tasks": taskPanel, "drive-report": report, "drive-jobs": jobPanel, "drive-paid": paidPanel, "drive-pay": payPanel, "drive-fuel": fuel, "drive-docs": page === "drive-docs" ? viewDocs("trucking") : "" }[page] || desk;
   return `<div class="desk">${side}<div class="desk-main">${panel}</div></div>`;
 }
 
@@ -1643,20 +1648,25 @@ function autoDocs(tag) {
   }
   return out;
 }
+function docFromTeam(x) { return !x.auto && x.byRole && x.byRole !== "admin"; }
+function docsWaiting(tag) { return (DATA.docs || []).filter((x) => (!tag || x.tag === tag) && docFromTeam(x) && !x.seenAt).length; }
 function docCard(x) {
   const isPdf = /^data:application\/pdf|[?&]t=application%2Fpdf/.test(String(x.file || ""));
   const today = todayYmd(), in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
   const exp = x.expiry ? (x.expiry < today ? ["red", "Expired " + fmtDay(x.expiry)] : x.expiry <= in30 ? ["gold", "Expires " + fmtDay(x.expiry)] : ["green", "Valid to " + fmtDay(x.expiry)]) : null;
   const link = linkText(x);
   const canDel = !x.auto && (DATA.me.role === "admin" || x.byId === DATA.me.id) && !DATA.viewingAs;
-  return `<div class="card doc-card">
+  const office = DATA.me.role === "admin";
+  const fresh = office && docFromTeam(x) && !x.seenAt;
+  return `<div class="card doc-card ${fresh ? "flash" : ""}">
     <button type="button" class="doc-thumb js-open-doc" data-doc="${esc(x.id)}">${isPdf ? `<span class="pdf">PDF</span>` : `<img src="${x.file}" alt="" />`}</button>
     <div class="doc-info">
       <b>${esc(x.title)}</b>
       <div class="muted">${esc(docTypeName(x.type))} · ${fmtDay(x.date)}${x.number ? " · No. " + esc(x.number) : ""}</div>
       ${x.party || x.amountUgx ? `<div class="muted">${x.party ? esc(x.party) : ""}${x.party && x.amountUgx ? " · " : ""}${x.amountUgx ? ugx(x.amountUgx) : ""}</div>` : ""}
       ${link ? `<div class="muted">${esc(link)}</div>` : ""}
-      <div class="doc-tags">${exp ? `<span class="badge ${exp[0]}">${exp[1]}</span>` : ""}${x.auto ? `<span class="badge blue">${esc(x.source)}</span>` : ""}</div>
+      ${office && docFromTeam(x) ? `<div class="muted">From ${esc(x.by || "team")} · ${whenShort(x.addedAt)}</div>` : ""}
+      <div class="doc-tags">${exp ? `<span class="badge ${exp[0]}">${exp[1]}</span>` : ""}${x.auto ? `<span class="badge blue">${esc(x.source)}</span>` : ""}${fresh && !DATA.viewingAs ? `<button type="button" class="btn btn-primary btn-sm" data-act="seen_doc" data-id="${esc(x.id)}">Seen</button>` : ""}</div>
     </div>
     ${canDel ? `<button type="button" class="linkbtn js-del-doc" data-id="${esc(x.id)}" aria-label="Remove">✕</button>` : ""}
   </div>`;
@@ -1671,9 +1681,11 @@ function viewDocs(tag) {
   const expiring = mine.filter((x) => x.expiry && x.expiry <= in30);
   const counts = {}; all.forEach((x) => { counts[x.type] = (counts[x.type] || 0) + 1; });
   window.__docs = Object.fromEntries(all.map((x) => [x.id, x]));
+  const driver = DATA.me.role === "driver";
   const head = tag === "sugarcane" ? caneTabs("cane-docs") : tag === "passion" ? farmTabs("passion-docs") : "";
   return `${head}
-    <h1>${{ trucking: "Fleet", sugarcane: "Cane", passion: "Passion" }[tag]} · Docs</h1>
+    <h1>${driver ? "My docs" : { trucking: "Fleet", sugarcane: "Cane", passion: "Passion" }[tag] + " · Docs"}</h1>
+    ${DATA.me.role !== "admin" ? `<p class="muted" style="margin-top:6px">What you add here goes straight to the office.</p>` : ""}
     ${expiring.length ? `<div class="card item req-box" style="margin-top:10px"><p class="eyebrow">Expiring or expired</p>${expiring.map((x) => `<div class="pay-line"><b>${esc(x.title)}</b><span class="badge ${x.expiry < today ? "red" : "gold"}">${x.expiry < today ? "Expired" : "Expires"} ${fmtDay(x.expiry)}</span></div>`).join("")}</div>` : ""}
     ${DATA.viewingAs ? "" : `<details class="card team-row" style="margin-top:10px" ${!all.length ? "open" : ""}>
       <summary><div class="avatar">＋</div><div style="flex:1"><b>Add a document</b></div></summary>
@@ -1692,7 +1704,7 @@ function viewDocs(tag) {
           <span class="js-doc-exp">${dateField("expiry", "Expiry date", { optional: true, future: true })}</span>
         </div>
         <div class="grid g2" style="margin-top:10px">
-          ${tag === "trucking" ? `<label class="lbl">Truck<select class="field" name="truckId"><option value="">— None —</option>${(DATA.trucks || []).map((t) => `<option value="${esc(t.id)}">${esc(t.plate)}</option>`).join("")}</select></label>` : ""}
+          ${tag === "trucking" && !driver ? `<label class="lbl">Truck<select class="field" name="truckId"><option value="">— None —</option>${(DATA.trucks || []).map((t) => `<option value="${esc(t.id)}">${esc(t.plate)}</option>`).join("")}</select></label>` : ""}
           ${linkSelect(tag)}
         </div>
         <label class="lbl" style="margin-top:10px">Photo or PDF<input class="field js-doc-file" type="file" accept="image/*,application/pdf" capture="environment" required /></label>
@@ -1932,6 +1944,7 @@ function viewHome() {
   const attn = [];
   [["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].forEach(([t, n]) => { if (req[t]) attn.push([FUND_HOME[t], "gold", `${req[t]} money request${req[t] > 1 ? "s" : ""}`, n]); });
   if (replies) attn.push(["#trucks-work", "blue", `${replies} task repl${replies > 1 ? "ies" : "y"} to check`, "Fleet"]);
+  [["trucking", "Fleet", "#trucks-docs"], ["sugarcane", "Cane", "#cane-docs"], ["passion", "Passion", "#passion-docs"]].forEach(([t, n, h]) => { const d = docsWaiting(t); if (d) attn.push([h, "blue", `${d} new document${d > 1 ? "s" : ""} from the team`, n]); });
   if (issN) attn.push(["#trucks-issues", "red", `${issN} driver issue${issN > 1 ? "s" : ""} to answer`, "Fleet"]);
   if (phones) attn.push(["#team", "gold", `${phones} new phone${phones > 1 ? "s" : ""} to approve`, "Team"]);
   const bkN = bookingsWaiting().length;

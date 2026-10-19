@@ -429,6 +429,7 @@ function scopedDb(db, user) {
       disbursements: (db.disbursements || []).filter((x) => x.toDriverId === myId),
       moneyRequests: (db.moneyRequests || []).filter((r) => r.driverId === myId),
       payStubs: (db.payStubs || []).filter((x) => x.personId === myId),
+      docs: (db.docs || []).filter((x) => x.byId === user.id || (truck && x.truckId === truck.id && ["licence", "truck_papers"].includes(x.type))),
     };
   }
   if (user.role === "cane_manager") {
@@ -470,8 +471,8 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
-    driver: ["read_note", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
+    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
   };
@@ -541,6 +542,10 @@ function applyAction(db, user, body) {
     if (action === "update_job" || action === "mark_job_paid" || action === "log_trip_result" || action === "log_scale" || action === "log_invoice") {
       const job = db.jobs.find((j) => j.id === body.id);
       if (!job || job.driverId !== user.driverId) throw new Error("No access");
+    }
+    if (action === "save_doc") {
+      body.truckId = mine.assignedTruckId || "";
+      if (body.jobId && !db.jobs.some((j) => j.id === body.jobId && j.driverId === user.driverId)) body.jobId = "";
     }
     if (action === "ack_fleet_task" || action === "complete_fleet_task") {
       const task = db.fleetTasks.find((t) => t.id === body.id);
@@ -1625,9 +1630,15 @@ function applyAction(db, user, body) {
       expiry: /^\d{4}-\d{2}-\d{2}$/.test(String(body.expiry || "")) ? body.expiry : "",
       truckId: body.truckId || "", jobId: body.jobId || "", caneBuyId: body.caneBuyId || "", blockId: body.blockId || "",
       file: body.file, fileName: String(body.fileName || "").slice(0, 80), mime: String(body.mime || ""),
-      note: String(body.note || "").trim(), by: user.name, byId: user.id, addedAt: new Date().toISOString(),
+      note: String(body.note || "").trim(), by: user.name, byId: user.id, byRole: user.assistant ? "admin" : user.role, addedAt: new Date().toISOString(),
     };
     db.docs.unshift(doc);
+  }
+
+  if (action === "seen_doc") {
+    const doc = (db.docs || []).find((x) => x.id === body.id);
+    if (!doc) throw new Error("Document not found");
+    doc.seenAt = new Date().toISOString(); doc.seenBy = user.name;
   }
 
   if (action === "delete_doc") {
