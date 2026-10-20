@@ -346,7 +346,8 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
       // the team signs in with location on; the main admin and the office's trusted computers are left out
       const trustedPc = (book.trustedDevices || []).some((d) => d.id === dev);
       if (!main && !trustedPc && !from.gps) {
-        logSignIn(book, user, "no_location", { device: label, deviceId: dev, ...from });
+        // a first try without GPS just learns that location is needed; only a real refusal is logged
+        if (!body.probe) logSignIn(book, user, "no_location", { device: label, deviceId: dev, ...from });
         out = { status: 200, body: { needLocation: true, error: "Turn on location to sign in." } };
         return { book };
       }
@@ -574,7 +575,20 @@ export function bookingPublic(b, book) {
     plans: b.quote ? { full: payPlan(b.quote.amountUgx, "full"), deposit: payPlan(b.quote.amountUgx, "deposit") } : null,
   };
 }
-export async function handleBook(kv, { method, body, query, ip }) {
+// a client's visit: rough town from the network and the kind of phone, nothing exact
+function deviceKind(ua) {
+  const u = String(ua || "");
+  if (/iPhone/.test(u)) return "iPhone"; if (/iPad/.test(u)) return "iPad"; if (/Android/.test(u)) return /Mobile/.test(u) ? "Android phone" : "Android tablet";
+  if (/Windows/.test(u)) return "Windows computer"; if (/Macintosh|Mac OS X/.test(u)) return "Mac"; if (/Linux/.test(u)) return "Computer"; return "";
+}
+function visitOf(geo, ip, ua) {
+  const v = { at: new Date().toISOString() };
+  if (geo) { const t = [geo.city, geo.region, geo.country].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(", "); if (t) v.place = t.slice(0, 120); }
+  const d = deviceKind(ua); if (d) v.dev = d;
+  if (ip) v.ip = String(ip).slice(0, 60);
+  return v;
+}
+export async function handleBook(kv, { method, body, query, ip, geo, ua }) {
   if (method === "GET" && query.list === "cargo") {
     const { book } = await loadBook(kv);
     const all = [...CARGO_BASE];
@@ -593,6 +607,22 @@ export async function handleBook(kv, { method, body, query, ip }) {
     const { book } = await loadBook(kv);
     const b = book && (book.bookings || []).find((x) => x.ref === String(query.r || "") && x.key === String(query.k || ""));
     if (!b) return { status: 404, body: { error: "We couldn't find this booking. Check the link." } };
+    if (query.v === "1") {
+      // the client opened their link: keep the last few opens (one per visitor per half hour)
+      const v = visitOf(geo, ip, ua);
+      const last = (b.views || [])[0];
+      const same = last && last.ip === v.ip && last.dev === v.dev && now() - Date.parse(last.at) < 30 * 60e3;
+      if (!same) {
+        await updateBook(kv, async (bk) => {
+          const x = bk && (bk.bookings || []).find((y) => y.id === b.id);
+          if (!x) return { write: false };
+          x.views = [v].concat(x.views || []).slice(0, 12);
+          x.viewCount = (x.viewCount || 0) + 1;
+          x._u = now(); x._s = bump(bk);
+          return { book: bk };
+        });
+      }
+    }
     return { status: 200, body: bookingPublic(b, book) };
   }
   if (method !== "POST") return { status: 405, body: { error: "method" } };
@@ -630,7 +660,7 @@ export async function handleBook(kv, { method, body, query, ip }) {
         cargo, tonnes: Math.max(0, Math.min(MAX_TONNES, Number(body.tonnes) || 0)), trips: Math.max(0, Math.min(200, Math.round(Number(body.trips) || 0))),
         date, time: clip(body.time, 20), pickup: place(body.pickup), drop: place(body.drop),
         km: Math.max(0, Math.min(3000, Math.round(Number(body.km) || 0))), notes: clip(body.notes, 600),
-        history: [{ at: new Date().toISOString(), what: "Request received" }], _u: now(), _s: s,
+        history: [{ at: new Date().toISOString(), what: "Request received" }], from: visitOf(geo, ip, ua), _u: now(), _s: s,
       };
       list.unshift(rec);
       out = { status: 200, body: { ref: rec.ref, key: rec.key } };

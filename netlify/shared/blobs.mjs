@@ -28,7 +28,7 @@ export async function serve(req, handler, context) {
     let body = null;
     if (req.method === "POST") { try { body = await req.json(); } catch (e) { return new Response('{"error":"bad json"}', { status: 400, headers: JSON_HEADERS }); } }
     const ip = req.headers.get("x-nf-client-connection-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
-    const out = await handler(kvFrom("conacrew"), { method: req.method, token, body, ip, geo: geoOf(req, context), query: Object.fromEntries(url.searchParams) });
+    const out = await handler(kvFrom("conacrew"), { method: req.method, token, body, ip, geo: geoOf(req, context), ua: String(req.headers.get("user-agent") || "").slice(0, 300), query: Object.fromEntries(url.searchParams) });
     if (out.raw) return new Response(out.raw, { status: out.status, headers: { "content-type": out.type, "cache-control": "private, max-age=31536000, immutable" } });
     return new Response(JSON.stringify(out.body), { status: out.status, headers: JSON_HEADERS });
   } catch (e) {

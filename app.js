@@ -573,6 +573,7 @@ function jobCard(j, paidView) {
       j.tonnesDelivered ? ["Tonnes", j.tonnesDelivered + " t"] : null,
       ["Price", ugx(price)],
       got ? ["Received", ugx(got) + (paidView && j.paidAt ? " · " + fmtDay(j.paidAt) : "") + (j.paidMethod ? " · " + esc(METHOD_LABEL[j.paidMethod] || j.paidMethod) : "")] : null,
+      ...(bk ? clientSeenRows(bk) : []),
       !paidView && tripTime(j, j.status) ? ["Trip", esc(TRIP_NAME[j.status] || label(j.status)) + " · " + tripTime(j, j.status) + ((j.steps || {})[j.status] && j.steps[j.status].office ? " · office" : "")] : null,
     ])}
     ${j.scaleTicket || j.invoice ? `<div class="thumbs">${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="Scale ticket" />` : ""}${j.invoice ? `<img src="${j.invoice}" alt="Invoice" />` : ""}</div>` : ""}
@@ -1103,6 +1104,17 @@ function bookingWhatsApp(b) {
   return "https://wa.me/" + waNumber(c.phone) + "?text=" + encodeURIComponent(lines.join("\n"));
 }
 const STAGE_BTN = { new: "Tell client: request received", seen: "Tell client: request received", quoted: "Send quote on WhatsApp", payment_check: "Tell client: checking payment", accepted: "Tell client: booking confirmed", assigned: "Tell client: truck assigned", heading: "Tell client: heading to pickup", loading: "Tell client: loading", on_the_way: "Tell client: in transit", delivered: "Tell client: delivered" };
+// where the client was: when they booked, and each time they opened their link
+function clientSeenRows(b) {
+  const rows = [];
+  const f = b.from;
+  if (f && (f.place || f.dev)) rows.push(["Booked from", `📍 ${esc(f.place || "Unknown area")}${f.dev ? ` <span class="muted">· ${esc(f.dev)}</span>` : ""}`]);
+  const v = b.views || [];
+  if (!v.length) rows.push(["Link opened", `<span class="muted">Not opened yet</span>`]);
+  else rows.push(["Link opened", `<b>${b.viewCount || v.length} time${(b.viewCount || v.length) > 1 ? "s" : ""}</b> · last ${whenShort(v[0].at)}${v[0].place ? " from " + esc(v[0].place) : ""}${v[0].dev ? ` <span class="muted">· ${esc(v[0].dev)}</span>` : ""}
+    ${v.length > 1 ? `<details class="views"><summary>Recent opens</summary>${v.map((x) => `<div class="view-line"><span>${whenShort(x.at)}</span><span>${esc(x.place ? x.place.split(",")[0] : "Unknown area")}</span><span class="muted">${esc(x.dev || "")}</span></div>`).join("")}</details>` : ""}`]);
+  return rows;
+}
 function payInfoCard() {
   return DATA.me.role === "admin" && !DATA.me.assistant ? (() => { const pi = DATA.payInfo || { airtel: { number: "0705139060", name: "Restatuta" }, bank: { bank: "Stanbic Bank Uganda", name: "Conacrew Logistics Ltd", account: "9030025603272", code: "042641" } }; return `<details class="card item settings" style="margin-top:10px"><summary>Where clients pay</summary>
       <form data-form="payinfo" style="margin-top:10px">
@@ -1145,6 +1157,7 @@ function viewBookings() {
           ${b.quote ? `<dt>Quote</dt><dd><b>${ugx(b.quote.amountUgx)}</b> · valid to ${fmtDay(b.quote.validUntil)}${b.quote.note ? " · " + esc(b.quote.note) : ""}</dd>` : ""}
           ${b.payment ? `<dt>Payment</dt><dd>${esc(PLAN_TEXT[b.payment.plan] || "")}${b.payment.due ? ` · <b>${ugx(b.payment.due)}</b> by ${b.payment.method === "bank" ? "bank" : "Airtel Money"}${b.payment.txn ? " · ID " + esc(b.payment.txn) : ""}` : ""} · ${{ checking: "to check", received: "received", rejected: "not found", account: "on delivery" }[b.payment.status] || ""}${b.payment.balance ? ` · balance ${ugx(b.payment.balance)}${b.payment.balancePaidAt ? " paid" : " due on delivery"}` : ""}</dd>` : ""}
           ${b.clientAnswer && b.clientAnswer.note ? `<dt>Client said</dt><dd>${esc(b.clientAnswer.note)}</dd>` : ""}
+          ${clientSeenRows(b).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}
           ${job ? `<dt>Load</dt><dd><a href="#trucks-jobs">${esc(job.code)}</a> · ${esc(TRIP_NAME[job.status] || label(job.status))}${tripTime(job, job.status) ? " · " + tripTime(job, job.status) : ""}${tripControls(job)}</dd>` : ""}
         </dl>
         ${b.payment && b.payment.status === "checking" ? `<div class="bk-pay">

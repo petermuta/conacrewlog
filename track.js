@@ -96,7 +96,10 @@
   let mini = null;
   async function load() {
     try {
-      const res = await fetch(API + "?r=" + encodeURIComponent(r) + "&k=" + encodeURIComponent(k), { cache: "no-store" });
+      // the first load of this page counts as the client opening the link (not refreshes, not the office's own phones)
+      let staff = false; try { const s = JSON.parse(localStorage.getItem("conacrew.user.v2") || "null"); staff = !!(s && s.userId); } catch (e) {}
+      const opened = !load.done && !staff; load.done = true;
+      const res = await fetch(API + "?r=" + encodeURIComponent(r) + "&k=" + encodeURIComponent(k) + (opened ? "&v=1" : ""), { cache: "no-store" });
       const b = await res.json();
       if (res.status === 404) { try { localStorage.setItem("conacrew.myBookings", JSON.stringify(mine.filter((x) => x.ref !== r))); } catch (e) {} } // gone: drop it from My bookings
       if (!res.ok) throw new Error(b.error || "We couldn't load this booking.");

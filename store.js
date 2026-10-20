@@ -2466,14 +2466,14 @@ const Conacrew = {
     db.bookVersion = 2;
     this.save(db);
   },
-  async login(phone, pin, gps) {
+  async login(phone, pin, gps, probe) {
     const p = phoneKey(phone);
     if (!p) throw new Error("Enter your phone number.");
     if (!this.server || this.server === "offline") await this.probe();
     if (this.server === "ok" || this.server === "signin") {
       let j;
       try {
-        const res = await fetch(SYNC_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "login", phone: p, pin: String(pin || "").trim(), deviceId: deviceId(), label: deviceLabel(), ...(gps ? { gps } : {}) }) });
+        const res = await fetch(SYNC_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "login", phone: p, pin: String(pin || "").trim(), deviceId: deviceId(), label: deviceLabel(), ...(gps ? { gps } : {}), ...(probe ? { probe: true } : {}) }) });
         j = await res.json();
       } catch (e) {
         this.server = "offline";
