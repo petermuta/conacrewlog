@@ -285,7 +285,15 @@ function strike(g, k, id, limit) {
 }
 
 // ---------- the request handler (method, headers, body) -> { status, body } ----------
-export async function handleSync(kv, { method, token, body, ip }) {
+// where a sign-in came from: the network's city, plus the phone's own GPS when the person shares it
+function placeOf(geo, ip, gps) {
+  const out = {};
+  if (geo) { const text = [geo.city, geo.region, geo.country].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(", "); if (text) out.place = text.slice(0, 120); if (geo.lat && geo.lng) out.placeLat = geo.lat, out.placeLng = geo.lng; }
+  if (ip) out.ip = String(ip).slice(0, 60);
+  if (gps && isFinite(gps.lat) && isFinite(gps.lng) && Math.abs(gps.lat) <= 90 && Math.abs(gps.lng) <= 180) out.gps = { lat: Math.round(gps.lat * 1e5) / 1e5, lng: Math.round(gps.lng * 1e5) / 1e5, acc: Math.round(Number(gps.acc) || 0), at: new Date().toISOString() };
+  return out;
+}
+export async function handleSync(kv, { method, token, body, ip, geo }) {
   if (method === "GET") {
     const { book } = await loadBook(kv);
     return { status: 200, body: { exists: !!book, server: 2 } };
@@ -299,13 +307,14 @@ export async function handleSync(kv, { method, token, body, ip }) {
     const dev = String(body.deviceId || "").slice(0, 60);
     const label = String(body.label || "Phone").slice(0, 60);
     const where = String(ip || "").slice(0, 60);
+    const from = placeOf(geo, where, body.gps);
     if (!p) return { status: 400, body: { error: "Enter your phone number." } };
     const guard = await loadGuard(kv);
     // the main admin's login is left out of the blocks (his choice)
     const pre = (await loadBook(kv)).book;
     const mainLogin = !!pre && (pre.users || []).some((u) => isMainAdmin(u) && phoneKey(u.phone) === p);
     if (!mainLogin && (isBlocked(guard, "d", dev) || isBlocked(guard, "i", where))) {
-      await updateBook(kv, async (book) => { if (!book) return { write: false }; bump(book); logSignIn(book, null, "blocked_device", { phone: p, device: label, deviceId: dev }); return { book }; });
+      await updateBook(kv, async (book) => { if (!book) return { write: false }; bump(book); logSignIn(book, null, "blocked_device", { phone: p, device: label, deviceId: dev, ...from }); return { book }; });
       return { status: 200, body: { error: BLOCKED } };
     }
     let out, wrong = false, okUser = null;
@@ -315,7 +324,7 @@ export async function handleSync(kv, { method, token, body, ip }) {
       bump(book);
       const matches = (book.users || []).filter((u) => phoneKey(u.phone) === p);
       const user = matches.find((u) => u.active !== false) || matches[0];
-      const fail = (msg, result) => { logSignIn(book, user, result, { phone: p, device: label, deviceId: dev }); out = { status: 200, body: { error: msg } }; return { book }; };
+      const fail = (msg, result) => { logSignIn(book, user, result, { phone: p, device: label, deviceId: dev, ...from }); out = { status: 200, body: { error: msg } }; return { book }; };
       const known = user && ((guard.k || {})[user.id] || []).includes(dev);
       if (user && !known && !isMainAdmin(user) && isBlocked(guard, "p", user.id)) return fail(BLOCKED, "blocked_login");
       // the same answer for an unknown phone, a wrong PIN or a login with no PIN: nothing to learn here
@@ -335,14 +344,18 @@ export async function handleSync(kv, { method, token, body, ip }) {
       if (user.role === "driver" && !user.driverId) { out = { status: 200, body: { error: "This driver login is not linked to a driver record." } }; return { write: false }; }
       if (user.failCount) { user.failCount = 0; userTouched(book, user); }
       if (!main && !deviceOk(book, user, dev)) {
+        const before = (user.pendingDevices || []).find((d) => d.id === dev);
         user.pendingDevices = (user.pendingDevices || []).filter((d) => d.id !== dev);
-        user.pendingDevices.push({ id: dev, label, requestedAt: new Date().toISOString() });
+        // a second ask from the same phone only adds the GPS it shared; it keeps the first ask time
+        user.pendingDevices.push({ ...(before || {}), id: dev, label, requestedAt: (before && before.requestedAt) || new Date().toISOString(), ...from, gps: from.gps || (before && before.gps) || null });
         userTouched(book, user);
-        logSignIn(book, user, "new_phone", { device: label, deviceId: dev });
+        if (!before || !from.gps) logSignIn(book, user, "new_phone", { device: label, deviceId: dev, ...from });
         out = { status: 200, body: { needsApproval: true, name: user.name } };
         return { book };
       }
-      logSignIn(book, user, "ok", { device: label, deviceId: dev });
+      logSignIn(book, user, "ok", { device: label, deviceId: dev, ...from });
+      const myDev = (user.devices || []).find((d) => d.id === dev);
+      if (myDev) { myDev.lastAt = new Date().toISOString(); if (from.place) myDev.lastPlace = from.place; if (from.ip) myDev.lastIp = from.ip; userTouched(book, user); }
       okUser = user;
       out = { status: 200, body: { ok: true, user: { id: user.id, role: user.role, driverId: user.driverId || null, name: user.name }, token: await makeToken(kv, user, dev) } };
       return { book };

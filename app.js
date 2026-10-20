@@ -2815,6 +2815,16 @@ function driverWaiting() {
     notes: (DATA.notifications || []).filter((n) => n.status === "unread" && !n.taskId).length,
   };
 }
+// where a phone signed in from: network area, and exact GPS when the person shared it
+function whereLine(p, opts) {
+  if (!p) return "";
+  const bits = [];
+  if (p.place) bits.push(`<span class="where-net" title="From the mobile network or Wi-Fi, accurate to the town">📍 ${esc(p.place)}</span>`);
+  if (p.gps && p.gps.lat) bits.push(`<a class="where-gps" href="https://www.google.com/maps?q=${p.gps.lat},${p.gps.lng}" target="_blank" rel="noopener">Exact spot${p.gps.acc ? " ±" + (p.gps.acc > 999 ? Math.round(p.gps.acc / 100) / 10 + " km" : p.gps.acc + " m") : ""} ›</a>`);
+  else if (opts && opts.askedGps) bits.push(`<span class="muted">GPS not shared</span>`);
+  if (!bits.length && !(opts && opts.ip && p.ip)) return "";
+  return `<div class="where">${bits.join(" ")}${opts && opts.ip && p.ip ? `<span class="muted where-ip">Network ${esc(p.ip)}</span>` : ""}</div>`;
+}
 function phonesWaiting() {
   return (DATA.users || []).reduce((n, u) => n + ((u.pendingDevices || []).length), 0);
 }
@@ -2851,12 +2861,12 @@ function viewTeam() {
       </summary>
       ${pend.length ? `<div class="phone-box attn">
         <p class="eyebrow">New phone wants to sign in</p>
-        ${pend.map((p) => `<div class="pay-line"><div><b>${esc(p.label)}</b><div class="muted">Asked ${whenShort(p.requestedAt)}</div></div>
+        ${pend.map((p) => `<div class="pay-line"><div><b>${esc(p.label)}</b><div class="muted">Asked ${whenShort(p.requestedAt)}</div>${whereLine(p, { askedGps: true, ip: true }) || `<div class="muted">Location not known</div>`}</div>
           ${canEdit ? `<div class="due-right"><button type="button" class="btn btn-primary btn-sm" data-act="approve_device" data-user="${esc(u.id)}" data-device="${esc(p.id)}">Approve</button><button type="button" class="btn btn-ghost btn-sm" data-act="reject_device" data-user="${esc(u.id)}" data-device="${esc(p.id)}">Reject</button></div>` : ""}</div>`).join("")}
       </div>` : ""}
       ${!main ? `<div class="phone-box">
         <p class="eyebrow">Approved phones</p>
-        ${devs.length ? devs.map((p) => `<div class="pay-line"><div><b>${esc(p.label)}</b><div class="muted">Approved ${whenShort(p.approvedAt)}${p.approvedBy ? " by " + esc(p.approvedBy) : ""}</div></div>${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" data-act="remove_device" data-user="${esc(u.id)}" data-device="${esc(p.id)}">Remove</button>` : ""}</div>`).join("") : `<p class="muted">None yet</p>`}
+        ${devs.length ? devs.map((p) => `<div class="pay-line"><div><b>${esc(p.label)}</b><div class="muted">Approved ${whenShort(p.approvedAt)}${p.approvedBy ? " by " + esc(p.approvedBy) : ""}</div>${p.lastAt ? `<div class="muted">Last sign-in ${whenShort(p.lastAt)}</div>` : ""}${whereLine(p.lastPlace ? { place: p.lastPlace } : p)}</div>${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" data-act="remove_device" data-user="${esc(u.id)}" data-device="${esc(p.id)}">Remove</button>` : ""}</div>`).join("") : `<p class="muted">None yet</p>`}
       </div>` : ""}
       ${u.locked && canEdit ? `<div class="phone-box"><p class="muted">Locked after ${u.failCount || 5} wrong PINs.</p><button type="button" class="btn btn-steel btn-sm" data-act="unlock_login" data-user="${esc(u.id)}">Unlock</button> <span class="muted">or set a new PIN below</span></div>` : ""}
       <div class="team-actions">
@@ -2916,7 +2926,7 @@ function viewTeam() {
     <div class="list" style="margin-top:10px">${sorted.map(row).join("")}</div>
     <h2 style="margin:22px 0 0">Sign-in history</h2>
     <div class="card" style="padding:4px 14px;margin-top:10px">
-      ${log.length ? log.slice(0, 40).map((l) => { const t = LOG_TEXT[l.result] || ["blue", label(l.result)]; return `<div class="pay-line"><div><b>${esc(l.name || "—")}</b><div class="muted">${whenShort(l.at)} · ${esc(l.device || "")}${l.by ? " · by " + esc(l.by) : ""}</div></div><span class="badge ${t[0]}">${t[1]}</span></div>`; }).join("") : `<p class="muted" style="padding:10px 0">No sign-ins yet.</p>`}
+      ${log.length ? log.slice(0, 40).map((l) => { const t = LOG_TEXT[l.result] || ["blue", label(l.result)]; return `<div class="pay-line"><div><b>${esc(l.name || "—")}</b><div class="muted">${whenShort(l.at)} · ${esc(l.device || "")}${l.by ? " · by " + esc(l.by) : ""}</div>${whereLine(l)}</div><span class="badge ${t[0]}">${t[1]}</span></div>`; }).join("") : `<p class="muted" style="padding:10px 0">No sign-ins yet.</p>`}
     </div>`;
 }
 function bindTeam() {
