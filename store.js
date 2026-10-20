@@ -2480,6 +2480,7 @@ const Conacrew = {
         return this.localLogin(phone, pin); // no signal: check the PIN on this phone, sync later
       }
       if (j.empty) { this.server = "empty"; return this.localLogin(phone, pin); }
+      if (j.needLocation) { const e = new Error(j.error || "Turn on location to sign in."); e.needLocation = true; throw e; }
       if (j.error) throw new Error(j.error);
       if (j.needsApproval) return { ok: false, needsApproval: true, name: j.name };
       const prev = this.session();

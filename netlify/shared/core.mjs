@@ -343,6 +343,13 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
       if (!main && user.lockedAt) return fail("This login is locked. Ask the admin to unlock it.", "locked");
       if (user.role === "driver" && !user.driverId) { out = { status: 200, body: { error: "This driver login is not linked to a driver record." } }; return { write: false }; }
       if (user.failCount) { user.failCount = 0; userTouched(book, user); }
+      // the team signs in with location on; the main admin and the office's trusted computers are left out
+      const trustedPc = (book.trustedDevices || []).some((d) => d.id === dev);
+      if (!main && !trustedPc && !from.gps) {
+        logSignIn(book, user, "no_location", { device: label, deviceId: dev, ...from });
+        out = { status: 200, body: { needLocation: true, error: "Turn on location to sign in." } };
+        return { book };
+      }
       if (!main && !deviceOk(book, user, dev)) {
         const before = (user.pendingDevices || []).find((d) => d.id === dev);
         user.pendingDevices = (user.pendingDevices || []).filter((d) => d.id !== dev);
@@ -355,7 +362,7 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
       }
       logSignIn(book, user, "ok", { device: label, deviceId: dev, ...from });
       const myDev = (user.devices || []).find((d) => d.id === dev);
-      if (myDev) { myDev.lastAt = new Date().toISOString(); if (from.place) myDev.lastPlace = from.place; if (from.ip) myDev.lastIp = from.ip; userTouched(book, user); }
+      if (myDev) { myDev.lastAt = new Date().toISOString(); if (from.place) myDev.lastPlace = from.place; if (from.ip) myDev.lastIp = from.ip; if (from.gps) myDev.lastGps = from.gps; userTouched(book, user); }
       okUser = user;
       out = { status: 200, body: { ok: true, user: { id: user.id, role: user.role, driverId: user.driverId || null, name: user.name }, token: await makeToken(kv, user, dev) } };
       return { book };

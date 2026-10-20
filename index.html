@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon-w.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <link rel="stylesheet" href="./styles.css?v=153" />
+  <link rel="stylesheet" href="./styles.css?v=154" />
   <script>
     // Runs before the page is drawn, so a signed-in phone never sees the sign-in form flash.
     (function () {
@@ -53,7 +53,7 @@
       </a>
     </div>
   </div>
-  <script src="./store.js?v=153"></script>
+  <script src="./store.js?v=154"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>
@@ -78,6 +78,27 @@
       }
       if (Conacrew.user() && !document.documentElement.classList.contains("going")) location.replace(HOME[Conacrew.user().role]);
     });
+    // the phone's GPS for sign-in: the browser asks once, then it's silent; GPS switched off means no position
+    function where() {
+      return new Promise((res) => {
+        if (!navigator.geolocation) return res({ pos: null, why: "none" });
+        navigator.geolocation.getCurrentPosition(
+          (p) => res({ pos: { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy } }),
+          (e) => res({ pos: null, why: e.code === 1 ? "denied" : "off" }),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+      });
+    }
+    async function showLocationHelp(why) {
+      let state = why;
+      try { if (navigator.permissions) { const p = await navigator.permissions.query({ name: "geolocation" }); if (p.state === "denied") state = "denied"; } } catch (e) {}
+      const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+      const msg = state === "denied"
+        ? (ios ? "Location is blocked for Conacrew. Open Settings › Privacy & Security › Location Services, turn it on, and allow Safari (or Conacrew) While Using. Then tap Try again." : "Location is blocked for Conacrew. Tap the lock or ⓘ next to the address (or long-press the app icon › App info › Permissions), set Location to Allow, then tap Try again.")
+        : "Turn on your phone's location (GPS), then tap Try again.";
+      const el = document.getElementById("err");
+      el.innerHTML = `<b>Enable location to sign in</b><br>${msg}`;
+      el.classList.add("loc-help");
+    }
     document.getElementById("login").addEventListener("submit", async e => {
       e.preventDefault();
       const btn = document.getElementById("loginBtn");
@@ -92,19 +113,24 @@
         if (!users.some((u) => u.role === "admin") && Conacrew.server !== "ok" && Conacrew.server !== "signin") {
           Conacrew.createOwner(fd.get("name"), fd.get("phone"), fd.get("pin"));
         }
-        const json = await Conacrew.login(fd.get("phone"), fd.get("pin"));
+        // the main admin's phone isn't asked; anyone else gets the location check
+        let free = false; try { free = localStorage.getItem("conacrew.locFree") === "1"; } catch (x) {}
+        let gps = { pos: null, why: "skip" };
+        if (!free) { btn.textContent = "Checking location…"; gps = await where(); }
+        btn.textContent = "Signing in…";
+        let json;
+        try { json = await Conacrew.login(fd.get("phone"), fd.get("pin"), gps.pos); }
+        catch (x) {
+          if (!x.needLocation) throw x;
+          if (free) { btn.textContent = "Checking location…"; gps = await where(); try { json = await Conacrew.login(fd.get("phone"), fd.get("pin"), gps.pos); } catch (y) { if (!y.needLocation) throw y; } }
+          if (!json) { await showLocationHelp(gps.why); btn.disabled = false; btn.textContent = "Try again"; return; }
+        }
+        try { const u = Conacrew.user(); if (u && u.role === "admin" && !u.assistant) localStorage.setItem("conacrew.locFree", "1"); else localStorage.removeItem("conacrew.locFree"); } catch (x) {}
         if (json.needsApproval) {
           const nm = String(json.name || "").replace(/[<>&"]/g, "");
           document.getElementById("login").innerHTML = `<h2>Waiting for approval</h2>
             <p style="margin-top:8px">Hi ${nm}. The office will approve this phone. Then sign in again.</p>
-            <p class="muted" id="whereNote" style="margin-top:10px">Sharing this phone's location with the office…</p>
             <button class="btn btn-primary wide" style="margin-top:14px" type="button" onclick="location.reload()">Sign in again</button>`;
-          // the office sees where a new phone is asking from; GPS only if the person allows it
-          const note = (t) => { const el = document.getElementById("whereNote"); if (el) el.textContent = t; };
-          if (navigator.geolocation) navigator.geolocation.getCurrentPosition(async (pos) => {
-            try { await Conacrew.login(fd.get("phone"), fd.get("pin"), { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }); note("Location shared with the office."); } catch (x) { note(""); }
-          }, () => note("Location not shared. The office sees your network area only."), { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
-          else note("");
           return;
         }
         sessionStorage.setItem("land", "1");
