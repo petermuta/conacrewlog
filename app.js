@@ -6,10 +6,11 @@ function ugx(n) {
 function tonnes(n) {
   return (n || 0).toLocaleString("en-UG", { maximumFractionDigits: 1 }) + " t";
 }
+const BADGE_TEXT = { pass: "OK", ok: "OK", warn: "Needs attention", warning: "Needs attention", fail: "Not OK", idle: "Ready", on_trip: "On a trip", workshop: "In workshop", parked: "Parked", "not paid": "Not paid", seller_paid: "Seller paid" };
 function label(s) {
   return String(s || "").replace(/_/g, " ");
 }
-const CARGO_BASE = ["Plaster Sand", "Lake Sand", "Stone dust", "Coal", "Dirt (murram)", "Bumba", "Rocks", "Sugarcane"];
+const CARGO_BASE = ["Plaster Sand", "Lake Sand", "Stone dust", "Coal", "Murram (dirt)", "Bumba", "Rocks", "Sugarcane"];
 function cargoOptions() {
   const extra = DATA.cargoTypes || [];
   const all = [...CARGO_BASE];
@@ -28,19 +29,19 @@ const INSPECT = [
   ["Papers", [["licence","Driving licence"],["insurance","Insurance"],["road","Road licence"]]],
 ];
 function inspectForm() {
-  return INSPECT.map(([g, parts]) => `
+  return `<div class="inspect-top"><span class="muted js-insp-count">0 of ${INSPECT.reduce((n, [, p]) => n + p.length, 0)} checked</span><button type="button" class="btn btn-ghost btn-sm js-all-ok">Mark all OK</button></div>` + INSPECT.map(([g, parts]) => `
     <p class="eyebrow" style="margin-top:14px">${g}</p>
     ${parts.map(([id, name]) => `
       <div class="inspect-part" data-part="${id}" style="padding:8px 0;border-bottom:1px solid rgba(15,28,46,.08)">
         <div class="row">
           <span>${name}</span>
           <span style="display:flex;gap:6px">
-            <label class="mark pass on"><input type="radio" name="p_${id}" value="pass" checked hidden />PASS</label>
-            <label class="mark warn"><input type="radio" name="p_${id}" value="warn" hidden />WARNING</label>
-            <label class="mark fail"><input type="radio" name="p_${id}" value="fail" hidden />FAIL</label>
+            <label class="mark pass"><input type="radio" name="p_${id}" value="pass" hidden />OK</label>
+            <label class="mark warn"><input type="radio" name="p_${id}" value="warn" hidden />NEEDS ATTENTION</label>
+            <label class="mark fail"><input type="radio" name="p_${id}" value="fail" hidden />NOT OK</label>
           </span>
         </div>
-        <input class="field js-shot" type="file" accept="image/*" data-part="${id}" style="display:none;margin-top:8px" />
+        <input class="field js-shot" type="file" accept="image/*" capture="environment" data-part="${id}" aria-label="Photo of the problem: ${name}" style="display:none;margin-top:8px" />
       </div>`).join("")}
   `).join("");
 }
@@ -106,6 +107,7 @@ function badge(status) {
     settled: "green",
     seller_paid: "green",
     on_trip: "blue",
+    parked: "",
     en_route: "blue",
     in_transit: "blue",
     booked: "",
@@ -123,7 +125,8 @@ function badge(status) {
     unread: "gold",
     urgent: "red",
   };
-  return `<span class="badge ${map[status] || ""}">${TRIP_NAME[status] && status !== "delivered" ? TRIP_NAME[status] : label(status)}</span>`;
+  const txt = BADGE_TEXT[status] || (TRIP_NAME[status] && status !== "delivered" ? TRIP_NAME[status] : label(status));
+  return `<span class="badge ${map[status] || ""}">${esc(txt.charAt(0).toUpperCase() + txt.slice(1))}</span>`;
 }
 function landed(b) {
   const costs = (b.buyPriceUgx || 0) + (b.cuttingCostUgx || 0) + (b.loadingCostUgx || 0) + (b.fuelUgx || 0);
@@ -145,7 +148,7 @@ const NAV = {
   ],
   driver: [
     ["#drive", "Desk"],
-    ["#drive-jobs", "Jobs"],
+    ["#drive-jobs", "Loads"],
     ["#drive-paid", "Paid loads"],
     ["#drive-pay", "My pay"],
     ["#drive-tasks", "Tasks"],
@@ -158,28 +161,28 @@ const NAV = {
     ["#cane", "Board"],
     ["#cane-new", "New buy"],
     ["#cane-sell", "Sell"],
-    ["#cane-spend", "Spend"],
+    ["#cane-spend", "Advances"],
     ["#cane-pay", "Pay"],
   ],
   passion_manager: [
     ["#passion", "Blocks"],
     ["#field", "Work"],
     ["#passion-sell", "Sell"],
-    ["#passion-spend", "Spend"],
+    ["#passion-spend", "Advances"],
     ["#passion-pay", "Pay"],
   ],
 };
 const PAGES = {
-  fleet: [["#trucks", "Units"], ["#trucks-jobs", "Jobs"], ["#trucks-work", "Work"], ["#trucks-inspect", "Reports"], ["#trucks-paid", "Paid"], ["#trucks-trash", "Trash"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New job"]],
-  cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Spend"], ["#cane-ask", "Request"]],
+  fleet: [["#trucks", "Trucks"], ["#trucks-jobs", "Loads"], ["#trucks-work", "Tasks"], ["#trucks-inspect", "Inspections"], ["#trucks-paid", "Paid loads"], ["#trucks-trash", "Trash"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New load"]],
+  cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Advances"]],
   passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"]],
-  money: [["#money", "Flow"], ["#money-spend", "Spend"], ["#money-pay", "Pay"]],
+  money: [["#money", "Flow"], ["#money-spend", "Expenses"], ["#money-pay", "Pay"]],
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-drivers", "truck-id", "reports", "requests", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pl", "money-pl-q", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
-  cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-ask", "cane-docs", "cane-pay"],
+  cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
 };
 
@@ -255,8 +258,10 @@ async function act(action, payload) {
   }
 }
 
+const OLD_PAGES = { reports: "trucks-issues", requests: "money-spend", "cane-ask": "cane-spend", "money-pl": "money", "money-pl-q": "money" };
 function route() {
   let r = parseRoute();
+  if (OLD_PAGES[r.name]) { location.replace("#" + OLD_PAGES[r.name]); return; }
   if (r.name === "team" && DATA.me.assistant) { location.hash = "home"; return; }
   if (DATA.me.role === "driver" && !String(r.name).startsWith("drive")) r = { name: "drive" };
   if (DATA.me.role === "cane_manager" && !String(r.name).startsWith("cane")) r = { name: "cane" };
@@ -286,7 +291,6 @@ function route() {
     "trucks-trash": viewJobTrash,
     "trucks-drivers": viewDrivers,
     "truck-id": () => viewTruck(r.id),
-    reports: viewReports,
     "trucks-issues": viewReports,
     drive: () => viewDrive("drive"),
     "drive-money": () => viewDrive("drive-money"),
@@ -303,9 +307,7 @@ function route() {
     "cane-id": () => viewCaneId(r.id),
     "cane-sell": viewCaneSell,
     "cane-spend": viewCaneSpend,
-    "cane-ask": viewCaneAsk,
     "cane-pay": viewCanePay,
-    requests: viewSpend,
     passion: viewPassion,
     field: viewField,
     "passion-sell": viewPassionSell,
@@ -315,7 +317,6 @@ function route() {
     "money-cane": () => viewMoney("sugarcane"),
     "money-passion": () => viewMoney("passion"),
     "money-spend": viewSpend,
-    "money-pl": () => viewMoney(""),
     "money-pay": viewPayAdmin,
     "trucks-spend": viewFleetSpend,
     "trucks-docs": () => viewDocs("trucking"),
@@ -399,10 +400,12 @@ function bizBar() {
   const work = (DATA.fleetTasks || []).filter((t) => t.status === "done").length, iss = issuesWaiting(), pay = payWaiting(), phones = DATA.me.assistant ? 0 : phonesWaiting();
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
-    fleet: [["#trucks", "Units"], ["#trucks-book", "Bookings", bookingsWaiting().length], ["#trucks-jobs", "Jobs"], ["#trucks-spend", "Spend", req.trucking], ["#trucks-work", "Work", work], ["#trucks-issues", "Issues", iss], ["#trucks-docs", "Docs", docsWaiting("trucking")], ["#trucks-inspect", "Reports"], ["#trucks-paid", "Paid"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New job"], ["#trucks-trash", "Trash"]],
-    cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Spend", req.sugarcane], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
-    passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-spend", "Spend", req.passion], ["#passion-docs", "Docs", docsWaiting("passion")]],
-    money: [["#money", "Flow"], ["#money-spend", "Spend", req.trucking + req.sugarcane + req.passion], ["#money-pay", "Pay", pay]],
+    fleet: [["#trucks-book", "Bookings", bookingsWaiting().length, "Loads"], ["#trucks-jobs", "Loads", 0, "Loads"], ["#trucks-new", "New load", 0, "Loads"], ["#trucks-paid", "Paid loads", 0, "Loads"],
+      ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-inspect", "Inspections", 0, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Issues", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
+      ["#trucks-spend", "Advances", req.trucking, "Money & papers"], ["#trucks-docs", "Docs", docsWaiting("trucking"), "Money & papers"], ["#trucks-trash", "Trash", 0, "Money & papers"]],
+    cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Advances", req.sugarcane], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
+    passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-spend", "Advances", req.passion], ["#passion-docs", "Docs", docsWaiting("passion")]],
+    money: [["#money", "Flow"], ["#money-spend", "Expenses"], ["#money-pay", "Pay", pay]],
   }[biz] || [];
   return `<nav class="admin-nav">
     <div class="biz">
@@ -412,17 +415,18 @@ function bizBar() {
       <a class="${biz === "passion" ? "on" : ""}" href="#passion">Passion${dot(req.passion + docsWaiting("passion"))}</a>
       <a class="${biz === "money" ? "on" : ""}" href="#money">Money${dot(pay)}</a>
     </div>
-    ${subs.length ? `<div class="sub">${subs.map(([href, label, n]) => `<a class="${h === href ? "on" : ""} ${n ? "attn" : ""}" href="${href}">${label}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>${pagePick(subs, h)}` : ""}
+    ${subs.length ? `<div class="sub">${subs.map(([href, label, n, g], i) => `${i && g && g !== subs[i - 1][3] ? `<span class="sub-gap" aria-hidden="true"></span>` : ""}<a class="${h === href ? "on" : ""} ${n ? "attn" : ""}" href="${href}">${label}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>${pagePick(subs, h)}` : ""}
   </nav>`;
 }
 // Phones: the pages of a section in one drop-down instead of a row of buttons
 function pagePick(items, current) {
   const cur = items.find(([href]) => href === current) || items.find(([href]) => current.startsWith(href + "/")) || null;
   const waiting = items.filter(([href, , n]) => n && href !== (cur && cur[0])).reduce((s, [, , n]) => s + Number(n), 0);
+  // group name (4th item) only matters for the admin menu
   return `<div class="page-pick">
     <select class="field js-pagepick" aria-label="Page">
       ${cur ? "" : `<option value="" selected>Choose a page</option>`}
-      ${items.map(([href, label, n]) => `<option value="${href}" ${cur && cur[0] === href ? "selected" : ""}>${esc(label)}${n ? ` (${n})` : ""}</option>`).join("")}
+      ${(() => { const opt = ([href, label, n]) => `<option value="${href}" ${cur && cur[0] === href ? "selected" : ""}>${esc(label)}${n ? ` (${n})` : ""}</option>`; if (!items.some((x) => x[3])) return items.map(opt).join(""); const gs = [...new Set(items.map((x) => x[3]))]; return gs.map((g) => `<optgroup label="${esc(g)}">${items.filter((x) => x[3] === g).map(opt).join("")}</optgroup>`).join(""); })()}
     </select>
     ${waiting ? `<span class="pick-attn">${waiting} waiting</span>` : ""}
   </div>`;
@@ -436,78 +440,148 @@ function tabMenu(items, on) {
 }
 function fleetTabs(on) {
   const items = [
-    ["#trucks", "Units", "trucks"],
-    ["#trucks-jobs", "Jobs", "trucks-jobs"],
-    ["#trucks-work", "Work", "trucks-work"],
-    ["#trucks-inspect", "Reports", "trucks-inspect"],
-    ["#trucks-paid", "Paid", "trucks-paid"],
+    ["#trucks", "Trucks", "trucks"],
+    ["#trucks-jobs", "Loads", "trucks-jobs"],
+    ["#trucks-work", "Tasks", "trucks-work"],
+    ["#trucks-inspect", "Inspections", "trucks-inspect"],
+    ["#trucks-paid", "Paid loads", "trucks-paid"],
     ["#trucks-trash", "Trash", "trucks-trash"],
     ["#trucks-drivers", "Drivers", "trucks-drivers"],
-    ["#trucks-new", "New job", "trucks-new"],
+    ["#trucks-new", "New load", "trucks-new"],
   ];
   return tabMenu(items, on);
 }
 
+function truckForm(t) {
+  const drivers = DATA.drivers || [];
+  const v = t || {};
+  return `<form data-form="save-truck" class="truck-form">
+    ${t ? `<input type="hidden" name="id" value="${esc(t.id)}" />` : ""}
+    <div class="grid g2">
+      <label class="lbl">Number plate<input class="field" name="plate" required value="${esc(v.plate || "")}" placeholder="UA 000AA" autocapitalize="characters" /></label>
+      <label class="lbl">Model<input class="field" name="model" value="${esc(v.model || "Sinotruk HOWO 8×4")}" /></label>
+    </div>
+    <div class="grid g2" style="margin-top:10px">
+      <label class="lbl">Engine<select class="field" name="hp"><option value="420" ${Number(v.hp) >= 400 ? "selected" : ""}>420 hp</option><option value="370" ${t && Number(v.hp) < 400 ? "selected" : ""}>370 hp</option></select></label>
+      <label class="lbl">Driver<select class="field" name="assignedDriverId"><option value="">— No driver —</option>${drivers.map((d) => `<option value="${d.id}" ${d.id === v.assignedDriverId ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select></label>
+    </div>
+    <div class="grid g2" style="margin-top:10px">
+      <label class="lbl">Odometer (km)<input class="field" name="odometerKm" inputmode="numeric" value="${v.odometerKm || ""}" /></label>
+      <label class="lbl">Next service at (km)<input class="field" name="nextServiceKm" inputmode="numeric" value="${v.nextServiceKm || ""}" /></label>
+    </div>
+    <div class="grid g2" style="margin-top:10px">
+      <label class="lbl">Insurance expires<input class="field" type="date" name="insuranceExpiry" value="${esc(v.insuranceExpiry || "")}" /></label>
+      <label class="lbl">Road licence expires<input class="field" type="date" name="roadLicenceExpiry" value="${esc(v.roadLicenceExpiry || "")}" /></label>
+    </div>
+    ${t ? `<label class="lbl" style="margin-top:10px">Status<select class="field" name="status">${[["idle", "Ready"], ["workshop", "In the workshop"], ["parked", "Parked"]].map(([k, l]) => `<option value="${k}" ${v.status === k ? "selected" : ""}>${l}</option>`).join("")}${["on_trip", "loading"].includes(v.status) ? `<option value="" selected>On a trip (set by the load)</option>` : ""}</select></label>` : ""}
+    <button class="btn btn-primary wide" style="margin-top:12px">${t ? "Save truck" : "Add truck"}</button>
+  </form>`;
+}
 function viewTrucks() {
-  const open = (DATA.fleetTasks || []).filter((t) => !["done", "cancelled"].includes(t.status));
+  const open = (DATA.fleetTasks || []).filter((t) => !["done", "cancelled", "closed"].includes(t.status));
   const issues = (DATA.issues || []).filter((i) => i.status === "open");
+  const today = todayYmd(), soon = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  const when = (d) => !d ? "Not set" : `${fmtDay(d)}${d < today ? ` <span class="badge red">Expired</span>` : d <= soon ? ` <span class="badge gold">Due soon</span>` : ""}`;
+  const card = (t) => {
+    const d = DATA.drivers.find((x) => x.id === t.assignedDriverId);
+    const n = open.filter((x) => x.truckId === t.id).length;
+    const left = t.nextServiceKm ? t.nextServiceKm - (t.odometerKm || 0) : null;
+    const warn = (t.insuranceExpiry && t.insuranceExpiry <= soon) || (t.roadLicenceExpiry && t.roadLicenceExpiry <= soon) || (left !== null && left <= 1000);
+    const head = `<span class="lf-id">${esc(t.plate)}</span><span class="lf-mat">${esc(d ? d.name : "No driver")} · ${t.hp || 370} hp</span>${badge(t.status)}${warn ? ` <span class="badge gold">Check</span>` : ""}`;
+    const body = facts([
+      ["Model", esc(t.model || "Sinotruk HOWO 8×4")],
+      ["Odometer", (t.odometerKm || 0).toLocaleString() + " km"],
+      ["Next service", t.nextServiceKm ? t.nextServiceKm.toLocaleString() + " km" + (left !== null ? (left < 0 ? ` <span class="badge red">${Math.abs(left).toLocaleString()} km over</span>` : ` · in ${left.toLocaleString()} km`) : "") : "Not set"],
+      ["Insurance", when(t.insuranceExpiry)],
+      ["Road licence", when(t.roadLicenceExpiry)],
+      n ? ["Open tasks", `<a href="#trucks-work">${n}</a>`] : null,
+    ]) + `<a class="btn btn-ghost btn-sm" href="#truck/${t.id}" style="margin-top:10px">Service history</a><details class="settings" style="margin-top:10px"><summary>Edit truck</summary>${truckForm(t)}</details>`;
+    return foldCard(head, body);
+  };
   return `
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks")}
     <div class="grid g4" style="margin-top:14px">
-      <div class="card kpi steel"><span class="eyebrow">Units</span><b>${DATA.trucks.length}</b></div>
-      <div class="card kpi gold"><span class="eyebrow">Work</span><b>${open.length}</b></div>
+      <div class="card kpi steel"><span class="eyebrow">Trucks</span><b>${DATA.trucks.length}</b></div>
+      <div class="card kpi gold"><span class="eyebrow">Open tasks</span><b>${open.length}</b></div>
       <div class="card kpi"><span class="eyebrow">Issues</span><b>${issues.length}</b></div>
-      <div class="card kpi"><span class="eyebrow">Shop</span><b>${DATA.trucks.filter((t) => t.status === "workshop").length}</b></div>
+      <div class="card kpi"><span class="eyebrow">In workshop</span><b>${DATA.trucks.filter((t) => t.status === "workshop").length}</b></div>
     </div>
-    <div class="card" style="margin-top:14px;overflow:auto">
-      <table>
-        <thead><tr><th>Plate</th><th>Driver</th><th>Km</th><th>Service</th><th></th></tr></thead>
-        <tbody>
-          ${DATA.trucks.map((t) => {
-            const d = DATA.drivers.find((x) => x.id === t.assignedDriverId);
-            const n = open.filter((x) => x.truckId === t.id).length;
-            return `<tr>
-              <td><a href="#truck/${t.id}"><b>${t.plate}</b></a><div class="muted">${t.model}</div></td>
-              <td>${d ? d.name : "—"}</td>
-              <td>${t.odometerKm.toLocaleString()}</td>
-              <td>${t.nextServiceKm.toLocaleString()}</td>
-              <td>${badge(t.status)}${n ? " " + badge("open") : ""}</td>
-            </tr>`;
-          }).join("")}
-        </tbody>
-      </table>
-    </div>
+    <div class="list" style="margin-top:12px">${DATA.trucks.map(card).join("")}</div>
+    ${DATA.viewingAs ? "" : `<details class="card team-row" style="margin-top:10px"><summary><div class="avatar">＋</div><div style="flex:1"><b>Add a truck</b></div></summary><div style="margin-top:12px">${truckForm(null)}</div></details>`}
     <div class="row" style="margin-top:18px"><h2 style="margin:0">Live locations</h2><span class="muted" id="liveNote">Loading…</span></div>
     <div id="liveMap" style="height:320px;margin-top:10px;border-radius:16px"></div>
     <div class="list" id="liveList" style="margin-top:10px"></div>`;
 }
 
 function viewDrivers() {
+  const today = todayYmd();
+  const card = (d) => {
+    const t = DATA.trucks.find((x) => x.id === d.assignedTruckId);
+    const head = `<span class="lf-id">${esc(d.name)}</span><span class="lf-mat">${esc(t ? t.plate : "No truck")}</span>${d.licenceExpiry && d.licenceExpiry < today ? `<span class="badge red">Licence expired</span>` : ""}`;
+    const body = `${facts([["Phone", d.phone ? `<a href="tel:${esc(d.phone)}">${esc(d.phone)}</a>` : "—"], ["Licence", esc(d.licenseId || "—") + (d.licenceExpiry ? " · expires " + fmtDay(d.licenceExpiry) : "")], ["Truck", esc(t ? t.plate : "None")]])}
+      ${d.licensePhoto ? `<img src="${d.licensePhoto}" alt="Licence" class="lic-img" />` : ""}
+      <details class="settings" style="margin-top:10px"><summary>Edit driver</summary>
+      <form data-form="save-driver" style="margin-top:10px">
+        <input type="hidden" name="id" value="${esc(d.id)}" />
+        <div class="grid g2">
+          <label class="lbl">Name<input class="field" name="name" required value="${esc(d.name)}" /></label>
+          <label class="lbl">Phone<input class="field" name="phone" inputmode="tel" value="${esc(d.phone || "")}" /></label>
+        </div>
+        <div class="grid g2" style="margin-top:10px">
+          <label class="lbl">Driving licence number<input class="field" name="licenseId" value="${esc(d.licenseId || "")}" /></label>
+          <label class="lbl">Licence expires<input class="field" type="date" name="licenceExpiry" value="${esc(d.licenceExpiry || "")}" /></label>
+        </div>
+        <div class="grid g2" style="margin-top:10px">
+          <label class="lbl">Truck<select class="field" name="assignedTruckId"><option value="">— No truck —</option>${DATA.trucks.map((x) => `<option value="${x.id}" ${x.id === d.assignedTruckId ? "selected" : ""}>${esc(x.plate)}</option>`).join("")}</select></label>
+          <label class="lbl">Licence photo<input class="field" name="licensePhoto" type="file" accept="image/*" capture="environment" /></label>
+        </div>
+        <button class="btn btn-primary wide" style="margin-top:12px">Save driver</button>
+      </form></details>`;
+    return foldCard(head, body);
+  };
   return `
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-drivers")}
-    <div class="grid g2" style="margin-top:14px">
-      <form class="card item" data-form="save-truck">
-        <p class="eyebrow">Unit</p>
-        <select class="field js-unit" name="id" style="margin-top:8px">${DATA.trucks.map((t)=>`<option value="${t.id}">${t.plate}</option>`).join("")}</select>
-        <input class="field" name="model" placeholder="Model" style="margin-top:8px" value="${DATA.trucks[0]?.model || "Sinotruk HOWO 6x4"}" />
-        <select class="field" name="assignedDriverId" style="margin-top:8px">${DATA.drivers.map((d)=>`<option value="${d.id}" ${d.id===DATA.trucks[0]?.assignedDriverId?"selected":""}>${d.name}</option>`).join("")}</select>
-        <button class="btn btn-primary wide" style="margin-top:10px">Save unit</button>
-      </form>
-      <form class="card item" data-form="save-driver">
-        <p class="eyebrow">Driver</p>
-        <select class="field js-driver" name="id" style="margin-top:8px">${DATA.drivers.map((d)=>`<option value="${d.id}">${d.name}</option>`).join("")}</select>
-        <input class="field" name="phone" placeholder="Phone" style="margin-top:8px" value="${DATA.drivers[0]?.phone || ""}" />
-        <input class="field" name="licenseId" placeholder="Driving licence ID" style="margin-top:8px" value="${DATA.drivers[0]?.licenseId || ""}" />
-        <input class="field" name="licensePhoto" type="file" accept="image/*" style="margin-top:8px" />
-        <select class="field" name="assignedTruckId" style="margin-top:8px">${DATA.trucks.map((t)=>`<option value="${t.id}" ${t.id===DATA.drivers[0]?.assignedTruckId?"selected":""}>${t.plate}</option>`).join("")}</select>
-        ${DATA.drivers[0]?.licensePhoto ? `<img src="${DATA.drivers[0].licensePhoto}" alt="" style="width:72px;border-radius:8px;margin-top:8px" />` : ""}
-        <button class="btn btn-primary wide" style="margin-top:10px">Save driver</button>
-      </form>
-    </div>`;
+    <div class="list" style="margin-top:14px">${(DATA.drivers || []).map(card).join("") || `<div class="card item muted">No drivers yet.</div>`}</div>
+    <p class="muted" style="margin-top:10px">New drivers are added on <a href="#team">Team</a>, so they get a login and PIN.</p>`;
 }
-
+function foldCard(head, body, cls) {
+  return `<div class="card load-fold js-fold ${cls || ""}">
+    <button type="button" class="lf-head js-fold-btn" aria-expanded="false">${head}<span class="lf-chev" aria-hidden="true">›</span></button>
+    <div class="lf-body" hidden>${body}</div>
+  </div>`;
+}
+function facts(rows) { return `<dl class="bk-facts">${rows.filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`; }
+function jobCard(j, paidView) {
+  const c = DATA.contractors.find((x) => x.id === j.contractorId);
+  const t = DATA.trucks.find((x) => x.id === j.truckId);
+  const d = DATA.drivers.find((x) => x.id === j.driverId);
+  const bk = j.bookingId && (DATA.bookings || []).find((x) => x.id === j.bookingId);
+  const due = bk && bk.payment && bk.payment.balance && !bk.payment.balancePaidAt;
+  const got = jobReceived(j), price = j.incomeUgx || j.rateUgx || 0;
+  const map = j.pickupPin && j.dropPin ? `https://www.google.com/maps/dir/?api=1&origin=${j.pickupPin.lat},${j.pickupPin.lng}&destination=${j.dropPin.lat},${j.dropPin.lng}&travelmode=driving` : "";
+  const head = `<span class="lf-id">${esc(j.code || "Load")}</span><span class="lf-mat">${esc(j.cargo || "")}${c ? ` · ${esc(c.name)}` : ""}</span>${paidView ? `<b class="amt">${ugx(j.paidUgx || price)}</b>` : `<span class="badge ${tripTone(j)}">${esc(paidView ? "Paid" : TRIP_NAME[j.status] || label(j.status))}</span>`}`;
+  const body = `
+    <div class="lf-src">${sourceChip(j)}</div>
+    ${facts([
+      ["Route", esc((j.origin || "") + " → " + (j.destination || "")) + (map ? ` · <a href="${map}" target="_blank" rel="noopener">Map</a>` : "")],
+      j.pickupAt ? ["Pickup", esc(String(j.pickupAt).replace("T", " "))] : null,
+      j.dropAt ? ["Drop-off", esc(String(j.dropAt).replace("T", " "))] : null,
+      ["Truck", esc((t ? t.plate : "—") + (d ? " · " + d.name : ""))],
+      ["Distance", (j.km || 0) + " km" + (j.fuelLitres ? ` · ${j.fuelLitres} L · ${ugx(j.fuelCostUgx || 0)}` : "")],
+      j.tonnesDelivered ? ["Tonnes", j.tonnesDelivered + " t"] : null,
+      ["Price", ugx(price)],
+      got ? ["Received", ugx(got) + (paidView && j.paidAt ? " · " + fmtDay(j.paidAt) : "") + (j.paidMethod ? " · " + esc(METHOD_LABEL[j.paidMethod] || j.paidMethod) : "")] : null,
+      !paidView && tripTime(j, j.status) ? ["Trip", esc(TRIP_NAME[j.status] || label(j.status)) + " · " + tripTime(j, j.status) + ((j.steps || {})[j.status] && j.steps[j.status].office ? " · office" : "")] : null,
+    ])}
+    ${j.scaleTicket || j.invoice ? `<div class="thumbs">${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="Scale ticket" />` : ""}${j.invoice ? `<img src="${j.invoice}" alt="Invoice" />` : ""}</div>` : ""}
+    ${paidView ? "" : `<div class="lf-trip">${tripControls(j)}</div>`}
+    ${bk && !paidView ? `<div class="bk-actions"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay flash" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>` : ""}
+    ${paidView ? "" : `<div class="lf-actions"><button type="button" class="btn btn-primary js-paid" data-id="${j.id}">Client paid</button><button type="button" class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></div>`}`;
+  return foldCard(head, body, due ? "flash" : "");
+}
+function tripTone(j) { return { booked: "gold", to_pickup: "blue", loading: "blue", en_route: "blue", delivered: "green", invoiced: "green" }[j.status] || "blue"; }
 function viewTruckJobs() {
   const src = sessionStorage.getItem("jobSrc") || "";
   const all = (DATA.jobs || []).filter((j) => !isPaid(j));
@@ -519,53 +593,18 @@ function viewTruckJobs() {
     <div class="seg src-seg" style="margin-top:14px">
       ${[["", "All", all.length], ["client", "Client loads", cnt("client")], ["office", "Office", cnt("office")], ["driver", "Driver", cnt("driver")]].map(([k, t, n]) => `<button type="button" class="seg-btn ${src === k ? "on" : ""}" data-jobsrc="${k}">${t}${n ? ` <span class="count">${n}</span>` : ""}</button>`).join("")}
     </div>
-    <div class="card" style="margin-top:12px;overflow:auto">
-      <table>
-        <thead><tr><th>Load ID</th><th>Cargo</th><th>Route</th><th>Km / fuel</th><th>Pay</th><th>Trip</th><th></th></tr></thead>
-        <tbody>
-          ${open.length ? open.map((j) => {
-            const c = DATA.contractors.find((x) => x.id === j.contractorId);
-            const t = DATA.trucks.find((x) => x.id === j.truckId);
-            return `<tr>
-              <td><b>${j.code || "—"}</b><div>${sourceChip(j)}</div></td>
-              <td>${j.cargo}<div class="muted">${c?.name || ""} · ${t?.plate || ""}</div></td>
-              <td>${j.origin} → ${j.destination}<div class="muted">${j.pickupAt||""}${j.dropAt?" → "+j.dropAt:""}</div></td>
-              <td>${j.km || 0} km<div class="muted">${j.fuelLitres||0} L · ${ugx(j.fuelCostUgx||0)}</div></td>
-              <td>${ugx(j.rateUgx||0)}<div class="muted">${j.tonnesDelivered ? j.tonnesDelivered + " t" : ""}</div>${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="width:72px;border-radius:8px" />` : ""}${j.invoice ? `<img src="${j.invoice}" alt="" style="width:72px;border-radius:8px" />` : ""}</td>
-              <td>${badge(j.status)}${tripTime(j, j.status) ? `<div class="muted">${tripTime(j, j.status)}${(j.steps || {})[j.status] && j.steps[j.status].office ? " · office" : ""}</div>` : ""}${tripControls(j)}</td>
-              <td>${(() => { const bk = j.bookingId && (DATA.bookings || []).find((x) => x.id === j.bookingId); if (!bk) return ""; const due = bk.payment && bk.payment.balance && !bk.payment.balancePaidAt; return `<div class="bk-actions" style="margin:0 0 8px"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay flash" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>`; })()}${badge("not paid")}<button class="btn btn-primary" data-act="mark_job_paid" data-id="${j.id}" style="margin-left:8px">Paid</button>
-              <button class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></td>
-            </tr>`;
-          }).join("") : `<tr><td colspan="7" class="muted">No open loads</td></tr>`}
-        </tbody>
-      </table>
-    </div>`;
+    <div class="list" style="margin-top:12px">${open.length ? open.map((j) => jobCard(j)).join("") : `<div class="card item muted">No open loads.</div>`}</div>`;
 }
 
 function viewPaidJobs() {
   const paid = (DATA.jobs || []).filter(isPaid);
+  const total = paid.reduce((s, j) => s + (j.paidUgx || j.rateUgx || 0), 0);
   return `
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-paid")}
-    <div class="card" style="margin-top:14px;overflow:auto">
-      <table>
-        <thead><tr><th>Cargo</th><th>Route</th><th>Paid on</th><th>Amount</th></tr></thead>
-        <tbody>
-          ${paid.length ? paid.map((j) => {
-            const c = DATA.contractors.find((x) => x.id === j.contractorId);
-            const t = DATA.trucks.find((x) => x.id === j.truckId);
-            return `<tr>
-              <td><b>${j.code || ""} ${j.cargo}</b><div class="muted">${c?.name || ""} · ${t?.plate || ""}</div><div>${sourceChip(j)}</div></td>
-              <td>${j.origin} → ${j.destination}</td>
-              <td>${j.paidAt || j.startDate || ""}</td>
-              <td>${ugx(j.paidUgx || j.rateUgx || 0)}</td>
-            </tr>`;
-          }).join("") : `<tr><td colspan="4" class="muted">None paid yet</td></tr>`}
-        </tbody>
-      </table>
-    </div>`;
+    <div class="grid g2" style="margin-top:14px"><div class="card kpi"><span class="eyebrow">Paid loads</span><b>${paid.length}</b></div><div class="card kpi steel"><span class="eyebrow">Received</span><b>${ugx(total)}</b></div></div>
+    <div class="list" style="margin-top:12px">${paid.length ? paid.map((j) => jobCard(j, true)).join("") : `<div class="card item muted">No paid loads yet.</div>`}</div>`;
 }
-
 function viewInspectReport() {
   const list = DATA.inspections || [];
   const names = {};
@@ -799,6 +838,11 @@ function driverTaskReply(id) {
     </form>`;
 }
 // photos and the voice note are only asked for when something needs attention or is not OK
+function inspCount(form) {
+  const el = form && form.querySelector(".js-insp-count"); if (!el) return;
+  const all = form.querySelectorAll(".inspect-part").length, done = [...form.querySelectorAll(".inspect-part")].filter((b) => b.querySelector("input[type=radio]:checked")).length;
+  el.textContent = done + " of " + all + " checked"; el.classList.toggle("ok-t", done === all);
+}
 function showVoiceIfBad(form) {
   const v = form && form.querySelector(".js-voice-if-bad");
   if (!v) return;
@@ -896,36 +940,14 @@ function viewTruck(id) {
 function viewJobTrash() {
   const trash = DATA.jobsTrash || [];
   const bks = (DATA.bookings || []).filter((b) => b.trashed);
+  const row = (title, sub, when, btns) => `<div class="card trash-row"><div style="min-width:0"><b>${title}</b><div class="muted">${sub}</div><div class="muted">Removed ${when}</div></div><div class="trash-btns">${btns}</div></div>`;
   return `
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-trash")}
-    <div class="card" style="margin-top:14px;overflow:auto">
-      <table>
-        <thead><tr><th>Load</th><th>Removed</th><th></th></tr></thead>
-        <tbody>
-          ${trash.length ? trash.map((j) => `<tr>
-            <td><b>${j.code || ""} ${j.cargo}</b><div class="muted">${j.origin} → ${j.destination}</div></td>
-            <td>${j.deletedAt || ""} · ${j.deletedBy || ""}</td>
-            <td><button class="btn btn-ghost" data-act="restore_job" data-id="${j.id}">Restore</button>
-            <button class="btn btn-ghost" data-act="purge_job" data-id="${j.id}">Delete</button></td>
-          </tr>`).join("") : `<tr><td colspan="3" class="muted">Empty</td></tr>`}
-        </tbody>
-      </table>
-    </div>
-    ${bks.length ? `<h2 style="margin-top:18px">Closed bookings</h2>
-    <div class="card" style="margin-top:10px;overflow:auto">
-      <table>
-        <thead><tr><th>Booking</th><th>Removed</th><th></th></tr></thead>
-        <tbody>
-          ${bks.map((b) => `<tr>
-            <td><b>${esc(b.ref)} ${esc(b.cargo)}</b><div class="muted">${esc((b.client || {}).company || (b.client || {}).name || "")} · ${esc(BK_STATUS[b.status] ? BK_STATUS[b.status][1] : b.status)}</div></td>
-            <td>${esc(b.trashed.at || "")} · ${esc(b.trashed.by || "")}</td>
-            <td><button class="btn btn-ghost" data-act="restore_booking" data-id="${esc(b.id)}">Restore</button>
-            <button class="btn btn-ghost" data-act="purge_booking" data-id="${esc(b.id)}">Delete</button></td>
-          </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>` : ""}`;
+    <h2 style="margin:14px 0 0">Loads</h2>
+    <div class="list" style="margin-top:8px">${trash.length ? trash.map((j) => row(esc((j.code || "") + " · " + (j.cargo || "")), esc((j.origin || "") + " → " + (j.destination || "")), esc((j.deletedAt || "") + (j.deletedBy ? " by " + j.deletedBy : "")), `<button class="btn btn-ghost btn-sm" data-act="restore_job" data-id="${j.id}">Restore</button><button class="btn btn-danger btn-sm" data-act="purge_job" data-id="${j.id}">Delete</button>`)).join("") : `<div class="card item muted">No loads in the trash.</div>`}</div>
+    ${bks.length ? `<h2 style="margin:18px 0 0">Closed bookings</h2>
+    <div class="list" style="margin-top:8px">${bks.map((b) => row(esc(b.ref + " · " + (b.cargo || "")), esc(((b.client || {}).company || (b.client || {}).name || "") + " · " + (BK_STATUS[b.status] ? BK_STATUS[b.status][1] : b.status)), esc((b.trashed.at || "") + (b.trashed.by ? " by " + b.trashed.by : "")), `<button class="btn btn-ghost btn-sm" data-act="restore_booking" data-id="${esc(b.id)}">Restore</button><button class="btn btn-danger btn-sm" data-act="purge_booking" data-id="${esc(b.id)}">Delete</button>`)).join("")}</div>` : ""}`;
 }
 
 // A load from a client booking: everything the client gave stays as it is; the office picks driver, truck and fuel
@@ -936,7 +958,8 @@ function viewLoadFromBooking(bk) {
   const paid = p.status === "received" ? p.due : 0;
   const trips = Math.max(1, Number(bk.trips) || 1);
   const diesel = DATA.dieselDefaultUgx || 5200;
-  const est = estimateTripFuel(bk.km || 0, bk.km || 0, 370, diesel); // loaded there, empty back
+  const t0 = (DATA.trucks || [])[0];
+  const est = estimateTripFuel(bk.km || 0, bk.km || 0, (t0 && t0.hp) || 370, diesel); // loaded there, empty back; refreshed for the truck picked
   const litres = Math.round(est.litres * trips * 10) / 10, fuel = Math.round(est.fuelUgx * trips);
   const at = bk.date ? bk.date + "T" + ({ Morning: "08:00", Afternoon: "13:00", Evening: "17:00" }[bk.time] || "08:00") : "";
   const free = (DATA.trucks || []).map((t) => { const d = (DATA.drivers || []).find((x) => x.id === t.assignedDriverId); return { t, d }; });
@@ -959,14 +982,14 @@ function viewLoadFromBooking(bk) {
         <dt>Paid</dt><dd>${paid ? ugx(paid) : "Nothing yet"}${p.balance ? ` · ${ugx(p.balance)} due on delivery` : ""}</dd>
       </dl>
       <div class="grid g2" style="margin-top:14px">
-        <label class="lbl">Truck<select class="field js-bk-truck" name="truckId">${free.map(({ t, d }) => `<option value="${t.id}" data-driver="${d ? d.id : ""}">${esc(t.plate)}${d ? " · " + esc(d.name) : ""}</option>`).join("")}</select></label>
+        <label class="lbl">Truck<select class="field js-bk-truck" name="truckId">${free.map(({ t, d }) => `<option value="${t.id}" data-driver="${d ? d.id : ""}" data-hp="${t.hp || 370}">${esc(t.plate)}${d ? " · " + esc(d.name) : ""}</option>`).join("")}</select></label>
         <label class="lbl">Driver<select class="field js-bk-driver" name="driverId">${(DATA.drivers || []).map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
       </div>
       <label class="lbl" style="margin-top:10px">Pickup time<input class="field" type="datetime-local" name="pickupAt" value="${at}" /></label>
       <p class="eyebrow" style="margin-top:14px">Fuel</p>
       <div class="grid g3">
         <label class="lbl">Diesel UGX / litre<input class="field js-bk-diesel" name="dieselUgxPerLitre" inputmode="numeric" value="${diesel}" /></label>
-        <label class="lbl">Litres<input class="field js-bk-litres" name="fuelLitres" inputmode="decimal" value="${litres}" /></label>
+        <label class="lbl">Litres<input class="field js-bk-litres" name="fuelLitres" inputmode="decimal" value="${litres}" data-km="${bk.km || 0}" data-trips="${trips}" /></label>
         <label class="lbl">Fuel cost (UGX)<input class="field js-bk-fuel" name="fuelCostUgx" inputmode="numeric" value="${fuel}" /></label>
       </div>
       <p class="muted js-bk-fuelnote" style="margin-top:6px">${bk.km || 0} km there and back${trips > 1 ? " × " + trips + " trips" : ""}</p>
@@ -979,10 +1002,12 @@ function bindLoadFromBooking() {
   const form = f.form;
   const truck = form.querySelector(".js-bk-truck"), driver = form.querySelector(".js-bk-driver");
   const pickDriver = () => { const o = truck.selectedOptions[0]; if (o && o.dataset.driver) driver.value = o.dataset.driver; };
-  truck.onchange = pickDriver; pickDriver();
   const dz = form.querySelector(".js-bk-diesel"), lt = form.querySelector(".js-bk-litres"), fc = form.querySelector(".js-bk-fuel");
   const cost = () => { fc.value = Math.round((Number(lt.value) || 0) * (Number(dz.value) || 0)); };
-  dz.oninput = cost; lt.oninput = cost;
+  // litres follow the truck picked (420 hp and 370 hp burn differently) until someone types their own
+  const refuel = () => { if (lt.dataset.typed) return; const o = truck.selectedOptions[0], km = Number(lt.dataset.km) || 0, trips = Number(lt.dataset.trips) || 1; const e = estimateTripFuel(km, km, Number(o && o.dataset.hp) || 370, Number(dz.value) || 0); lt.value = Math.round(e.litres * trips * 10) / 10; cost(); };
+  truck.onchange = () => { pickDriver(); refuel(); }; pickDriver(); refuel();
+  dz.oninput = cost; lt.oninput = () => { lt.dataset.typed = "1"; cost(); };
 }
 function viewNewJob() {
   const bk = (DATA.bookings || []).find((x) => x.id === sessionStorage.getItem("jobFromBooking") && !x.jobId) || null;
@@ -991,45 +1016,50 @@ function viewNewJob() {
   const known = bk ? (DATA.contractors || []).find((c) => phoneDigits(c.phone) && phoneDigits(c.phone) === phoneDigits(cl.phone)) : null;
   const newC = bk && !known;
   return `
-    <h1>New job</h1>
+    <h1>New load</h1>
     ${fleetTabs("trucks-new")}
-    ${bk ? `<div class="card item from-booking" style="margin-top:16px;max-width:560px"><div class="row keep" style="align-items:center"><div><b>From booking ${esc(bk.ref)}</b><div class="muted">${esc(cl.name)}${cl.company ? ", " + esc(cl.company) : ""}</div></div><button type="button" class="btn btn-ghost btn-sm" id="dropBooking">Clear</button></div></div>` : ""}
-    <form class="card item" data-form="job" style="margin-top:16px;max-width:560px">
-      ${bk ? `<input type="hidden" name="bookingId" value="${esc(bk.id)}" />` : ""}
-      <select class="field js-contractor" name="contractorId">${DATA.contractors.map((c) => `<option value="${c.id}" ${known && known.id === c.id ? "selected" : ""}>${c.name} ${c.phone||""}</option>`).join("")}<option value="new" ${newC ? "selected" : ""}>New contractor</option></select>
-      <div class="grid g2 js-new-contractor" style="margin-top:10px;${newC ? "" : "display:none"}">
-        <input class="field" name="contractorName" placeholder="New contractor" value="${newC ? esc(cl.company || cl.name) : ""}" />
-        <input class="field" name="contractorPhone" placeholder="Phone" value="${newC ? esc(cl.phone) : ""}" />
+    <form class="card item form-card" data-form="job" style="margin-top:16px;max-width:620px">
+      <p class="form-step">Client and material</p>
+      <div class="grid g2">
+        <label class="lbl">Client<select class="field js-contractor" name="contractorId">${DATA.contractors.map((c) => `<option value="${c.id}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}<option value="new">＋ New client</option></select></label>
+        <label class="lbl">Material${cargoSelect("")}</label>
       </div>
-      <div style="height:10px"></div>
-      ${cargoSelect(bk ? bk.cargo : "")}
-      <div class="grid g2" style="margin-top:10px">
-        <input class="field js-pv" placeholder="Pickup (optional name)" value="${bk ? esc(bk.pickup.name) : ""}" />
-        <input class="field js-dv" placeholder="Drop (optional name)" value="${bk ? esc(bk.drop.name) : ""}" />
+      <div class="grid g2 js-new-contractor" style="margin-top:10px;display:none">
+        <label class="lbl">New client name<input class="field" name="contractorName" placeholder="Company or person" /></label>
+        <label class="lbl">Client phone<input class="field" name="contractorPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
+      </div>
+      <p class="form-step">Route and time</p>
+      <div class="grid g2">
+        <label class="lbl">Pickup place<input class="field js-pv" required placeholder="e.g. Kigo quarry" /></label>
+        <label class="lbl">Drop-off place<input class="field js-dv" required placeholder="e.g. Mukono site" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">
-        <input class="field" type="datetime-local" name="pickupAt" placeholder="Pickup date" value="${bk && bk.date ? bk.date + "T" + ({ Morning: "08:00", Afternoon: "13:00", Evening: "17:00" }[bk.time] || "08:00") : ""}" />
-        <input class="field" type="datetime-local" name="dropAt" placeholder="Drop date" />
+        <label class="lbl">Pickup time<input class="field" type="datetime-local" name="pickupAt" /></label>
+        <label class="lbl">Drop-off time <span class="muted">(optional)</span><input class="field" type="datetime-local" name="dropAt" /></label>
       </div>
       <input type="hidden" name="origin" class="js-origin" />
       <input type="hidden" name="destination" class="js-dest" />
       <p class="muted js-route" style="margin-top:8px"></p>
-      <button type="button" class="btn btn-ghost" id="useGps" style="margin-top:8px">Add truck GPS (optional)</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="useGps" style="margin-top:4px">Use the truck's GPS for distance</button>
       <input type="hidden" name="kmToPickup" class="js-dead" />
       <input type="hidden" name="kmHaul" class="js-haul" />
-      <div id="routeMap" style="height:220px;margin-top:8px;border-radius:14px" ${bk ? `data-pick="${bk.pickup.lat},${bk.pickup.lng}" data-drop="${bk.drop.lat},${bk.drop.lng}"` : ""}></div>
+      <div id="routeMap" style="height:220px;margin-top:8px;border-radius:14px"></div>
+      <p class="form-step">Truck and driver</p>
+      <div class="grid g2">
+        <label class="lbl">Truck<select class="field js-nl-truck" name="truckId">${DATA.trucks.map((t) => { const d = DATA.drivers.find((x) => x.id === t.assignedDriverId); return `<option value="${t.id}" data-driver="${d ? d.id : ""}">${esc(t.plate)}${t.hp ? " · " + t.hp + " hp" : ""}</option>`; }).join("")}</select></label>
+        <label class="lbl">Driver<select class="field js-nl-driver" name="driverId">${DATA.drivers.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
+      </div>
+      <p class="form-step">Price and fuel</p>
+      <div class="grid g2">
+        <label class="lbl">Distance (km)<input class="field js-km" name="km" inputmode="decimal" placeholder="One way" /></label>
+        <label class="lbl">Price to client (UGX)<input class="field" name="rateUgx" required inputmode="numeric" placeholder="0" /></label>
+      </div>
       <div class="grid g3" style="margin-top:10px">
-        <input class="field js-km" name="km" placeholder="Km" value="${bk && bk.km ? bk.km : ""}" />
-        <input class="field" name="rateUgx" required placeholder="Pay UGX" value="${bk && bk.quote ? bk.quote.amountUgx : ""}" />
-        <input class="field js-diesel" name="dieselUgxPerLitre" value="${DATA.dieselDefaultUgx||5200}" placeholder="UGX per litre" />
-        <input class="field js-litres" name="fuelLitres" readonly placeholder="Needed litres" />
-        <input class="field js-fuel" name="fuelCostUgx" readonly placeholder="Total fuel cost" />
+        <label class="lbl">Diesel UGX / litre<input class="field js-diesel" name="dieselUgxPerLitre" inputmode="numeric" value="${DATA.dieselDefaultUgx || 5200}" /></label>
+        <label class="lbl">Litres needed<input class="field js-litres" name="fuelLitres" readonly placeholder="Worked out" /></label>
+        <label class="lbl">Fuel cost (UGX)<input class="field js-fuel" name="fuelCostUgx" readonly placeholder="Worked out" /></label>
       </div>
-      <div class="grid g2" style="margin-top:10px">
-        <select class="field" name="driverId">${DATA.drivers.map((d) => `<option value="${d.id}">${d.name}</option>`).join("")}</select>
-        <select class="field" name="truckId">${DATA.trucks.map((t) => `<option value="${t.id}">${t.plate}</option>`).join("")}</select>
-      </div>
-      <button class="btn btn-steel wide" style="margin-top:14px">Save job</button>
+      <button class="btn btn-primary wide" style="margin-top:16px">Save load</button>
     </form>`;
 }
 
@@ -1073,6 +1103,15 @@ function bookingWhatsApp(b) {
   return "https://wa.me/" + waNumber(c.phone) + "?text=" + encodeURIComponent(lines.join("\n"));
 }
 const STAGE_BTN = { new: "Tell client: request received", seen: "Tell client: request received", quoted: "Send quote on WhatsApp", payment_check: "Tell client: checking payment", accepted: "Tell client: booking confirmed", assigned: "Tell client: truck assigned", heading: "Tell client: heading to pickup", loading: "Tell client: loading", on_the_way: "Tell client: in transit", delivered: "Tell client: delivered" };
+function payInfoCard() {
+  return DATA.me.role === "admin" && !DATA.me.assistant ? (() => { const pi = DATA.payInfo || { airtel: { number: "0705139060", name: "Restatuta" }, bank: { bank: "Stanbic Bank Uganda", name: "Conacrew Logistics Ltd", account: "9030025603272", code: "042641" } }; return `<details class="card item settings" style="margin-top:10px"><summary>Where clients pay</summary>
+      <form data-form="payinfo" style="margin-top:10px">
+        <div class="grid g2"><label class="lbl">Airtel Money number<input class="field" name="airtelNumber" value="${esc(pi.airtel.number)}" /></label><label class="lbl">Name on Airtel<input class="field" name="airtelName" value="${esc(pi.airtel.name)}" /></label></div>
+        <div class="grid g2" style="margin-top:10px"><label class="lbl">Bank<input class="field" name="bankName" value="${esc(pi.bank.bank)}" /></label><label class="lbl">Account name<input class="field" name="bankAccountName" value="${esc(pi.bank.name)}" /></label></div>
+        <div class="grid g2" style="margin-top:10px"><label class="lbl">Account number<input class="field" name="bankAccount" value="${esc(pi.bank.account)}" /></label><label class="lbl">Bank code<input class="field" name="bankCode" value="${esc(pi.bank.code)}" /></label></div>
+        <button class="btn btn-steel wide" style="margin-top:10px">Save payment details</button>
+      </form></details>`; })() : "";
+}
 function viewBookings() {
   const all = DATA.bookings || [];
   const only = sessionStorage.getItem("bkOnly");
@@ -1147,13 +1186,7 @@ function viewBookings() {
       <div class="row keep" style="align-items:center"><div style="min-width:0"><b>Your booking page</b><div class="muted">${esc(pageUrl)}</div></div>
       <div style="display:flex;gap:6px"><button type="button" class="btn btn-ghost btn-sm js-copylink" data-link="${esc(pageUrl)}">Copy</button><a class="btn btn-whatsapp btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent("Hire a Sinotruk 8×4 dump truck with a driver from Conacrew Logistics. Pin your pickup and drop-off and get a quote: " + pageUrl)}">Share</a></div></div>
     </div>
-    ${DATA.me.role === "admin" && !DATA.me.assistant ? (() => { const pi = DATA.payInfo || { airtel: { number: "0705139060", name: "Restatuta" }, bank: { bank: "Stanbic Bank Uganda", name: "Conacrew Logistics Ltd", account: "9030025603272", code: "042641" } }; return `<details class="card item settings" style="margin-top:10px"><summary>Where clients pay</summary>
-      <form data-form="payinfo" style="margin-top:10px">
-        <div class="grid g2"><label class="lbl">Airtel Money number<input class="field" name="airtelNumber" value="${esc(pi.airtel.number)}" /></label><label class="lbl">Name on Airtel<input class="field" name="airtelName" value="${esc(pi.airtel.name)}" /></label></div>
-        <div class="grid g2" style="margin-top:10px"><label class="lbl">Bank<input class="field" name="bankName" value="${esc(pi.bank.bank)}" /></label><label class="lbl">Account name<input class="field" name="bankAccountName" value="${esc(pi.bank.name)}" /></label></div>
-        <div class="grid g2" style="margin-top:10px"><label class="lbl">Account number<input class="field" name="bankAccount" value="${esc(pi.bank.account)}" /></label><label class="lbl">Bank code<input class="field" name="bankCode" value="${esc(pi.bank.code)}" /></label></div>
-        <button class="btn btn-steel wide" style="margin-top:10px">Save payment details</button>
-      </form></details>`; })() : ""}
+
     <div class="seg" style="margin-top:14px">
       ${[["open", "Open"], ["closed", "Closed"]].map(([k, t]) => `<button type="button" class="seg-btn ${tab === k ? "on" : ""}" data-bktab="${k}">${t}${n(k) ? ` <span class="count">${n(k)}</span>` : ""}</button>`).join("")}
     </div>
@@ -1220,7 +1253,7 @@ function viewDrive(page, taskId) {
   const dw = driverWaiting();
   const side = tabMenu([
     ["#drive", "Desk", "drive", dw.notes],
-    ["#drive-jobs", "Jobs", "drive-jobs", dw.jobs],
+    ["#drive-jobs", "Loads", "drive-jobs", dw.jobs],
     ["#drive-paid", "Paid loads", "drive-paid"],
     ["#drive-pay", "My pay", "drive-pay"],
     ["#drive-tasks", "Tasks", "drive-tasks", dw.tasks],
@@ -1245,7 +1278,7 @@ function viewDrive(page, taskId) {
     <div class="card item" id="liveStatus" style="margin-top:10px"></div>
     <div class="desk-grid">
       <a class="card item" href="#drive-report"><b>Inspect</b><p class="muted">Before the truck moves</p></a>
-      <a class="card item" href="#drive-jobs"><b>Jobs</b><p class="muted">${jobs.filter(j=>!isPaid(j)).length} open</p></a>
+      <a class="card item" href="#drive-jobs"><b>Loads</b><p class="muted">${jobs.filter(j=>!isPaid(j)).length} open</p></a>
       <a class="card item" href="#drive-paid"><b>Paid loads</b><p class="muted">${jobs.filter(isPaid).length} saved</p></a>
       <a class="card item" href="#drive-pay"><b>My pay</b><p class="muted">${ugx(paySums(DATA.payStubs).ytd)} YTD · ${owedTo("driver", { ...(DATA.driver || {}), id: DATA.me.driverId }, DATA.payStubs, DATA).waiting.length} waiting</p></a>
       <a class="card item" href="#drive-tasks"><b>Tasks</b><p class="muted">${tasks.length} open</p></a>
@@ -1274,41 +1307,46 @@ function viewDrive(page, taskId) {
     </div>`;
 
   const jobPanel = `
-    <h1>Jobs</h1>
-    <form class="card item" data-form="driver-load" style="margin-top:14px">
-      ${cargoSelect("")}
-      <div class="grid g2" style="margin-top:10px">
-        <input class="field js-pv" placeholder="Pickup (optional name)" />
-        <input class="field js-dv" placeholder="Drop (optional name)" />
+    <h1>My loads</h1>
+    <details class="card team-row" style="margin-top:14px">
+    <summary><div class="avatar">＋</div><div style="flex:1"><b>Add a load I found</b><div class="muted">The office sees it right away</div></div></summary>
+    <form data-form="driver-load" class="form-card" style="margin-top:12px">
+      <div class="grid g2">
+        <label class="lbl">Client<select class="field js-contractor" name="contractorId">${(DATA.contractors || []).map((c) => `<option value="${c.id}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}<option value="new">＋ New client</option></select></label>
+        <label class="lbl">Material${cargoSelect("")}</label>
+      </div>
+      <div class="grid g2 js-new-contractor" style="margin-top:10px;display:none">
+        <label class="lbl">New client name<input class="field" name="contractorName" /></label>
+        <label class="lbl">Client phone<input class="field" name="contractorPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">
-        <input class="field" type="datetime-local" name="pickupAt" placeholder="Pickup date" />
-        <input class="field" type="datetime-local" name="dropAt" placeholder="Drop date" />
+        <label class="lbl">Pickup place<input class="field js-pv" required placeholder="e.g. Kigo quarry" /></label>
+        <label class="lbl">Drop-off place<input class="field js-dv" required placeholder="e.g. Mukono site" /></label>
+      </div>
+      <div class="grid g2" style="margin-top:10px">
+        <label class="lbl">Pickup time<input class="field" type="datetime-local" name="pickupAt" /></label>
+        <label class="lbl">Drop-off time <span class="muted">(optional)</span><input class="field" type="datetime-local" name="dropAt" /></label>
       </div>
       <input type="hidden" name="origin" class="js-origin" />
       <input type="hidden" name="destination" class="js-dest" />
       <p class="muted js-route" style="margin-top:8px"></p>
-      <button type="button" class="btn btn-ghost" id="useGps" style="margin-top:8px">Add truck GPS (optional)</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="useGps" style="margin-top:4px">Use my truck's GPS for distance</button>
       <input type="hidden" name="kmToPickup" class="js-dead" />
       <input type="hidden" name="kmHaul" class="js-haul" />
       <div id="routeMap" style="height:220px;margin-top:8px;border-radius:14px"></div>
       <div class="grid g3" style="margin-top:10px">
-        <input class="field js-km" name="km" placeholder="Km" />
-        <select class="field" name="payBasis"><option value="trip">Pay per trip</option><option value="tonne">Pay per tonne</option></select>
-        <input class="field" name="payPerTonne" placeholder="UGX / t if known" />
+        <label class="lbl">Distance (km)<input class="field js-km" name="km" inputmode="decimal" /></label>
+        <label class="lbl">Client pays<select class="field" name="payBasis"><option value="trip">Per trip</option><option value="tonne">Per tonne</option></select></label>
+        <label class="lbl">UGX per tonne <span class="muted">(if known)</span><input class="field" name="payPerTonne" inputmode="numeric" /></label>
       </div>
       <div class="grid g3" style="margin-top:10px">
-        <input class="field js-diesel" name="dieselUgxPerLitre" value="${DATA.dieselDefaultUgx||5200}" placeholder="UGX per litre" />
-        <input class="field js-litres" name="fuelLitres" readonly placeholder="Needed litres" />
-        <input class="field js-fuel" name="fuelCostUgx" readonly placeholder="Total fuel cost" />
+        <label class="lbl">Diesel UGX / litre<input class="field js-diesel" name="dieselUgxPerLitre" inputmode="numeric" value="${DATA.dieselDefaultUgx || 5200}" /></label>
+        <label class="lbl">Litres needed<input class="field js-litres" name="fuelLitres" readonly placeholder="Worked out" /></label>
+        <label class="lbl">Fuel cost (UGX)<input class="field js-fuel" name="fuelCostUgx" readonly placeholder="Worked out" /></label>
       </div>
-      <select class="field js-contractor" name="contractorId" style="margin-top:10px">${(DATA.contractors||[]).map((c)=>`<option value="${c.id}">${c.name} ${c.phone||""}</option>`).join("")}<option value="new">New contractor</option></select>
-      <div class="grid g2 js-new-contractor" style="margin-top:10px;display:none">
-        <input class="field" name="contractorName" placeholder="New contractor" />
-        <input class="field" name="contractorPhone" placeholder="Phone" />
-      </div>
-      <button class="btn btn-primary wide" style="margin-top:12px">Add load</button>
+      <button class="btn btn-primary wide" style="margin-top:14px">Add load</button>
     </form>
+    </details>
     <div class="list" style="margin-top:14px">
       ${jobs.filter((j) => !isPaid(j)).length ? jobs.filter((j) => !isPaid(j)).map((j) => {
         const c = DATA.contractors.find((x) => x.id === j.contractorId);
@@ -1316,10 +1354,10 @@ function viewDrive(page, taskId) {
         const income = j.incomeUgx || ((j.tonnesDelivered || 0) * (j.payPerTonne || 0)) || j.rateUgx;
         const dir = j.pickupPin && j.dropPin ? `https://www.google.com/maps/dir/?api=1&origin=${j.pickupPin.lat},${j.pickupPin.lng}&destination=${j.dropPin.lat},${j.dropPin.lng}&travelmode=driving` : "";
         return `<div class="card item ${newOfficeLoad(j) ? "flash" : ""}"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">${j.bookingRef ? "Client booking " + esc(j.bookingRef) : "From office"}</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""} · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}</p></div>${badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
-        ${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : `<form data-form="scale" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><input class="field" name="tonnes" required placeholder="Tonnes after scale" /><input class="field" name="ticket" type="file" accept="image/*" required /></div><button class="btn btn-steel wide" style="margin-top:8px">Save scale ticket</button></form>`}
-        ${j.scaleTicket && !j.invoice ? `<form data-form="invoice" data-id="${j.id}" style="margin-top:8px"><input class="field" name="amountUgx" required placeholder="Amount UGX" value="${income || ""}" /><input class="field" name="invoice" type="file" accept="image/*" required style="margin-top:8px" /><select class="field" name="paidNow" style="margin-top:8px"><option value="0">Pay later</option><option value="1">Paid now</option></select><button class="btn btn-primary wide" style="margin-top:8px">Send invoice</button></form>` : ""}
+        ${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : `<form data-form="scale" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><label class="lbl">Tonnes on the scale<input class="field" name="tonnes" required inputmode="decimal" /></label><label class="lbl">Scale ticket photo<input class="field" name="ticket" type="file" accept="image/*" capture="environment" required /></label></div><button class="btn btn-steel wide" style="margin-top:8px">Save scale ticket</button></form>`}
+        ${j.scaleTicket && !j.invoice ? `<form data-form="invoice" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><label class="lbl">Invoice amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" value="${income || ""}" /></label><label class="lbl">Has the client paid?<select class="field" name="paidNow"><option value="0">Not yet</option><option value="1">Yes, paid now</option></select></label></div><label class="lbl" style="margin-top:8px">Invoice photo<input class="field" name="invoice" type="file" accept="image/*" capture="environment" required /></label><button class="btn btn-primary wide" style="margin-top:8px">Send invoice</button></form>` : ""}
         ${j.invoice ? `<img src="${j.invoice}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : ""}
-        <button class="btn btn-ghost wide" style="margin-top:8px" data-act="trash_job" data-id="${j.id}">Remove</button>
+        ${j.source === "driver" && !j.fromOffice && !j.bookingId ? `<button class="btn btn-ghost wide" style="margin-top:8px" data-act="trash_job" data-id="${j.id}">Remove</button>` : ""}
         ${n ? `<div class="trip-now">${badge(j.status)}${tripTime(j, j.status) ? ` <span class="muted">${tripTime(j, j.status)}</span>` : ""}</div><button class="btn btn-steel wide" style="margin-top:10px" data-act="update_job" data-id="${j.id}" data-status="${n}">${nextLabel[n]}</button>` : ""}
         </div>`;
       }).join("") : `<div class="card item">None</div>`}
@@ -1344,7 +1382,7 @@ function caneTabs(on) {
     ["#cane", "Buys", "cane"],
     ["#cane-new", "New", "cane-new"],
     ["#cane-sell", "Sell", "cane-sell"],
-    ["#cane-spend", "Spend", "cane-spend", toConfirm("sugarcane").length],
+    ["#cane-spend", "Advances", "cane-spend", toConfirm("sugarcane").length],
     ["#cane-docs", "Docs", "cane-docs"],
     ["#cane-pay", "Pay", "cane-pay"],
   ], on);
@@ -1387,20 +1425,22 @@ function viewNewCane() {
     <form class="card item" data-form="cane" style="margin-top:14px">
       <input type="hidden" name="type" value="acre" />
       <div class="tabs" style="margin-top:0">
-        <button type="button" class="btn btn-primary" id="type-acre">Acre</button>
-        <button type="button" class="btn btn-ghost" id="type-trip">Trip</button>
+        <button type="button" class="btn btn-primary" id="type-acre">Bought by the acre</button>
+        <button type="button" class="btn btn-ghost" id="type-trip">Bought by the trip</button>
       </div>
       <div class="grid g2" style="margin-top:12px">
-        <select class="field" name="sellerId">${DATA.sellers.map((s) => `<option value="${s.id}">${s.name}${s.phone ? " · " + s.phone : ""}</option>`).join("")}</select>
-        <input class="field" name="sellerName" placeholder="New seller name" />
-        <input class="field" name="sellerPhone" placeholder="Seller phone" />
-        <input class="field" name="location" required placeholder="Location" />
+        <label class="lbl">Seller<select class="field js-seller" name="sellerId">${DATA.sellers.map((s) => `<option value="${s.id}">${esc(s.name)}${s.phone ? " · " + esc(s.phone) : ""}</option>`).join("")}<option value="new" ${DATA.sellers.length ? "" : "selected"}>＋ New seller</option></select></label>
+        <label class="lbl">Location<input class="field" name="location" required placeholder="e.g. Kamuli" /></label>
+      </div>
+      <div class="grid g2 js-new-seller" style="margin-top:10px" ${DATA.sellers.length ? "hidden" : ""}>
+        <label class="lbl">New seller name<input class="field" name="sellerName" /></label>
+        <label class="lbl">Seller phone<input class="field" name="sellerPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
       </div>
       <div class="grid g2 acre-only" style="margin-top:10px">
-        <input class="field" name="acres" placeholder="Acres" />
+        <label class="lbl">Acres<input class="field" name="acres" inputmode="decimal" /></label>
       </div>
       <div class="grid g2 trip-only" style="margin-top:10px;display:none">
-        <input class="field" name="tripsAgreed" placeholder="Trips" />
+        <label class="lbl">Trips agreed<input class="field" name="tripsAgreed" inputmode="numeric" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px"><label class="lbl">Buy price (UGX)<input class="field" name="buyPriceUgx" required inputmode="numeric" placeholder="0" /></label>${dateField("date", "Date bought")}</div>
       <button class="btn btn-primary wide" style="margin-top:12px">Save buy</button>
@@ -1435,7 +1475,7 @@ function viewCaneId(id) {
       ${steps.map((st) => `<button class="chip ${b.status === st ? "on" : ""}" data-act="update_cane_buy" data-id="${b.id}" data-status="${st}">${label(st)}</button>`).join("")}
     </div>
     ${!b.millTonnes ? `<form class="card item" data-form="mill" data-id="${b.id}" style="margin-top:14px"><div class="grid g2"><input class="field" name="millTonnes" required placeholder="Tonnes" /><input class="field" name="millPriceUgx" placeholder="${m?.priceUgxPerTonne || "UGX/t"}" /></div><button class="btn btn-primary wide" style="margin-top:10px">Save weight</button></form>` : ""}
-    ${!b.sellerPaid ? (DATA.me.role === "admin" ? `<button class="btn btn-ghost wide" style="margin-top:10px" data-act="pay_seller" data-id="${b.id}">Office paid seller ${ugx(b.buyPriceUgx)}</button>` : `<form class="card item" data-form="pay-seller" data-id="${b.id}" style="margin-top:10px"><b>Pay seller ${ugx(b.buyPriceUgx)}</b>${fundSelect("sugarcane", true, b.buyPriceUgx)}<button class="btn btn-primary wide" style="margin-top:10px">Pay seller</button></form>`) : ""}`;
+    ${!b.sellerPaid ? (DATA.me.role === "admin" ? `<button class="btn btn-ghost wide" style="margin-top:10px" data-act-sheet="seller" data-id="${b.id}">Office paid seller ${ugx(b.buyPriceUgx)}</button>` : `<form class="card item" data-form="pay-seller" data-id="${b.id}" style="margin-top:10px"><b>Pay seller ${ugx(b.buyPriceUgx)}</b>${fundSelect("sugarcane", true, b.buyPriceUgx)}<button class="btn btn-primary wide" style="margin-top:10px">Pay seller</button></form>`) : ""}`;
 }
 
 
@@ -1445,25 +1485,29 @@ function viewCaneSell() {
   return `
     <h1>Cane</h1>
     ${caneTabs("cane-sell")}
-    <form class="card item" data-form="cane-sale" style="margin-top:14px">
+    <form class="card item form-card" data-form="cane-sale" style="margin-top:14px">
+      <p class="form-step">Sale to the mill</p>
       <div class="grid g2">
-        <input class="field" name="tonnes" id="saleT" required placeholder="Tonnes" />
-        <input class="field" name="pricePerTonne" id="saleP" required placeholder="UGX / tonne" />
+        <label class="lbl">Mill<select class="field" name="millId">${mills.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></label>
+        ${dateField("date", "Sale date")}
       </div>
-      <div class="grid g2" style="margin-top:10px">${dateField("date", "Sale date")}</div>
-      <p class="muted" id="saleSum" style="margin-top:8px">Total UGX 0</p>
       <div class="grid g2" style="margin-top:10px">
-        <select class="field" name="millId" aria-label="Mill">${mills.map((m)=>`<option value="${m.id}">${m.name}</option>`).join("")}</select>
-        <select class="field" name="method" aria-label="Paid by"><option value="cash">Cash</option><option value="mtn_momo">MoMo</option><option value="bank">Bank</option></select>
+        <label class="lbl">Tonnes<input class="field" name="tonnes" id="saleT" required inputmode="decimal" placeholder="0" /></label>
+        <label class="lbl">Price per tonne (UGX)<input class="field" name="pricePerTonne" id="saleP" required inputmode="numeric" placeholder="0" /></label>
       </div>
-      <select class="field" name="buyId" aria-label="For cane buy" style="margin-top:10px"><option value="">— Not linked to a buy —</option>${(DATA.caneBuys||[]).map((b)=>`<option value="${b.id}">${b.location||b.id} · ${b.acres?b.acres+" ac": (b.tripsAgreed||0)+" trips"}</option>`).join("")}</select>
-      <div class="grid g3" style="margin-top:10px">
-        <input class="field" name="cuttingCostUgx" placeholder="Cut UGX" />
-        <input class="field" name="loadingCostUgx" placeholder="Load UGX" />
-        <input class="field" name="transportUgx" placeholder="Transport UGX" />
+      <p class="sum-line" id="saleSum">Total UGX 0</p>
+      <div class="grid g2">
+        <label class="lbl">Mill paid by<select class="field" name="method">${methodOptions("bank")}</select></label>
+        <label class="lbl">For cane buy <span class="muted">(optional)</span><select class="field" name="buyId"><option value="">— Not linked —</option>${(DATA.caneBuys || []).map((b) => `<option value="${b.id}">${esc(b.location || b.id)} · ${b.acres ? b.acres + " ac" : (b.tripsAgreed || 0) + " trips"}</option>`).join("")}</select></label>
       </div>
-      <input class="field" name="note" placeholder="Note" style="margin-top:10px" />
-      <button class="btn btn-primary wide" style="margin-top:12px">Save sale</button>
+      <p class="form-step">Costs for this sale <span class="muted">(optional)</span></p>
+      <div class="grid g3">
+        <label class="lbl">Cutting cost (UGX)<input class="field" name="cuttingCostUgx" inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Loading cost (UGX)<input class="field" name="loadingCostUgx" inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Transport cost (UGX)<input class="field" name="transportUgx" inputmode="numeric" placeholder="0" /></label>
+      </div>
+      <label class="lbl" style="margin-top:10px">Note <span class="muted">(optional)</span><input class="field" name="note" /></label>
+      <button class="btn btn-primary wide" style="margin-top:14px">Save sale</button>
     </form>
     <div class="card" style="margin-top:14px;overflow:auto">
       <table>
@@ -1495,7 +1539,7 @@ function farmTabs(on) {
     ["#passion", "Blocks", "passion"],
     ["#field", "Work", "field"],
     ["#passion-sell", "Sell", "passion-sell"],
-    ["#passion-spend", "Spend", "passion-spend", toConfirm("passion").length],
+    ["#passion-spend", "Advances", "passion-spend", toConfirm("passion").length],
     ["#passion-docs", "Docs", "passion-docs"],
     ["#passion-pay", "Pay", "passion-pay"],
   ], on);
@@ -1566,12 +1610,12 @@ function viewField() {
       <p class="eyebrow">${meta[1]}</p>
       <input type="hidden" name="kind" value="${kind}" />
       <div class="tabs" style="margin-top:8px" id="blockPick">
-        ${["B1","B2","B3","B4"].map((id,i) => `<button type="button" class="block-btn ${i===0?"on":""}" data-block="${id}">${id}</button>`).join("")}
+        ${(() => { const bl = (DATA.blocks || []).length ? DATA.blocks.map((b) => b.id) : ["B1", "B2", "B3", "B4"]; return bl.map((id, i) => `<button type="button" class="block-btn ${i === 0 ? "on" : ""}" data-block="${esc(id)}">${esc(id)}</button>`).join(""); })()}
       </div>
-      <input type="hidden" name="blockId" value="B1" />
+      <input type="hidden" name="blockId" value="${esc(((DATA.blocks || [])[0] || {}).id || "B1")}" />
       <div class="grid g2" style="margin-top:10px">
-        <input class="field" name="date" type="date" />
-        <input class="field" name="costUgx" placeholder="Cost UGX" />
+        <label class="lbl">Date<input class="field" name="date" type="date" value="${todayYmd()}" max="${todayYmd()}" /></label>
+        <label class="lbl">Cost (UGX)<input class="field" name="costUgx" inputmode="numeric" placeholder="0" /></label>
       </div>
       ${fundSelect("passion")}
       <div style="margin-top:10px">${extra}</div>
@@ -1597,20 +1641,26 @@ function viewPassionSell() {
       <div class="card kpi passion"><span class="eyebrow">Can sell</span><b>${stock} kg</b></div>
       <div class="card kpi gold"><span class="eyebrow">Sales</span><b>${ugx(DATA.kpis?.weekSales || 0)}</b></div>
     </div>
-    <form class="card item" data-form="sale" style="margin-top:14px">
-      <div class="grid g4">
-        <input class="field" name="buyer" required placeholder="Buyer" />
-        <input class="field" name="kg" required placeholder="Kg" />
-        <input class="field" name="amountUgx" required placeholder="Sale UGX" />
-        <select class="field" name="payMethod" aria-label="Paid by"><option value="cash">Cash</option><option value="mtn_momo">MoMo</option><option value="airtel_money">Airtel</option><option value="bank">Bank</option></select>
+    <form class="card item form-card" data-form="sale" style="margin-top:14px">
+      <p class="form-step">New sale</p>
+      <div class="grid g2">
+        <label class="lbl">Buyer<input class="field" name="buyer" required placeholder="Name or market" /></label>
+        ${dateField("date", "Sale date")}
       </div>
-      <div class="grid g2" style="margin-top:10px">${dateField("date", "Sale date")}</div>
-      <div class="grid g3" style="margin-top:10px">
-        <input class="field" name="paidUgx" placeholder="Paid now UGX" />
-        <input class="field" name="expenseUgx" placeholder="Sale expense UGX" />
-        <input class="field" name="expenseNote" placeholder="Expense note" />
+      <div class="grid g2" style="margin-top:10px">
+        <label class="lbl">Kg sold<input class="field" name="kg" required inputmode="decimal" placeholder="0" /></label>
+        <label class="lbl">Total sale (UGX)<input class="field" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
       </div>
-      <button class="btn btn-passion wide" style="margin-top:10px">Sell</button>
+      <div class="grid g2" style="margin-top:10px">
+        <label class="lbl">Amount received now (UGX)<input class="field" name="paidUgx" inputmode="numeric" placeholder="Leave empty if paid in full" /></label>
+        <label class="lbl">Paid by<select class="field" name="payMethod">${methodOptions("cash")}</select></label>
+      </div>
+      <p class="form-step">Sale costs <span class="muted">(optional)</span></p>
+      <div class="grid g2">
+        <label class="lbl">Cost (UGX)<input class="field" name="expenseUgx" inputmode="numeric" placeholder="e.g. transport, sacks" /></label>
+        <label class="lbl">What was it for<input class="field" name="expenseNote" /></label>
+      </div>
+      <button class="btn btn-passion wide" style="margin-top:14px">Save sale</button>
     </form>
     <div class="card" style="margin-top:14px;overflow:auto">
       <table>
@@ -1639,7 +1689,11 @@ function dateField(name, labelText, opts) {
 const DOC_TYPES = [["receipt", "Receipt"], ["invoice", "Invoice"], ["quotation", "Quotation"], ["contract", "Contract / agreement"], ["licence", "Licence / permit / insurance"], ["truck_papers", "Truck papers (logbook etc.)"], ["delivery", "Delivery note / weighbridge"], ["statement", "Bank / MoMo statement"], ["payslip", "Payslip / pay record"], ["other", "Other"]];
 const DOC_EXPIRES = ["licence", "contract", "truck_papers"];
 const DOC_HOME = { trucking: "#trucks-docs", sugarcane: "#cane-docs", passion: "#passion-docs" };
-function docTypes(tag) { return DOC_TYPES.filter(([k]) => k !== "truck_papers" || tag === "trucking"); }
+function docTypes(tag) {
+  if (DATA && DATA.me && DATA.me.role === "driver") return DOC_TYPES.filter(([k]) => ["receipt", "delivery", "licence", "truck_papers", "other"].includes(k));
+  return DOC_TYPES.filter(([k]) => k !== "truck_papers" || tag === "trucking");
+}
+const DOC_EXAMPLE = { trucking: "e.g. Shell fuel receipt", sugarcane: "e.g. Kakira mill weighbridge slip", passion: "e.g. Fertilizer receipt, Block B2" };
 function docTypeName(k) { return (DOC_TYPES.find(([v]) => v === k) || [, "Other"])[1]; }
 function autoDocs(tag) {
   // receipts and papers already captured elsewhere in the app
@@ -1700,7 +1754,7 @@ function viewDocs(tag) {
       <form data-form="doc" data-tag="${tag}" style="margin-top:12px">
         <div class="grid g2">
           <label class="lbl">Type<select class="field js-doc-type" name="type">${docTypes(tag).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
-          <label class="lbl">Name<input class="field" name="title" required placeholder="e.g. Shell fuel receipt" /></label>
+          <label class="lbl">Name<input class="field" name="title" required placeholder="${DOC_EXAMPLE[tag] || ""}" /></label>
         </div>
         <div class="grid g3" style="margin-top:10px">
           ${dateField("date", "Document date")}
@@ -1993,7 +2047,7 @@ function viewHome() {
         <div class="muted">Sales this month ${ugx(fruitM.reduce((s, x) => s + (x.amountUgx || 0), 0))}</div></a>
     </div>
     <div class="quick">
-      <a class="btn btn-ghost" href="#trucks-work">＋ Task</a><a class="btn btn-ghost" href="#trucks-new">＋ Load</a><a class="btn btn-ghost" href="#money-spend">＋ Spend</a><a class="btn btn-ghost" href="#trucks-docs">＋ Doc</a>${DATA.me.assistant ? "" : `<a class="btn btn-ghost" href="#team">Team</a>`}
+      <a class="btn btn-ghost" href="#trucks-work">＋ Task</a><a class="btn btn-ghost" href="#trucks-new">＋ Load</a><a class="btn btn-ghost" href="#money-spend">＋ Expense</a><a class="btn btn-ghost" href="#trucks-docs">＋ Doc</a>${DATA.me.assistant ? "" : `<a class="btn btn-ghost" href="#team">Team</a>`}
     </div>`;
 }
 
@@ -2030,7 +2084,7 @@ function fixPageTitle() {
 function moneyTabs(on) {
   return tabMenu([
     ["#money", "Flow", "money"],
-    ["#money-spend", "Spend", "money-spend"],
+    ["#money-spend", "Expenses", "money-spend"],
     ["#money-pay", "Pay", "money-pay"],
   ], on);
 }
@@ -2045,6 +2099,69 @@ function cashRef(c) {
 }
 function esc(v) {
   return String(v == null ? "" : v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+const PAY_METHODS = [["cash", "Cash"], ["mtn_momo", "MTN MoMo"], ["airtel_money", "Airtel Money"], ["bank", "Bank transfer"]];
+function methodOptions(sel) { return PAY_METHODS.map(([k, l]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${l}</option>`).join(""); }
+// a bottom sheet for a short form (payment received, payment sent)
+function openSheet({ title, sub, body, submit, onSubmit }) {
+  closeSheet();
+  const wrap = document.createElement("div");
+  wrap.className = "sheet-wrap"; wrap.id = "sheet";
+  wrap.innerHTML = `<form class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <div class="sheet-head"><div><b>${esc(title)}</b>${sub ? `<div class="muted">${sub}</div>` : ""}</div><button type="button" class="icon-x js-sheet-x" aria-label="Close">✕</button></div>
+    <div class="sheet-body">${body}</div>
+    <p class="err js-sheet-err" role="alert"></p>
+    <button class="btn btn-primary wide">${esc(submit || "Save")}</button>
+  </form>`;
+  document.body.appendChild(wrap);
+  document.body.classList.add("sheet-open");
+  const form = wrap.querySelector("form");
+  wrap.onclick = (e) => { if (e.target === wrap) closeSheet(); };
+  wrap.querySelector(".js-sheet-x").onclick = closeSheet;
+  const m = form.querySelector("[name=method]"), refBox = form.querySelector(".js-ref");
+  if (m && refBox) { const s = () => { refBox.hidden = m.value === "cash"; }; m.onchange = s; s(); }
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = Object.fromEntries(new FormData(form).entries());
+    try { await onSubmit(fd); closeSheet(); } catch (err) { form.querySelector(".js-sheet-err").textContent = err.message || "Could not save"; }
+  };
+  setTimeout(() => { const f = form.querySelector("input:not([type=hidden]),select"); if (f) f.focus(); }, 50);
+}
+function closeSheet() { const s = document.getElementById("sheet"); if (s) s.remove(); document.body.classList.remove("sheet-open"); }
+function payFields(amount, opts) {
+  const o = opts || {};
+  return `<label class="lbl">Amount (UGX)<input class="field" name="amountUgx" inputmode="numeric" required value="${amount || ""}" ${o.fixed ? "readonly" : ""} /></label>
+    <label class="lbl">${o.methodLabel || "Paid by"}<select class="field" name="method">${methodOptions(o.method || "cash")}</select></label>
+    <label class="lbl js-ref">Transaction ID / reference<input class="field" name="reference" maxlength="60" placeholder="From the SMS or bank slip" /></label>
+    <label class="lbl">Date<input class="field" type="date" name="date" required value="${todayYmd()}" max="${todayYmd()}" /></label>`;
+}
+function jobReceived(j) { return (DATA.cash || []).filter((c) => c.direction === "in" && (c.jobId === j.id || c.refId === j.id) && c.category !== "advance_return").reduce((s, c) => s + (Number(c.amountUgx) || 0), 0); }
+function openJobPaid(id) {
+  const j = (DATA.jobs || []).find((x) => x.id === id); if (!j) return;
+  const total = j.incomeUgx || j.rateUgx || 0, got = jobReceived(j), left = Math.max(0, total - got);
+  const c = (DATA.contractors || []).find((x) => x.id === j.contractorId);
+  openSheet({
+    title: "Client paid · " + (j.code || "Load"),
+    sub: esc((c ? c.name + " · " : "") + (j.cargo || "")) + (got ? ` · ${ugx(got)} already in` : ""),
+    body: payFields(left || total),
+    submit: "Mark load paid",
+    onSubmit: (fd) => {
+      const amt = Number(String(fd.amountUgx).replace(/[^\d]/g, ""));
+      if (!amt) throw new Error("Enter the amount received");
+      return act("mark_job_paid", { id: j.id, paidUgx: got + amt, method: fd.method, reference: fd.reference, paidAt: fd.date });
+    },
+  });
+}
+function openSellerPaid(id) {
+  const b = (DATA.caneBuys || []).find((x) => x.id === id); if (!b) return;
+  const s = (DATA.sellers || []).find((x) => x.id === b.sellerId);
+  openSheet({
+    title: "Pay cane seller", sub: esc((s ? s.name + " · " : "") + (b.location || "")),
+    body: payFields(b.buyPriceUgx, { fixed: true, methodLabel: "Paid with", method: s && s.phone ? "mtn_momo" : "cash" }),
+    submit: "Save payment",
+    onSubmit: (fd) => act("pay_seller", { id: b.id, method: fd.method, reference: fd.reference, date: fd.date }),
+  });
 }
 const METHOD_LABEL = { cash: "Cash", mtn_momo: "MTN MoMo", airtel_money: "Airtel Money", bank: "Bank transfer", mobile_money: "Mobile money", invoice: "Invoice" };
 const BIZ_LABEL = { trucking: "Fleet", sugarcane: "Cane", passion: "Passion", overhead: "Overhead" };
@@ -2388,7 +2505,7 @@ function viewFundsAdmin(tag) {
   const mKey = thisMonth(0);
   const spentMonth = floats.reduce((s, f) => s + (f.usages || []).filter((u) => String(u.date).startsWith(mKey)).reduce((a, u) => a + (u.amountUgx || 0), 0), 0);
   return `
-    <div class="row" style="align-items:center"><h1>${title} · Spend</h1></div>
+    <div class="row" style="align-items:center"><h1>${title} · Advances</h1></div>
     <h2 style="margin:16px 0 0">Requests ${reqs.length ? `<span class="attn-n big">${reqs.length}</span>` : ""}</h2>
     ${reqs.length ? reqs.map((r) => { const p = requesterOf(r); const link = linkText(r); const [tone, st] = reqStatusText(r); return `<details class="card req-card flash" ${reqs.length === 1 ? "open" : ""}>
       <summary>
@@ -2533,12 +2650,12 @@ function workerFundsView(tag) {
 function driverAdvanceView() { return `<h1>Advance</h1>${workerFundsView("trucking")}`; }
 function viewCaneSpend() {
   if (DATA.me.role === "admin") return viewFundsAdmin("sugarcane");
-  return `<h1>Cane</h1>${caneTabs("cane-spend")}<h2 style="margin:16px 0 0">Spend</h2>${workerFundsView("sugarcane")}`;
+  return `<h1>Cane</h1>${caneTabs("cane-spend")}<h2 style="margin:16px 0 0">Advances</h2>${workerFundsView("sugarcane")}`;
 }
 function viewCaneAsk() { return viewCaneSpend(); }
 function viewPassionSpend() {
   if (DATA.me.role === "admin") return viewFundsAdmin("passion");
-  return `<h1>Passion</h1>${farmTabs("passion-spend")}<h2 style="margin:16px 0 0">Spend</h2>${workerFundsView("passion")}`;
+  return `<h1>Passion</h1>${farmTabs("passion-spend")}<h2 style="margin:16px 0 0">Advances</h2>${workerFundsView("passion")}`;
 }
 function viewFleetSpend() { return viewFundsAdmin("trucking"); }
 // "Pay from" select for manager forms that cost money (paying a seller, farm work)
@@ -2568,7 +2685,7 @@ function viewSpend() {
     <h1>Money</h1>
     ${moneyTabs("money-spend")}
     <div class="grid g3" style="margin-top:14px">
-      ${[["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([t, n]) => `<a class="card kpi req-link ${pend[t] ? "attn-kpi" : ""}" href="${FUND_HOME[t]}"><span class="eyebrow">${n} requests</span><b>${pend[t] ? pend[t] + " waiting" : "None"}</b><span class="muted">Open ${n} › Spend</span></a>`).join("")}
+      ${[["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([t, n]) => `<a class="card kpi req-link ${pend[t] ? "attn-kpi" : ""}" href="${FUND_HOME[t]}"><span class="eyebrow">${n} requests</span><b>${pend[t] ? pend[t] + " waiting" : "None"}</b><span class="muted">Open ${n} › Advances</span></a>`).join("")}
     </div>
     <details class="card team-row" style="margin-top:12px">
       <summary><div class="avatar">＋</div><div style="flex:1"><b>Office paid directly</b></div></summary>
@@ -2592,7 +2709,7 @@ function viewSpend() {
       </form>
     </details>
     <div class="row" style="margin-top:22px;align-items:center">
-      <h2 style="margin:0">Money out</h2>
+      <h2 style="margin:0">Office expenses</h2>
       <div class="seg seg-sm">${[["", "All"], ["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([k, t]) => `<button type="button" class="seg-btn ${biz === k ? "on" : ""}" data-spendfilter="${k}">${t}</button>`).join("")}</div>
     </div>
     <div class="grid g2" style="margin-top:10px">
@@ -2641,7 +2758,22 @@ function bindSpend() {
 function bindDriverAdvance() {
   document.querySelectorAll("form[data-form=float-use]").forEach((form) => {
     const cat = form.querySelector(".js-use-cat"), lit = form.querySelector(".js-use-litres");
-    if (cat && lit) { const fuel = cat.dataset.fuel; const s = () => { lit.style.display = fuel && cat.value === fuel ? "" : "none"; }; cat.addEventListener("change", s); s(); }
+    if (cat && lit) {
+      const fuel = cat.dataset.fuel, viaFuel = DATA.me.role === "driver" && fuel === "diesel";
+      let note = form.querySelector(".js-fuel-note");
+      if (viaFuel && !note) { note = document.createElement("div"); note.className = "card item req-box js-fuel-note"; note.innerHTML = `<b>Diesel goes on the Fuel page</b><p class="muted" style="margin:4px 0 8px">Pick this advance under “Paid from” so it's counted once.</p><a class="btn btn-primary wide" href="#drive-fuel">Log fuel</a>`; cat.closest(".grid").after(note); }
+      const s = () => {
+        const isFuel = fuel && cat.value === fuel;
+        lit.style.display = isFuel && !viaFuel ? "" : "none";
+        if (viaFuel) {
+          note.hidden = !isFuel;
+          const keep = cat.closest("label");
+          [...form.children].forEach((el) => { if (el === note) return; if (el.contains(cat)) [...el.children].forEach((c) => { if (c !== keep) c.style.display = isFuel ? "none" : ""; }); else el.style.display = isFuel ? "none" : ""; });
+          if (!isFuel) lit.style.display = "none";
+        }
+      };
+      cat.addEventListener("change", s); s();
+    }
   });
 }
 
@@ -2758,23 +2890,7 @@ function viewTeam() {
       ${trusted.filter((d) => d.id !== myDev).map((d) => `<div class="pay-line"><div><b>${esc(d.label)}</b><div class="muted">Trusted ${whenShort(d.addedAt)}</div></div><button type="button" class="btn btn-ghost btn-sm" data-act="untrust_device" data-device="${esc(d.id)}">Remove</button></div>`).join("")}
     </div>` : ""}
     ${isMain ? `<div id="blocksBox"></div>` : ""}
-    ${isMain ? `<details class="card item fresh-card" style="margin-top:12px">
-      <summary><b>Start fresh for launch</b><div class="muted">Clear all test records. Logins and phones stay.</div></summary>
-      <form id="freshForm" style="margin-top:12px">
-        <p class="eyebrow">Keep</p>
-        <label class="check"><input type="checkbox" name="trucks" checked /> Trucks and drivers</label>
-        <label class="check"><input type="checkbox" name="blocks" checked /> Passion fruit blocks</label>
-        <label class="check"><input type="checkbox" name="contractors" /> Clients / contractors list</label>
-        <label class="check"><input type="checkbox" name="sellers" /> Cane sellers and mills</label>
-        <p class="muted" style="margin-top:10px">Cleared: loads, bookings, money, pay, advances, requests, tasks, inspections, fuel, docs, cane and passion records, sign-in history, GPS.</p>
-        <div class="grid g2" style="margin-top:10px">
-          <label class="lbl">Your PIN<input class="field" name="pin" type="password" inputmode="numeric" autocomplete="off" required /></label>
-          <label class="lbl">Type START FRESH<input class="field" name="confirm" autocomplete="off" required /></label>
-        </div>
-        <p class="err" id="freshErr"></p>
-        <button class="btn btn-danger wide" style="margin-top:10px">Clear test records</button>
-      </form>
-    </details>` : ""}
+    ${payInfoCard().replace("<summary>Where clients pay</summary>", "<summary><b>Where clients pay</b><div class=\"muted\">Airtel Money and bank details shown on booking links</div></summary>").replace('style="margin-top:10px"', 'style="margin-top:12px"')}
     <div class="grid g3" style="margin-top:14px">
       <div class="card kpi"><span class="eyebrow">People</span><b>${users.length}</b></div>
       <div class="card kpi steel"><span class="eyebrow">Ready to sign in</span><b>${ok}</b></div>
@@ -3238,10 +3354,20 @@ function bind() {
       if (shot) { shot.style.display = (val === "warn" || val === "fail") ? "" : "none"; if (val === "pass") shot.value = ""; }
       lab.querySelector("input").checked = true;
       showVoiceIfBad(lab.closest("form"));
+      inspCount(lab.closest("form"));
     };
   });
+  document.querySelectorAll(".js-all-ok").forEach((b) => { b.onclick = () => {
+    const form = b.closest("form");
+    if (!confirm("Mark every part OK? Only do this after checking the truck.")) return;
+    form.querySelectorAll(".inspect-part").forEach((box) => { if (box.querySelector("input[type=radio]:checked")) return; const l = box.querySelector(".mark.pass"); box.querySelectorAll(".mark").forEach((c) => c.classList.remove("on")); l.classList.add("on"); l.querySelector("input").checked = true; });
+    showVoiceIfBad(form); inspCount(form);
+  }; });
+  document.querySelectorAll(".js-paid").forEach((b) => { b.onclick = () => openJobPaid(b.dataset.id); });
+  document.querySelectorAll("[data-act-sheet=seller]").forEach((b) => { b.onclick = () => openSellerPaid(b.dataset.id); });
+  const ASK = { trash_job: "Move this load to the trash?", purge_job: "Delete this load for good? This can't be undone.", purge_booking: "Delete this booking for good? This can't be undone.", trash_booking: "Move this booking to the trash?", decline_advance: "Decline this request?", remove_device: "Remove this phone? The person will need approval again.", reject_device: "Reject this phone?" };
   document.querySelectorAll("[data-act]").forEach((btn) => {
-    btn.onclick = () => act(btn.dataset.act, { id: btn.dataset.id, status: btn.dataset.status, method: "mtn_momo", refId: btn.dataset.ref, kind: btn.dataset.kind, amountUgx: btn.dataset.amount, personId: btn.dataset.person, personName: btn.dataset.name, month: btn.dataset.month, floatId: btn.dataset.float, userId: btn.dataset.user, deviceId: btn.dataset.device, label: btn.dataset.label });
+    btn.onclick = () => (ASK[btn.dataset.act] && !confirm(ASK[btn.dataset.act])) ? null : act(btn.dataset.act, { id: btn.dataset.id, status: btn.dataset.status, refId: btn.dataset.ref, kind: btn.dataset.kind, amountUgx: btn.dataset.amount, personId: btn.dataset.person, personName: btn.dataset.name, month: btn.dataset.month, floatId: btn.dataset.float, userId: btn.dataset.user, deviceId: btn.dataset.device, label: btn.dataset.label });
   });
   const cargoSel = document.querySelector(".js-cargo");
   const cargoOther = document.querySelector(".js-cargo-other");
@@ -3315,7 +3441,7 @@ function bind() {
         location.hash = fromBk ? "#trucks-book" : "#trucks";
       } else if (kind === "save-truck") {
         await act("save_truck", fd);
-        location.hash = "#trucks-drivers";
+        location.hash = "#trucks";
       } else if (kind === "save-driver") {
         const file = form.querySelector("[name=licensePhoto]") && form.querySelector("[name=licensePhoto]").files[0];
         if (file) fd.licensePhoto = await compressPhoto(file);
@@ -3339,9 +3465,11 @@ function bind() {
         const photos = {};
         form.querySelectorAll(".inspect-part").forEach((box) => {
           const id = box.dataset.part;
-          const val = (box.querySelector("input[type=radio]:checked") || {}).value || "pass";
+          const val = (box.querySelector("input[type=radio]:checked") || {}).value || "";
           items[id] = val;
         });
+        const missing = Object.keys(items).filter((k) => !items[k]);
+        if (missing.length) { alert("Check every part first. " + missing.length + " not checked yet."); const first = form.querySelector(`.inspect-part[data-part="${missing[0]}"]`); if (first) first.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
         const need = Object.keys(items).filter((k) => items[k] === "warn" || items[k] === "fail");
         const files = [...form.querySelectorAll(".js-shot")];
         for (const inp of files) {
@@ -3377,7 +3505,7 @@ function bind() {
           amountUgx: row.querySelector(".req-amt").value,
         }));
         await act("request_money", { tag: fd.tag || "sugarcane", note: fd.note, lines });
-        location.hash = "#cane-ask";
+        location.hash = "#cane-spend";
       } else if (kind === "harvest") {
         await act("log_farm_work", { ...fd, kind: "harvest" });
       } else if (kind === "field") {
@@ -3534,6 +3662,8 @@ function bind() {
     taskKind.onchange = syncParts;
     syncParts();
   }
+  document.querySelectorAll(".js-seller").forEach((sel) => { const box = sel.form.querySelector(".js-new-seller"); const s = () => { box.hidden = sel.value !== "new"; if (sel.value !== "new") { sel.form.sellerName.value = ""; sel.form.sellerPhone.value = ""; } }; sel.onchange = s; });
+  document.querySelectorAll(".js-nl-truck").forEach((sel) => { const dr = sel.form.querySelector(".js-nl-driver"); const s = () => { const o = sel.selectedOptions[0]; if (o && o.dataset.driver && dr) dr.value = o.dataset.driver; }; sel.addEventListener("change", s); s(); });
   document.querySelectorAll(".js-unit").forEach((sel) => {
     const form = sel.form;
     const sync = () => {

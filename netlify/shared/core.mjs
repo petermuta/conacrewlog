@@ -118,6 +118,22 @@ function meta(book) {
   return book._meta;
 }
 const bump = (book) => ++meta(book).seq;
+// one-time fixes to office data, run once on the server
+function migrateBook(book) {
+  const m = meta(book); m.mig = m.mig || {};
+  let changed = false;
+  if (!m.mig.trucks8x4 && Array.isArray(book.trucks)) {
+    const drivers = book.drivers || [];
+    book.trucks.forEach((t) => {
+      const d = drivers.find((x) => x.id === t.assignedDriverId) || drivers.find((x) => x.assignedTruckId === t.id);
+      const hp = d && /paul/i.test(d.name || "") ? 420 : d && /meddy/i.test(d.name || "") ? 370 : t.hp || 370;
+      t.model = "Sinotruk HOWO 8×4"; t.hp = hp;
+      t._u = now(); t._s = bump(book); changed = true;
+    });
+    m.mig.trucks8x4 = true;
+  }
+  return changed;
+}
 
 // Turn a whole phone book into a server book (first upload from the main admin)
 async function fromWholeBook(kv, whole) {
@@ -347,7 +363,8 @@ export async function handleSync(kv, { method, token, body, ip }) {
     return out;
   }
 
-  if (op === "reset") {
+  if (op === "reset") return { status: 410, body: { error: "Start fresh was used for launch and is now turned off." } };
+  if (op === "reset_disabled") {
     // Start fresh for launch: main admin only, PIN again, typed confirmation. A full copy is kept first.
     const { book: cur } = await loadBook(kv);
     const who = await readToken(kv, cur, token);
@@ -434,10 +451,11 @@ export async function handleSync(kv, { method, token, body, ip }) {
       const who = await readToken(kv, book, token);
       if (!who) { out = { status: 401, body: { error: "signin" } }; return { write: false }; }
       const has = Object.keys(ch.set || {}).some((k) => (ch.set[k] || []).length) || Object.keys(ch.del || {}).some((k) => (ch.del[k] || []).length) || Object.keys(ch.top || {}).length;
+      const mig = migrateBook(book);
       let refused = null;
       if (has) refused = await applyChanges(kv, book, who.user, ch);
       out = { status: 200, body: delta(book, who.user, Number(body.since) || 0, refused) };
-      return has ? { book } : { write: false };
+      return has || mig ? { book } : { write: false };
     });
     return out;
   }
@@ -501,7 +519,7 @@ export const PAY_INFO = {
 };
 const FULL_OFF = 0.05, DEPOSIT = 0.75;
 export const payPlan = (quote, plan) => { const q = Math.round(Number(quote) || 0); if (plan === "full") { const total = Math.round(q * (1 - FULL_OFF)); return { total, due: total, balance: 0 }; } const due = Math.round(q * DEPOSIT); return { total: q, due, balance: q - due }; };
-const CARGO_BASE = ["Plaster Sand", "Lake Sand", "Stone dust", "Coal", "Dirt (murram)", "Bumba", "Rocks", "Sugarcane"];
+const CARGO_BASE = ["Plaster Sand", "Lake Sand", "Stone dust", "Coal", "Murram (dirt)", "Bumba", "Rocks", "Sugarcane"];
 const BOOK_PER_DAY = 150;
 const clip = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
 // client phones from any country, stored as +<country><number>; a local Ugandan 07... number becomes +256...

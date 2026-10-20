@@ -56,14 +56,14 @@ function dayOf(body, key) {
   return v > todayStr() ? todayStr() : v;
 }
 // One load = one income line, whichever button recorded it
-function recordJobIncome(db, job, amount, date, method) {
+function recordJobIncome(db, job, amount, date, method, reference) {
   if (!amount) return null;
   // only what isn't in yet (a client may already have paid a deposit on the booking)
   const already = (db.cash || []).filter((c) => c.direction === "in" && (c.refId === job.id || c.jobId === job.id) && c.category !== "advance_return").reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
   const rest = amount - already;
   if (rest <= 0) return null;
   const c = (db.contractors || []).find((x) => x.id === job.contractorId);
-  const row = { id: uid("k"), date: date || todayStr(), direction: "in", amountUgx: rest, tag: "trucking", category: "load_income", method: method || "invoice", note: "Load " + (job.code || job.id) + (job.cargo ? " · " + job.cargo : "") + (already ? " · balance" : ""), refId: job.id, jobId: job.id, truckId: job.truckId, payeeName: c ? c.name : "" };
+  const row = { id: uid("k"), date: date || todayStr(), direction: "in", amountUgx: rest, tag: "trucking", category: "load_income", method: method || "invoice", reference: String(reference || "").slice(0, 60), note: "Load " + (job.code || job.id) + (job.cargo ? " · " + job.cargo : "") + (already ? " · balance" : ""), refId: job.id, jobId: job.id, truckId: job.truckId, payeeName: c ? c.name : "" };
   db.cash.unshift(row);
   return row;
 }
@@ -566,6 +566,7 @@ function applyAction(db, user, body) {
       const job = db.jobs.find((j) => j.id === body.id);
       if (!job || job.driverId !== user.driverId) throw new Error("No access");
       if (job.paid || job.incomeUgx) throw new Error("Paid load stays. Ask the admin.");
+      if (job.fromOffice || job.bookingId || job.source !== "driver") throw new Error("Loads from the office stay. Ask the office to remove it.");
     }
     if (body.driverId && body.driverId !== user.driverId) throw new Error("No access");
   }
@@ -644,37 +645,48 @@ function applyAction(db, user, body) {
   }
   if (action === "save_truck") {
     if (!db.trucks) db.trucks = [];
+    const plate = String(body.plate || "").trim().toUpperCase().replace(/\s+/g, " ");
     let t = body.id ? db.trucks.find((x) => x.id === body.id) : null;
+    if (plate && db.trucks.some((x) => x.id !== (t && t.id) && plateKey(x.plate) === plateKey(plate))) throw new Error("A truck with plate " + plate + " is already saved");
+    const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? v : "");
     if (!t) {
-      t = { id: uid("t"), plate: body.plate, model: body.model || "Sinotruk HOWO", year: Number(body.year) || 2021, odometerKm: Number(body.odometerKm) || 0, kmPerLitre: 2.9, hp: Number(body.hp)||370, status: "idle", nextServiceKm: Number(body.nextServiceKm) || 0, insuranceExpiry: body.insuranceExpiry || "", roadLicenceExpiry: body.roadLicenceExpiry || "", assignedDriverId: body.assignedDriverId || "" };
-      db.trucks.unshift(t);
-    } else {
-      ["plate","model","assignedDriverId","status"].forEach((k) => { if (body[k] !== undefined && body[k] !== "") t[k] = body[k]; });
-      if (body.odometerKm) t.odometerKm = Number(body.odometerKm);
-      if (body.nextServiceKm) t.nextServiceKm = Number(body.nextServiceKm);
-    }
-    if (t.assignedDriverId) {
+      if (!plate) throw new Error("Enter the number plate");
+      t = { id: uid("t"), plate, model: "Sinotruk HOWO 8×4", year: 2021, odometerKm: 0, kmPerLitre: 2.9, hp: 370, status: "idle", nextServiceKm: 0, insuranceExpiry: "", roadLicenceExpiry: "", assignedDriverId: "" };
+      db.trucks.push(t);
+    } else if (plate) t.plate = plate;
+    if (body.model) t.model = String(body.model).trim().slice(0, 60);
+    if (body.hp) t.hp = Number(body.hp) >= 400 ? 420 : 370;
+    if (body.year) t.year = Number(body.year) || t.year;
+    if (body.odometerKm !== undefined && body.odometerKm !== "") t.odometerKm = Number(body.odometerKm) || 0;
+    if (body.nextServiceKm !== undefined && body.nextServiceKm !== "") t.nextServiceKm = Number(body.nextServiceKm) || 0;
+    if (body.insuranceExpiry !== undefined) t.insuranceExpiry = day(body.insuranceExpiry);
+    if (body.roadLicenceExpiry !== undefined) t.roadLicenceExpiry = day(body.roadLicenceExpiry);
+    if (body.status && ["idle", "workshop", "parked"].includes(body.status)) t.status = body.status;
+    if (body.assignedDriverId !== undefined) {
+      t.assignedDriverId = body.assignedDriverId || "";
+      (db.trucks || []).forEach((x) => { if (x.id !== t.id && t.assignedDriverId && x.assignedDriverId === t.assignedDriverId) x.assignedDriverId = ""; });
       db.drivers.forEach((d) => {
         if (d.id === t.assignedDriverId) d.assignedTruckId = t.id;
-        else if (d.assignedTruckId === t.id && d.id !== t.assignedDriverId) d.assignedTruckId = "";
+        else if (d.assignedTruckId === t.id) d.assignedTruckId = "";
       });
     }
   }
   if (action === "save_driver") {
     if (!db.drivers) db.drivers = [];
     let d = body.id ? db.drivers.find((x) => x.id === body.id) : null;
-    if (!d) {
-      const u = { id: uid("u"), name: body.name, phone: body.phone || "", pin: body.pin || "drive123", role: "driver", driverId: "", active: true };
-      d = { id: uid("d"), userId: u.id, name: body.name, phone: body.phone || "", licenceClass: body.licenceClass || "CM", licenceExpiry: body.licenceExpiry || "", assignedTruckId: body.assignedTruckId || "", advanceUgx: 0, payType: body.payType || "trip", monthRateUgx: Number(body.monthRateUgx)||0 };
-      u.driverId = d.id;
-      db.users.push(u);
-      db.drivers.unshift(d);
-    } else {
+    if (!d) throw new Error("Add new drivers on the Team page, so they get a login and PIN");
+    {
       d.name = body.name || d.name;
       if (body.phone) d.phone = body.phone;
       if (body.licenseId) d.licenseId = body.licenseId;
       if (body.licensePhoto) d.licensePhoto = body.licensePhoto;
-      if (body.assignedTruckId !== undefined) d.assignedTruckId = body.assignedTruckId;
+      if (body.licenceExpiry !== undefined) d.licenceExpiry = /^\d{4}-\d{2}-\d{2}$/.test(String(body.licenceExpiry || "")) ? body.licenceExpiry : "";
+      if (body.assignedTruckId !== undefined) {
+        const before = d.assignedTruckId;
+        d.assignedTruckId = body.assignedTruckId || "";
+        (db.trucks || []).forEach((t) => { if (t.id === before && t.id !== d.assignedTruckId && t.assignedDriverId === d.id) t.assignedDriverId = ""; });
+        if (d.assignedTruckId) db.drivers.forEach((x) => { if (x.id !== d.id && x.assignedTruckId === d.assignedTruckId) x.assignedTruckId = ""; });
+      }
       const u = db.users.find((x) => x.id === d.userId);
       if (u) { u.name = d.name; if (body.phone) u.phone = body.phone; }
     }
@@ -996,8 +1008,9 @@ function applyAction(db, user, body) {
     job.status = "paid";
     job.paidAt = dayOf(body, body.paidAt ? "paidAt" : "date");
     job.paidUgx = Number(body.paidUgx) || job.rateUgx || job.incomeUgx || 0;
+    job.paidMethod = body.method || job.paidMethod || "";
     // Customer payment only. Driver trip allowance is paid separately on Money › Pay.
-    recordJobIncome(db, job, job.paidUgx, job.paidAt, body.method || "invoice");
+    recordJobIncome(db, job, job.paidUgx, job.paidAt, body.method || "invoice", body.reference);
   }
 
   if (action === "add_cargo_type") {
@@ -1008,7 +1021,7 @@ function applyAction(db, user, body) {
 
   if (action === "update_job") {
     const job = db.jobs.find((j) => j.id === body.id);
-    if (!job) throw new Error("Job not found");
+    if (!job) throw new Error("Load not found");
     if (user.role === "driver" && job.driverId !== user.driverId) throw new Error("No access");
     // trip steps keep their time and who set them; steps nobody tapped are marked as passed
     const STEPS = ["booked", "to_pickup", "loading", "en_route", "delivered"];
@@ -1097,6 +1110,8 @@ function applyAction(db, user, body) {
     if (!db.sellers) db.sellers = [];
     let sellerId = body.sellerId || "";
     const newName = (body.sellerName || "").trim();
+    if (sellerId === "new" && !newName) throw new Error("Enter the new seller's name");
+    if (sellerId === "new") sellerId = "";
     if (newName) {
       let s = db.sellers.find((x) => x.name.toLowerCase() === newName.toLowerCase());
       if (!s) {
@@ -1159,7 +1174,7 @@ function applyAction(db, user, body) {
     if (!buy) throw new Error("Buy not found");
     if (buy.sellerPaid) throw new Error("Seller already paid");
     const seller = (db.sellers || []).find((x) => x.id === buy.sellerId);
-    const sp = { amountUgx: buy.buyPriceUgx, category: "buy", payeeName: (seller && seller.name) || "Seller", method: body.method || (seller && seller.phone ? "mtn_momo" : "cash"), payeePhone: (seller && seller.phone) || "", note: "Paid seller · " + (buy.location || buy.id), floatId: body.floatId || "" };
+    const sp = { amountUgx: buy.buyPriceUgx, category: "buy", payeeName: (seller && seller.name) || "Seller", method: body.method || (seller && seller.phone ? "mtn_momo" : "cash"), reference: String(body.reference || "").slice(0, 60), date: body.date || "", payeePhone: (seller && seller.phone) || "", note: "Paid seller · " + (buy.location || buy.id), floatId: body.floatId || "" };
     const done = spendFromAdvanceOrCash(db, user, sp, "sugarcane", { caneBuyId: buy.id, refId: buy.id });
     buy.sellerPaid = true;
     buy.payMethod = sp.method;
@@ -2095,7 +2110,7 @@ function applyAction(db, user, body) {
 
   if (action === "log_trip_result") {
     const job = db.jobs.find((j) => j.id === body.id);
-    if (!job) throw new Error("Job not found");
+    if (!job) throw new Error("Load not found");
     job.tonnesDelivered = Number(body.tonnesDelivered) || 0;
     job.payPerTonne = Number(body.payPerTonne) || 0;
     job.incomeUgx = Math.round((job.tonnesDelivered || 0) * (job.payPerTonne || 0)) || Number(body.incomeUgx) || job.rateUgx || 0;

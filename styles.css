@@ -115,7 +115,7 @@ select.field option, select.nav-jump option { color: #102840; background: #fff; 
 .kpi b { display: block; font-size: 20px; margin-top: 4px; }
 .badge {
   display: inline-flex; border-radius: 999px; padding: 2px 8px;
-  font-size: 11px; font-weight: 600; text-transform: capitalize;
+  font-size: 11px; font-weight: 600; text-transform: none;
   background: #18243c; color: #f4f7fb;
 }
 .badge.green { background: #143322; color: #3dff7a; }
@@ -663,3 +663,61 @@ audio.voice-play::-webkit-media-controls-panel { background: #ffd6d2; }
 .load-fold.open .lf-chev { transform: rotate(90deg); color: #f5c400; }
 .lf-body { margin: 0; padding: 4px 16px 14px; border-top: 1px solid var(--line); }
 .lf-body[hidden] { display: none !important; }
+
+/* ---- shared form sections ---- */
+.form-card { display: block; }
+.form-step { margin: 18px 0 8px; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #f5c400; }
+.form-step:first-child { margin-top: 2px; }
+.form-step .muted { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.lbl .muted { font-weight: 400; }
+.sum-line { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: rgba(245,196,0,.1); color: #f5c400; font-weight: 700; }
+.lbl > select.js-cargo + .js-cargo-other { margin-top: 6px; }
+
+/* ---- grouped Fleet menu ---- */
+.admin-nav .sub .sub-gap { flex: 0 0 1px; align-self: stretch; margin: 4px 4px; background: rgba(255,255,255,.18); }
+
+/* ---- office cards ---- */
+.lf-head .badge { flex: 0 0 auto; }
+.lf-src { margin: 10px 0 2px; }
+.lf-trip:empty { display: none; }
+.lf-trip { margin-top: 12px; }
+.lf-actions { display: flex; gap: 8px; margin-top: 14px; }
+.lf-actions .btn { flex: 1; }
+.lf-body .thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; }
+.lf-body .bk-actions { margin-top: 12px; }
+.truck-form { margin-top: 10px; }
+.lic-img { display: block; max-width: 180px; border-radius: 10px; margin-top: 10px; }
+.trash-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+.trash-btns { display: flex; gap: 6px; flex: 0 0 auto; }
+@media (max-width: 520px) { .trash-row { flex-direction: column; align-items: stretch; } .trash-btns .btn { flex: 1; } }
+
+/* ---- inspection counter ---- */
+.inspect-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); position: sticky; top: 0; z-index: 2; backdrop-filter: blur(6px); }
+.ok-t { color: #3dff7a !important; font-weight: 700; }
+
+/* ---- bottom sheet ---- */
+body.sheet-open { overflow: hidden; }
+.sheet-wrap { position: fixed; inset: 0; z-index: 1000; background: rgba(4,10,20,.6); display: flex; align-items: flex-end; justify-content: center; animation: sheetFade .15s ease-out; }
+.sheet { width: 100%; max-width: 520px; max-height: 92vh; overflow: auto; background: #101a30; color: #f4f7fb; border: 1px solid rgba(255,255,255,.12); border-bottom: 0; border-radius: 20px 20px 0 0; padding: 10px 18px calc(18px + env(safe-area-inset-bottom)); box-shadow: 0 -12px 40px rgba(0,0,0,.45); animation: sheetUp .2s ease-out; }
+.sheet-grip { width: 40px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.25); margin: 0 auto 10px; }
+.sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.sheet-head b { font-size: 17px; }
+.sheet-body { display: grid; gap: 10px; }
+.sheet .err { min-height: 0; margin: 8px 0 0; color: #ff8b7a; }
+.sheet .err:empty { display: none; }
+.sheet .btn.wide { margin-top: 14px; }
+.icon-x { background: rgba(255,255,255,.08); color: #fff; border: 0; width: 34px; height: 34px; border-radius: 50%; font-size: 15px; cursor: pointer; flex: 0 0 auto; }
+.js-ref[hidden] { display: none !important; }
+@media (min-width: 700px) { .sheet-wrap { align-items: center; } .sheet { border-radius: 20px; border-bottom: 1px solid rgba(255,255,255,.12); } }
+@keyframes sheetUp { from { transform: translateY(30px); opacity: .6; } to { transform: none; opacity: 1; } }
+@keyframes sheetFade { from { opacity: 0; } to { opacity: 1; } }
+.js-new-seller[hidden], .js-fuel-note[hidden] { display: none !important; }
+
+/* ---- OK / Needs attention / Not OK as pill buttons ---- */
+.inspect-part .mark { display: inline-flex; align-items: center; justify-content: center; padding: 7px 10px; min-height: 34px; border-radius: 999px; border: 1.5px solid rgba(255,255,255,.18); background: rgba(255,255,255,.04); color: rgba(244,247,251,.8); font-size: 11px; font-weight: 800; letter-spacing: .04em; cursor: pointer; white-space: nowrap; transition: background .12s, border-color .12s; }
+.inspect-part .mark::before { display: none !important; }
+.inspect-part .mark.pass.on { background: #1d7a3a; border-color: #1d7a3a; color: #fff; }
+.inspect-part .mark.warn.on { background: #f5c400; border-color: #f5c400; color: #101a30; }
+.inspect-part .mark.fail.on { background: #d92d20; border-color: #d92d20; color: #fff; }
+.inspect-part .row > span:last-child, .tp-marks { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 420px) { .inspect-part .row { flex-direction: column; align-items: flex-start !important; gap: 8px; } }
