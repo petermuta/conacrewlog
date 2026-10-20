@@ -150,10 +150,23 @@ function estimateFuel(distanceKm, kmPerLitre, dieselUgx) {
 }
 const HOWO = { 370: { emptyL100: 16, loadedL100: 34 }, 420: { emptyL100: 17, loadedL100: 36 } };
 function howoRates(hp) { return Number(hp) >= 400 ? HOWO[420] : HOWO[370]; }
-function estimateTripFuel(deadKm, haulKm, hp, dieselUgx) {
-  const km = (Number(deadKm) || 0) + (Number(haulKm) || 0);
-  const litres = km > 0 ? km / 2.2 : 0;
+// litres per 100 km for one truck: its own figures when the office set them, else the HOWO figures for its engine
+function truckRates(t) {
+  const base = howoRates(t && typeof t === "object" ? t.hp : t);
+  if (!t || typeof t !== "object") return { loaded: base.loadedL100, empty: base.emptyL100 };
+  return { loaded: Number(t.loadedL100) || base.loadedL100, empty: Number(t.emptyL100) || base.emptyL100 };
+}
+// emptyKm at the empty rate, loadedKm at the loaded rate; hpOrTruck is the engine hp or the truck itself
+function estimateTripFuel(emptyKm, loadedKm, hpOrTruck, dieselUgx) {
+  const r = truckRates(hpOrTruck);
+  const litres = ((Number(emptyKm) || 0) * r.empty + (Number(loadedKm) || 0) * r.loaded) / 100;
   return { litres: Math.round(litres * 10) / 10, fuelUgx: Math.round(litres * (Number(dieselUgx) || 0)) };
+}
+// what one load should burn: to the pickup and back empty, the haul loaded
+function loadFuelExpected(j, t) {
+  const haul = Number(j.kmHaul || j.km) || 0;
+  const empty = (Number(j.kmToPickup) || 0) + haul; // run to the pickup, then back after tipping
+  return estimateTripFuel(empty, haul, t, 0).litres;
 }
 
 function weekStart() {
@@ -348,6 +361,7 @@ function scopedDb(db, user) {
       docs: db.docs || [],
       bookings: db.bookings || [],
       payInfo: db.payInfo || null,
+      pricing: db.pricing || null,
       dieselDefaultUgx: db.dieselDefaultUgx,
       trucks: db.trucks,
       drivers: db.drivers,
@@ -397,7 +411,7 @@ function scopedDb(db, user) {
           model: rawTruck.model,
           odometerKm: rawTruck.odometerKm,
           kmPerLitre: rawTruck.kmPerLitre,
-          hp: rawTruck.hp || 370,
+          hp: rawTruck.hp || 370, loadedL100: rawTruck.loadedL100 || "", emptyL100: rawTruck.emptyL100 || "",
           status: rawTruck.status,
         }
       : null;
@@ -471,7 +485,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -571,6 +585,11 @@ function applyAction(db, user, body) {
     if (body.driverId && body.driverId !== user.driverId) throw new Error("No access");
   }
 
+  if (action === "save_pricing") {
+    const n = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(String(v || "").replace(/[^\d.]/g, "")) || 0));
+    db.pricing = { marginPct: n(body.marginPct, 0, 300), wearPerKm: n(body.wearPerKm, 0, 20000), driverPerTrip: n(body.driverPerTrip, 0, 5e6), extraPerTrip: n(body.extraPerTrip, 0, 5e7), minTrip: n(body.minTrip, 0, 1e8), updatedAt: new Date().toISOString(), by: user.name };
+    if (Number(body.dieselUgx) > 0) db.dieselDefaultUgx = n(body.dieselUgx, 1000, 20000);
+  }
   if (action === "save_payinfo") {
     if (!isMainAdmin(user)) throw new Error("Only the main admin can change payment details");
     const t = (v, n) => String(v || "").trim().slice(0, n || 80);
@@ -657,6 +676,9 @@ function applyAction(db, user, body) {
     if (body.model) t.model = String(body.model).trim().slice(0, 60);
     if (body.hp) t.hp = Number(body.hp) >= 400 ? 420 : 370;
     if (body.year) t.year = Number(body.year) || t.year;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(body.fuelCheckedAt || ""))) t.fuelCheckedAt = body.fuelCheckedAt;
+    if (body.loadedL100 !== undefined) t.loadedL100 = Math.min(90, Math.max(0, Number(body.loadedL100) || 0)) || "";
+    if (body.emptyL100 !== undefined) t.emptyL100 = Math.min(90, Math.max(0, Number(body.emptyL100) || 0)) || "";
     if (body.odometerKm !== undefined && body.odometerKm !== "") t.odometerKm = Number(body.odometerKm) || 0;
     if (body.nextServiceKm !== undefined && body.nextServiceKm !== "") t.nextServiceKm = Number(body.nextServiceKm) || 0;
     if (body.insuranceExpiry !== undefined) t.insuranceExpiry = day(body.insuranceExpiry);
@@ -804,7 +826,7 @@ function applyAction(db, user, body) {
       const diesel = job0.dieselUgxPerLitre || db.dieselDefaultUgx;
       const dead = job0.kmToPickup || 0;
       const haul = job0.kmHaul || job0.km || 0;
-      const f = estimateTripFuel(dead, haul, truck.hp || 370, diesel);
+      const f = estimateTripFuel(dead + haul, haul, truck, diesel);
       job0.fuelLitres = f.litres;
       job0.fuelCostUgx = f.fuelUgx;
     }

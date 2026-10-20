@@ -293,6 +293,31 @@ function placeOf(geo, ip, gps) {
   if (gps && isFinite(gps.lat) && isFinite(gps.lng) && Math.abs(gps.lat) <= 90 && Math.abs(gps.lng) <= 180) out.gps = { lat: Math.round(gps.lat * 1e5) / 1e5, lng: Math.round(gps.lng * 1e5) / 1e5, acc: Math.round(Number(gps.acc) || 0), at: new Date().toISOString() };
   return out;
 }
+// ---- backups: a copy of the whole office book every night ----
+// daily copies are kept 30 days, one copy per month is kept for a year
+export async function runBackup(kv, why) {
+  const got = await kv.get("book");
+  if (!got) return { ok: false, error: "No office data yet" };
+  const d = new Date(), day = d.toISOString().slice(0, 10), month = day.slice(0, 7);
+  await kv.set("backup/daily/" + day, got.text, {});
+  if (!(await kv.has("backup/month/" + month))) await kv.set("backup/month/" + month, got.text, {});
+  const info = { at: d.toISOString(), why: why || "nightly", bytes: got.text.length };
+  await kv.set("backup/last", JSON.stringify(info), {});
+  if (kv.list && kv.del) {
+    const daily = (await kv.list("backup/daily/")).sort();
+    for (const k of daily.slice(0, Math.max(0, daily.length - 30))) await kv.del(k);
+    const months = (await kv.list("backup/month/")).sort();
+    for (const k of months.slice(0, Math.max(0, months.length - 12))) await kv.del(k);
+  }
+  return { ok: true, ...info };
+}
+// a copy for the main admin to keep: PINs are left out
+function exportCopy(book) {
+  const copy = JSON.parse(JSON.stringify(book));
+  (copy.users || []).forEach((u) => { delete u.pin; });
+  delete copy._meta;
+  return copy;
+}
 export async function handleSync(kv, { method, token, body, ip, geo }) {
   if (method === "GET") {
     const { book } = await loadBook(kv);
@@ -384,6 +409,17 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
     return out;
   }
 
+  if (op === "backup_status" || op === "backup_now" || op === "backup_download") {
+    const { book } = await loadBook(kv);
+    const who = await readToken(kv, book, token);
+    if (!who || !isMainAdmin(who.user)) return { status: 403, body: { error: "Only the main admin can use backups" } };
+    if (op === "backup_now") { const r = await runBackup(kv, "by " + who.user.name); return { status: 200, body: r }; }
+    if (op === "backup_download") return { status: 200, body: { ok: true, savedAt: new Date().toISOString(), book: exportCopy(book) } };
+    const last = await kv.get("backup/last");
+    const daily = kv.list ? (await kv.list("backup/daily/")).sort().reverse() : [];
+    const months = kv.list ? (await kv.list("backup/month/")).sort().reverse() : [];
+    return { status: 200, body: { last: last ? JSON.parse(last.text) : null, daily: daily.map((k) => k.slice(13)), months: months.map((k) => k.slice(13)) } };
+  }
   if (op === "reset") return { status: 410, body: { error: "Start fresh was used for launch and is now turned off." } };
   if (op === "reset_disabled") {
     // Start fresh for launch: main admin only, PIN again, typed confirmation. A full copy is kept first.

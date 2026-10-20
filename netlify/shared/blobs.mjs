@@ -10,6 +10,8 @@ export function kvFrom(name) {
       return !r || r.modified !== false;
     },
     async has(k) { return !!(await store.getMetadata(k)); },
+    async list(prefix) { const r = await store.list({ prefix }); return (r.blobs || []).map((x) => x.key); },
+    async del(k) { await store.delete(k); },
   };
 }
 const JSON_HEADERS = { "content-type": "application/json", "cache-control": "no-store" };

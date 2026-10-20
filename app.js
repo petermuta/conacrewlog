@@ -180,7 +180,7 @@ const PAGES = {
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -289,6 +289,7 @@ function route() {
     "trucks-new": viewNewJob,
     "trucks-book": viewBookings,
     "trucks-trash": viewJobTrash,
+    "trucks-profit": viewTruckProfit,
     "trucks-drivers": viewDrivers,
     "truck-id": () => viewTruck(r.id),
     "trucks-issues": viewReports,
@@ -336,6 +337,7 @@ function route() {
     "trucks-book": "trucks",
     "trucks-trash": "trucks",
     "trucks-issues": "trucks",
+    "trucks-profit": "trucks",
     "trucks-drivers": "trucks",
     "trucks-spend": "trucks",
     "trucks-docs": "trucks",
@@ -401,7 +403,7 @@ function bizBar() {
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
     fleet: [["#trucks-book", "Bookings", bookingsWaiting().length, "Loads"], ["#trucks-jobs", "Loads", 0, "Loads"], ["#trucks-new", "New load", 0, "Loads"], ["#trucks-paid", "Paid loads", 0, "Loads"],
-      ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-inspect", "Inspections", 0, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Issues", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
+      ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-profit", "Profit", fuelAlerts().length, "Trucks"], ["#trucks-inspect", "Inspections", 0, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Issues", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
       ["#trucks-spend", "Advances", req.trucking, "Money & papers"], ["#trucks-docs", "Docs", docsWaiting("trucking"), "Money & papers"], ["#trucks-trash", "Trash", 0, "Money & papers"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Advances", req.sugarcane], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-spend", "Advances", req.passion], ["#passion-docs", "Docs", docsWaiting("passion")]],
@@ -473,6 +475,10 @@ function truckForm(t) {
       <label class="lbl">Insurance expires<input class="field" type="date" name="insuranceExpiry" value="${esc(v.insuranceExpiry || "")}" /></label>
       <label class="lbl">Road licence expires<input class="field" type="date" name="roadLicenceExpiry" value="${esc(v.roadLicenceExpiry || "")}" /></label>
     </div>
+    <div class="grid g2" style="margin-top:10px">
+      <label class="lbl">Fuel use loaded (L per 100 km)<input class="field" name="loadedL100" inputmode="decimal" value="${v.loadedL100 || ""}" placeholder="${truckRates(v.hp ? v : { hp: 420 }).loaded}" /></label>
+      <label class="lbl">Fuel use empty (L per 100 km)<input class="field" name="emptyL100" inputmode="decimal" value="${v.emptyL100 || ""}" placeholder="${truckRates(v.hp ? v : { hp: 420 }).empty}" /></label>
+    </div>
     ${t ? `<label class="lbl" style="margin-top:10px">Status<select class="field" name="status">${[["idle", "Ready"], ["workshop", "In the workshop"], ["parked", "Parked"]].map(([k, l]) => `<option value="${k}" ${v.status === k ? "selected" : ""}>${l}</option>`).join("")}${["on_trip", "loading"].includes(v.status) ? `<option value="" selected>On a trip (set by the load)</option>` : ""}</select></label>` : ""}
     <button class="btn btn-primary wide" style="margin-top:12px">${t ? "Save truck" : "Add truck"}</button>
   </form>`;
@@ -512,6 +518,104 @@ function viewTrucks() {
     <div class="row" style="margin-top:18px"><h2 style="margin:0">Live locations</h2><span class="muted" id="liveNote">Loading…</span></div>
     <div id="liveMap" style="height:320px;margin-top:10px;border-radius:16px"></div>
     <div class="list" id="liveList" style="margin-top:10px"></div>`;
+}
+
+// ---- truck profit and fuel check ----
+const COST_GROUP = { diesel: "Fuel", fuel: "Fuel", parts: "Repairs & tyres", workshop: "Repairs & tyres", tyres: "Repairs & tyres", service: "Repairs & tyres", papers: "Papers & road fees", road: "Papers & road fees", labour: "Trip costs", trip: "Trip costs", employee_pay: "Driver pay" };
+const COST_ORDER = ["Fuel", "Repairs & tyres", "Driver pay", "Trip costs", "Papers & road fees", "Other"];
+function fleetReport(from, to) {
+  const inP = (d) => { d = String(d || "").slice(0, 10); return d >= from && d <= to; };
+  const jobs = DATA.jobs || [], trucks = DATA.trucks || [];
+  const jobT = Object.fromEntries(jobs.map((j) => [j.id, j.truckId]));
+  const drvT = Object.fromEntries((DATA.drivers || []).map((d) => [d.id, d.assignedTruckId]));
+  const blank = (t) => ({ t, income: 0, owed: 0, costs: {}, loads: 0, km: 0, litres: 0, expected: 0, fuelKnown: true });
+  const rep = Object.fromEntries(trucks.map((t) => [t.id, blank(t)])); rep._none = blank(null);
+  const at = (id) => rep[id] || rep._none;
+  const cost = (r, cat, amt) => { const g = COST_GROUP[cat] || "Other"; r.costs[g] = (r.costs[g] || 0) + (Number(amt) || 0); };
+  (DATA.cash || []).forEach((c) => {
+    if ((c.tag || "") !== "trucking" || !inP(c.date)) return;
+    const tid = c.truckId || jobT[c.jobId] || drvT[c.driverId] || "";
+    if (c.direction === "in") { if (c.category === "load_income") at(tid).income += Number(c.amountUgx) || 0; return; }
+    if (["to_driver", "advance_return"].includes(c.category)) return; // advances count when they're spent
+    cost(at(tid), c.category, c.amountUgx);
+  });
+  (DATA.disbursements || []).filter((f) => (f.tag || "trucking") === "trucking").forEach((f) => (f.usages || []).forEach((u) => {
+    if (inP(u.date)) cost(at(f.truckId || drvT[f.toDriverId] || ""), u.category, u.amountUgx);
+  }));
+  (DATA.fuelLogs || []).forEach((l) => {
+    if (!inP(l.date)) return;
+    const r = at(l.truckId || drvT[l.driverId] || "");
+    r.litres += Number(l.litres) || 0;
+    if (l.notFromAdvance) cost(r, "diesel", l.amountUgx); // driver's own money, no cash line yet
+  });
+  jobs.forEach((j) => {
+    const done = isPaid(j) || ["delivered", "invoiced"].includes(j.status);
+    if (!done || !inP(deliveredOn(j))) return;
+    const r = at(j.truckId); const haul = Number(j.kmHaul || j.km) || 0;
+    r.loads += 1; r.km += haul * 2 + (Number(j.kmToPickup) || 0);
+    if (r.t) r.expected += loadFuelExpected(j, r.t);
+    if (!isPaid(j)) r.owed += Math.max(0, (j.incomeUgx || j.rateUgx || 0) - jobReceived(j));
+  });
+  Object.values(rep).forEach((r) => { r.costTotal = Object.values(r.costs).reduce((s, x) => s + x, 0); r.profit = r.income - r.costTotal; });
+  return rep;
+}
+function fuelVerdict(r) {
+  if (!r.expected || !r.litres) return null;
+  const pct = Math.round((r.litres / r.expected) * 100);
+  return { pct, tone: pct > 130 ? "red" : pct > 115 ? "gold" : "green", word: pct > 130 ? "High" : pct > 115 ? "Watch" : "OK" };
+}
+// last 30 days, trucks burning clearly more than their loads need (for Home)
+function fuelAlerts() {
+  if (!DATA || DATA.me.role !== "admin") return [];
+  const to = todayYmd(), from = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  const quiet = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+  return Object.values(fleetReport(from, to)).filter((r) => r.t && r.expected >= 150 && !(r.t.fuelCheckedAt && r.t.fuelCheckedAt >= quiet)).map((r) => ({ r, v: fuelVerdict(r) })).filter((x) => x.v && x.v.pct > 130);
+}
+function viewTruckProfit() {
+  const per = sessionStorage.getItem("profitPer") || "month";
+  const [from, to, title] = periodRange(per);
+  const rep = fleetReport(from, to);
+  const rows = Object.values(rep).filter((r) => r.t);
+  const none = rep._none;
+  const tot = rows.concat([none]).reduce((s, r) => ({ income: s.income + r.income, cost: s.cost + r.costTotal, owed: s.owed + r.owed, km: s.km + r.km, loads: s.loads + r.loads }), { income: 0, cost: 0, owed: 0, km: 0, loads: 0 });
+  const profit = tot.income - tot.cost;
+  const money = (n) => `<b class="${n < 0 ? "neg" : "pos"}">${n < 0 ? "−" : ""}${ugx(Math.abs(n))}</b>`;
+  const perKm = (p, km) => km ? `${p < 0 ? "−" : ""}UGX ${Math.round(Math.abs(p) / km).toLocaleString()} / km` : "—";
+  const card = (r) => {
+    const d = (DATA.drivers || []).find((x) => x.id === r.t.assignedDriverId);
+    const v = fuelVerdict(r);
+    const head = `<span class="lf-id">${esc(r.t.plate)}</span><span class="lf-mat">${esc(d ? d.name : "No driver")} · ${r.loads} load${r.loads === 1 ? "" : "s"}</span>${money(r.profit)}${v && v.word !== "OK" ? ` <span class="badge ${v.tone}">Fuel ${v.word.toLowerCase()}</span>` : ""}`;
+    const body = facts([
+      ["Money in", ugx(r.income)],
+      r.owed ? ["Clients still owe", ugx(r.owed)] : null,
+      ...COST_ORDER.filter((g) => r.costs[g]).map((g) => [g, "− " + ugx(r.costs[g])]),
+      ["Profit", money(r.profit) + (r.income ? ` <span class="muted">· ${r.profit < 0 ? "−" : ""}${Math.abs(Math.round((r.profit / r.income) * 100))}% of income</span>` : "")],
+      ["Distance", r.km ? Math.round(r.km).toLocaleString() + " km · " + perKm(r.profit, r.km) : "No loads delivered"],
+    ]) + `<div class="fuel-check ${v ? v.tone : ""}">
+      <b>Fuel check</b>
+      ${v ? `<p>Bought <b>${Math.round(r.litres).toLocaleString()} L</b> · the loads needed about <b>${Math.round(r.expected).toLocaleString()} L</b> · <span class="badge ${v.tone}">${v.pct}% · ${v.word}</span></p>
+      ${v.word !== "OK" ? `<p class="muted">More fuel bought than the loads need. Check the fuel receipts, odometer and trips for ${esc(r.t.plate)}.</p>${v.word === "High" ? (r.t.fuelCheckedAt && r.t.fuelCheckedAt >= new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10) ? `<p class="muted">Checked ${fmtDay(r.t.fuelCheckedAt)}</p>` : `<button type="button" class="btn btn-ghost btn-sm js-fuelok" data-id="${r.t.id}" style="margin-top:8px">I've checked this</button>`) : ""}` : ""}`
+      : `<p class="muted">${r.litres ? `Bought ${Math.round(r.litres).toLocaleString()} L, but no delivered loads with distance to compare.` : r.expected ? "No fuel logged for these loads." : "Nothing to compare yet."}</p>`}
+      <p class="muted fine">Uses ${truckRates(r.t).loaded} L/100 km loaded and ${truckRates(r.t).empty} L/100 km empty. Change these under Trucks › Edit truck.</p>
+    </div>`;
+    return foldCard(head, body, v && v.word === "High" && !(r.t.fuelCheckedAt && r.t.fuelCheckedAt >= new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10)) ? "flash" : "");
+  };
+  return `
+    <div class="row"><h1>Fleet</h1></div>
+    ${fleetTabs("trucks-profit")}
+    <div class="seg seg-sm" style="margin-top:14px">${[["month", "This month"], ["lastmonth", "Last month"], ["quarter", "Quarter"], ["year", "Year"], ["all", "All"]].map(([k, l]) => `<button type="button" class="seg-btn ${per === k ? "on" : ""}" data-profitper="${k}">${l}</button>`).join("")}</div>
+    <div class="card item profit-total" style="margin-top:12px">
+      <div class="profit-head"><span class="eyebrow">Fleet profit · ${esc(title)}</span>${money(profit)}</div>
+      <div class="grid g3 profit-grid">
+        <div><span class="eyebrow">Money in</span><b>${ugx(tot.income)}</b></div>
+        <div><span class="eyebrow">Costs</span><b>${ugx(tot.cost)}</b></div>
+        <div><span class="eyebrow">Per km</span><b>${perKm(profit, tot.km)}</b></div>
+      </div>
+      <p class="muted" style="margin:8px 0 0">${tot.loads} load${tot.loads === 1 ? "" : "s"} delivered · ${Math.round(tot.km).toLocaleString()} km${tot.owed ? ` · clients still owe ${ugx(tot.owed)}` : ""}</p>
+    </div>
+    <div class="list" style="margin-top:12px">${rows.map(card).join("")}</div>
+    ${none.income || none.costTotal ? `<div class="card item" style="margin-top:10px"><b>Not linked to a truck</b>${facts([["Money in", ugx(none.income)], ...COST_ORDER.filter((g) => none.costs[g]).map((g) => [g, "− " + ugx(none.costs[g])])])}<p class="muted" style="margin:6px 0 0">Pick a truck when you record spending so it lands on the right truck.</p></div>` : ""}
+    <p class="muted" style="margin-top:12px;font-size:12px">Money in is what clients paid in this period. Costs are what was spent: office spending, money spent from advances, and driver pay. Advances not yet spent aren't counted.</p>`;
 }
 
 function viewDrivers() {
@@ -960,7 +1064,7 @@ function viewLoadFromBooking(bk) {
   const trips = Math.max(1, Number(bk.trips) || 1);
   const diesel = DATA.dieselDefaultUgx || 5200;
   const t0 = (DATA.trucks || [])[0];
-  const est = estimateTripFuel(bk.km || 0, bk.km || 0, (t0 && t0.hp) || 370, diesel); // loaded there, empty back; refreshed for the truck picked
+  const est = estimateTripFuel(bk.km || 0, bk.km || 0, t0 || 370, diesel); // loaded there, empty back; refreshed for the truck picked
   const litres = Math.round(est.litres * trips * 10) / 10, fuel = Math.round(est.fuelUgx * trips);
   const at = bk.date ? bk.date + "T" + ({ Morning: "08:00", Afternoon: "13:00", Evening: "17:00" }[bk.time] || "08:00") : "";
   const free = (DATA.trucks || []).map((t) => { const d = (DATA.drivers || []).find((x) => x.id === t.assignedDriverId); return { t, d }; });
@@ -1006,7 +1110,7 @@ function bindLoadFromBooking() {
   const dz = form.querySelector(".js-bk-diesel"), lt = form.querySelector(".js-bk-litres"), fc = form.querySelector(".js-bk-fuel");
   const cost = () => { fc.value = Math.round((Number(lt.value) || 0) * (Number(dz.value) || 0)); };
   // litres follow the truck picked (420 hp and 370 hp burn differently) until someone types their own
-  const refuel = () => { if (lt.dataset.typed) return; const o = truck.selectedOptions[0], km = Number(lt.dataset.km) || 0, trips = Number(lt.dataset.trips) || 1; const e = estimateTripFuel(km, km, Number(o && o.dataset.hp) || 370, Number(dz.value) || 0); lt.value = Math.round(e.litres * trips * 10) / 10; cost(); };
+  const refuel = () => { if (lt.dataset.typed) return; const o = truck.selectedOptions[0], km = Number(lt.dataset.km) || 0, trips = Number(lt.dataset.trips) || 1; const tk = (DATA.trucks || []).find((x) => x.id === truck.value); const e = estimateTripFuel(km, km, tk || Number(o && o.dataset.hp) || 370, Number(dz.value) || 0); lt.value = Math.round(e.litres * trips * 10) / 10; cost(); };
   truck.onchange = () => { pickDriver(); refuel(); }; pickDriver(); refuel();
   dz.oninput = cost; lt.oninput = () => { lt.dataset.typed = "1"; cost(); };
 }
@@ -1115,6 +1219,58 @@ function clientSeenRows(b) {
     ${v.length > 1 ? `<details class="views"><summary>Recent opens</summary>${v.map((x) => `<div class="view-line"><span>${whenShort(x.at)}</span><span>${esc(x.place ? x.place.split(",")[0] : "Unknown area")}</span><span class="muted">${esc(x.dev || "")}</span></div>`).join("")}</details>` : ""}`]);
   return rows;
 }
+// ---- price suggestion for a client quote ----
+const PRICING_START = { marginPct: 30, wearPerKm: 600, driverPerTrip: 50000, extraPerTrip: 0, minTrip: 250000 };
+function pricing() { return { ...PRICING_START, ...(DATA.pricing || {}) }; }
+function suggestPrice(b) {
+  const p = pricing(), km = Number(b.km) || 0, trips = Math.max(1, Number(b.trips) || 1);
+  const diesel = DATA.dieselDefaultUgx || 5200;
+  const trucks = DATA.trucks || [];
+  // the hungrier truck, so the price covers whichever one goes
+  const litres = Math.max(0, ...trucks.map((t) => estimateTripFuel(km, km, t, 0).litres), estimateTripFuel(km, km, 420, 0).litres);
+  const fuel = Math.round(litres * diesel), wear = Math.round(km * 2 * p.wearPerKm);
+  const cost = fuel + wear + p.driverPerTrip + p.extraPerTrip;
+  const raw = Math.max(p.minTrip, cost * (1 + p.marginPct / 100));
+  const perTrip = Math.ceil(raw / 10000) * 10000;
+  return { km, trips, litres, diesel, fuel, wear, driver: p.driverPerTrip, extra: p.extraPerTrip, cost, perTrip, total: perTrip * trips, margin: p.marginPct, minUsed: raw === p.minTrip && cost * (1 + p.marginPct / 100) < p.minTrip };
+}
+function pastPerKm() {
+  const done = (DATA.jobs || []).filter((j) => (isPaid(j) || ["delivered", "invoiced"].includes(j.status)) && (j.kmHaul || j.km) > 0 && (j.rateUgx || j.incomeUgx));
+  if (done.length < 3) return null;
+  const sum = done.reduce((s, j) => s + (j.paidUgx || j.incomeUgx || j.rateUgx) / (j.kmHaul || j.km), 0);
+  return { n: done.length, perKm: Math.round(sum / done.length) };
+}
+function priceBox(b) {
+  if (!b.km) return `<div class="price-box"><b>Suggested price</b><p class="muted">Add the distance to get a suggestion.</p></div>`;
+  const s = suggestPrice(b), past = pastPerKm();
+  return `<div class="price-box">
+    <div class="row keep" style="align-items:center"><div><span class="eyebrow">Suggested price</span><b class="price-big">${ugx(s.total)}</b><div class="muted">${s.trips > 1 ? `${ugx(s.perTrip)} a trip × ${s.trips}` : "One trip"} · ${s.km} km each way</div></div>
+      <button type="button" class="btn btn-primary btn-sm js-useprice" data-price="${s.total}">Use this price</button></div>
+    <details class="settings" style="margin-top:8px"><summary>How it's worked out</summary>
+      ${facts([["Diesel", `${Math.round(s.litres)} L × ${ugx(s.diesel)} = ${ugx(s.fuel)}`], ["Repairs & tyres", `${s.km * 2} km × ${ugx(pricing().wearPerKm)} = ${ugx(s.wear)}`], ["Driver pay", ugx(s.driver)], s.extra ? ["Other trip costs", ugx(s.extra)] : null, ["Cost a trip", `<b>${ugx(s.cost)}</b>`], ["Your margin", s.margin + "%" + (s.minUsed ? ` · raised to your minimum ${ugx(pricing().minTrip)}` : "")]])}
+      ${past ? `<p class="muted" style="margin:8px 0 0">Your last ${past.n} loads averaged ${ugx(past.perKm)} per km; this suggestion is ${ugx(Math.round(s.perTrip / s.km))} per km.</p>` : ""}
+    </details>
+  </div>`;
+}
+function pricingCard() {
+  const p = pricing();
+  return `<details class="card item settings pricing-card" style="margin-top:10px"><summary><b>Pricing for quotes</b><div class="muted">${DATA.pricing ? `Margin ${p.marginPct}% · diesel ${ugx(DATA.dieselDefaultUgx || 5200)}/L` : "Starting values: set your own"}</div></summary>
+    <form data-form="pricing" style="margin-top:10px">
+      <div class="grid g2">
+        <label class="lbl">Diesel today (UGX / litre)<input class="field" name="dieselUgx" inputmode="numeric" value="${DATA.dieselDefaultUgx || 5200}" /></label>
+        <label class="lbl">Your margin (%)<input class="field" name="marginPct" inputmode="numeric" value="${p.marginPct}" /></label>
+      </div>
+      <div class="grid g2" style="margin-top:10px">
+        <label class="lbl">Repairs & tyres (UGX per km)<input class="field" name="wearPerKm" inputmode="numeric" value="${p.wearPerKm}" /></label>
+        <label class="lbl">Driver pay a trip (UGX)<input class="field" name="driverPerTrip" inputmode="numeric" value="${p.driverPerTrip}" /></label>
+      </div>
+      <div class="grid g2" style="margin-top:10px">
+        <label class="lbl">Other costs a trip (UGX) <span class="muted">(loading, road fees)</span><input class="field" name="extraPerTrip" inputmode="numeric" value="${p.extraPerTrip}" /></label>
+        <label class="lbl">Lowest price a trip (UGX)<input class="field" name="minTrip" inputmode="numeric" value="${p.minTrip}" /></label>
+      </div>
+      <button class="btn btn-primary wide" style="margin-top:12px">Save pricing</button>
+    </form></details>`;
+}
 function payInfoCard() {
   return DATA.me.role === "admin" && !DATA.me.assistant ? (() => { const pi = DATA.payInfo || { airtel: { number: "0705139060", name: "Restatuta" }, bank: { bank: "Stanbic Bank Uganda", name: "Conacrew Logistics Ltd", account: "9030025603272", code: "042641" } }; return `<details class="card item settings" style="margin-top:10px"><summary>Where clients pay</summary>
       <form data-form="payinfo" style="margin-top:10px">
@@ -1173,7 +1329,8 @@ function viewBookings() {
         ${b.quote && ["quoted", "payment_check"].includes(b.status) ? `<button type="button" class="btn btn-ghost wide js-bkpay" data-id="${esc(b.id)}" data-kind="account" style="margin-top:10px">Book without payment (trusted client)</button>` : ""}
         ${canQuote && b.status !== "payment_check" ? `<form data-form="book-quote" class="bk-form">
           <input type="hidden" name="id" value="${esc(b.id)}" />
-          <div class="grid g2"><label class="lbl">${b.quote ? "New price" : "Price"} (UGX)<input class="field" name="amountUgx" required inputmode="numeric" value="${b.quote ? b.quote.amountUgx : ""}" /></label>
+          ${priceBox(b)}
+          <div class="grid g2" style="margin-top:10px"><label class="lbl">${b.quote ? "New price" : "Price"} (UGX)<input class="field" name="amountUgx" required inputmode="numeric" value="${b.quote ? b.quote.amountUgx : ""}" /></label>
           <label class="lbl">Valid for<select class="field" name="validDays"><option value="1">1 day</option><option value="3" selected>3 days</option><option value="7">7 days</option></select></label></div>
           <label class="lbl" style="margin-top:10px">Note to client <span class="muted">(optional)</span><input class="field" name="note" maxlength="300" value="${b.quote ? esc(b.quote.note) : ""}" /></label>
           <button class="btn btn-primary wide" style="margin-top:10px">${b.quote ? "Update quote" : "Save quote"}</button>
@@ -1200,6 +1357,7 @@ function viewBookings() {
       <div style="display:flex;gap:6px"><button type="button" class="btn btn-ghost btn-sm js-copylink" data-link="${esc(pageUrl)}">Copy</button><a class="btn btn-whatsapp btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent("Hire a Sinotruk 8×4 dump truck with a driver from Conacrew Logistics. Pin your pickup and drop-off and get a quote: " + pageUrl)}">Share</a></div></div>
     </div>
 
+    ${pricingCard()}
     <div class="seg" style="margin-top:14px">
       ${[["open", "Open"], ["closed", "Closed"]].map(([k, t]) => `<button type="button" class="seg-btn ${tab === k ? "on" : ""}" data-bktab="${k}">${t}${n(k) ? ` <span class="count">${n(k)}</span>` : ""}</button>`).join("")}
     </div>
@@ -1209,6 +1367,7 @@ function bindBookings() {
   document.querySelectorAll('a[href="#trucks-book"]').forEach((l) => { l.addEventListener("click", () => { if (sessionStorage.getItem("bkOnly")) { sessionStorage.removeItem("bkOnly"); if (location.hash === "#trucks-book") setTimeout(route, 0); } }); });
   const bkBack = document.getElementById("bkBack");
   if (bkBack) bkBack.onclick = () => { sessionStorage.removeItem("bkOnly"); sessionStorage.setItem("jobSrc", "client"); location.hash = "#trucks-jobs"; };
+  document.querySelectorAll(".js-useprice").forEach((b) => { b.onclick = () => { const f = b.closest("form").querySelector("[name=amountUgx]"); f.value = b.dataset.price; f.focus(); }; });
   document.querySelectorAll("[data-bktab]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("bkTab", b.dataset.bktab); route(); }; });
   document.querySelectorAll(".js-copylink").forEach((b) => { b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.link); b.textContent = "Copied"; } catch (e) { prompt("Copy this link", b.dataset.link); } }; });
   document.querySelectorAll(".js-bkpay").forEach((b) => { b.onclick = () => {
@@ -2020,6 +2179,7 @@ function viewHome() {
   [["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].forEach(([t, n]) => { if (req[t]) attn.push([FUND_HOME[t], "gold", `${req[t]} money request${req[t] > 1 ? "s" : ""}`, n]); });
   if (replies) attn.push(["#trucks-work", "blue", `${replies} task repl${replies > 1 ? "ies" : "y"} to check`, "Fleet"]);
   [["trucking", "Fleet", "#trucks-docs"], ["sugarcane", "Cane", "#cane-docs"], ["passion", "Passion", "#passion-docs"]].forEach(([t, n, h]) => { const d = docsWaiting(t); if (d) attn.push([h, "blue", `${d} new document${d > 1 ? "s" : ""} from the team`, n]); });
+  fuelAlerts().forEach(({ r, v }) => attn.push(["#trucks-profit", "red", `${r.t.plate} bought ${v.pct - 100}% more fuel than its loads need`, "Fleet"]));
   if (issN) attn.push(["#trucks-issues", "red", `${issN} driver issue${issN > 1 ? "s" : ""} to answer`, "Fleet"]);
   if (phones) attn.push(["#team", "gold", `${phones} new phone${phones > 1 ? "s" : ""} to approve`, "Team"]);
   const bkN = bookingsWaiting().length;
@@ -2794,6 +2954,39 @@ function bindDriverAdvance() {
 const ROLE_NAMES = { admin: "Admin", driver: "Driver", cane_manager: "Cane manager", passion_manager: "Passion manager" };
 const LOG_TEXT = { no_location: ["gold", "Location off, not let in"], ok: ["green", "Signed in"], wrong_pin: ["gold", "Wrong PIN"], locked_now: ["red", "Locked (5 wrong PINs)"], locked: ["red", "Tried while locked"], new_phone: ["gold", "New phone, waiting approval"], phone_approved: ["green", "Phone approved"], phone_removed: ["gold", "Phone removed"], unlocked: ["green", "Unlocked"], unknown_phone: ["red", "Unknown phone number"], computer_trusted: ["blue", "Computer trusted"], computer_untrusted: ["gold", "Computer untrusted"], turned_off: ["red", "Login is off"], no_pin: ["gold", "No PIN set"], blocked_device: ["red", "Blocked device tried"], blocked_login: ["red", "Blocked: too many tries"], office_book_started: ["blue", "Office book started"], fresh_start: ["blue", "Started fresh for launch"] };
 // main admin: devices and connections blocked after wrong tries (they only ever see "try again later")
+// ---- backups (main admin) ----
+async function backupCall(op) {
+  const res = await fetch("/.netlify/functions/sync", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ op }) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || j.error) throw new Error(j.error || "Couldn't reach the office");
+  return j;
+}
+async function loadBackups() {
+  const box = document.getElementById("backupBox");
+  if (!box) return;
+  if (!Conacrew.token()) { box.innerHTML = `<div class="card item backup-card"><b>Backups</b><p class="muted">Connect to the office (green sync light) to see backups.</p></div>`; return; }
+  let s = null; try { s = await backupCall("backup_status"); } catch (e) {}
+  const last = s && s.last;
+  const age = last ? (Date.now() - Date.parse(last.at)) / 36e5 : null;
+  box.innerHTML = `<div class="card item backup-card">
+    <div class="row keep" style="align-items:center"><div><b>Backups</b><div class="muted">A full copy is saved every night at 4 AM Kampala time</div></div><span class="badge ${!last ? "gold" : age > 36 ? "red" : "green"}">${!last ? "None yet" : age > 36 ? "Late" : "OK"}</span></div>
+    ${last ? `<p style="margin:10px 0 0">Last copy <b>${whenShort(last.at)}</b> <span class="muted">· ${Math.max(1, Math.round(last.bytes / 1024)).toLocaleString()} KB · ${esc(last.why)}</span></p>` : ""}
+    ${s ? `<p class="muted" style="margin:4px 0 0">${s.daily.length} daily cop${s.daily.length === 1 ? "y" : "ies"} (last 30 days) · ${s.months.length} monthly (last 12 months)</p>` : ""}
+    <div class="grid g2" style="margin-top:12px"><button type="button" class="btn btn-ghost js-bk-now">Back up now</button><button type="button" class="btn btn-primary js-bk-dl">Download a copy</button></div>
+    <p class="muted" style="margin:8px 0 0;font-size:12px">The download keeps everything except PINs. Keep it somewhere safe, like your Google Drive.</p>
+  </div>`;
+  box.querySelector(".js-bk-now").onclick = async (e) => { const b = e.target; b.disabled = true; b.textContent = "Saving…"; try { await backupCall("backup_now"); loadBackups(); } catch (x) { alert(x.message); b.disabled = false; b.textContent = "Back up now"; } };
+  box.querySelector(".js-bk-dl").onclick = async (e) => {
+    const b = e.target; b.disabled = true; b.textContent = "Preparing…";
+    try {
+      const j = await backupCall("backup_download");
+      const blob = new Blob([JSON.stringify(j.book, null, 1)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "conacrew-backup-" + todayYmd() + ".json"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (x) { alert(x.message); }
+    b.disabled = false; b.textContent = "Download a copy";
+  };
+}
 async function loadBlocks(op, extra) {
   const box = document.getElementById("blocksBox");
   if (!box || !Conacrew.token()) return;
@@ -2912,7 +3105,7 @@ function viewTeam() {
       <button type="button" class="btn ${thisTrusted ? "btn-ghost" : "btn-primary"} btn-sm" data-act="${thisTrusted ? "untrust_device" : "trust_device"}" data-device="${esc(myDev)}" data-label="${esc(deviceLabel())}">${thisTrusted ? "Stop trusting" : "Trust this computer"}</button></div>
       ${trusted.filter((d) => d.id !== myDev).map((d) => `<div class="pay-line"><div><b>${esc(d.label)}</b><div class="muted">Trusted ${whenShort(d.addedAt)}</div></div><button type="button" class="btn btn-ghost btn-sm" data-act="untrust_device" data-device="${esc(d.id)}">Remove</button></div>`).join("")}
     </div>` : ""}
-    ${isMain ? `<div id="blocksBox"></div>` : ""}
+    ${isMain ? `<div id="backupBox" style="margin-top:12px"></div><div id="blocksBox"></div>` : ""}
     ${payInfoCard().replace("<summary>Where clients pay</summary>", "<summary><b>Where clients pay</b><div class=\"muted\">Airtel Money and bank details shown on booking links</div></summary>").replace('style="margin-top:10px"', 'style="margin-top:12px"')}
     <div class="grid g3" style="margin-top:14px">
       <div class="card kpi"><span class="eyebrow">People</span><b>${users.length}</b></div>
@@ -2944,6 +3137,7 @@ function viewTeam() {
 }
 function bindTeam() {
   loadBlocks();
+  loadBackups();
   const ff = document.getElementById("freshForm");
   if (ff) ff.onsubmit = async (e) => {
     e.preventDefault();
@@ -3355,6 +3549,8 @@ function viewPL(mode) {
 function bind() {
   bindBookings();
   bindFolds();
+  document.querySelectorAll(".js-fuelok").forEach((b) => { b.onclick = () => act("save_truck", { id: b.dataset.id, fuelCheckedAt: todayYmd() }); });
+  document.querySelectorAll("[data-profitper]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("profitPer", b.dataset.profitper); route(); }; });
   document.querySelectorAll("[data-jobsrc]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("jobSrc", b.dataset.jobsrc); route(); }; });
   document.querySelectorAll(".js-openbk").forEach((b) => { b.onclick = () => {
     const bk = (DATA.bookings || []).find((x) => x.ref === b.dataset.ref);
@@ -3453,6 +3649,8 @@ function bind() {
         location.hash = "#money-pay";
       } else if (kind === "book-quote") {
         await act("quote_booking", fd);
+      } else if (kind === "pricing") {
+        await act("save_pricing", fd);
       } else if (kind === "payinfo") {
         await act("save_payinfo", fd);
       } else if (kind === "book-decline") {
@@ -4151,7 +4349,7 @@ function bindRouteCalc() {
     const dead = Number(document.querySelector(".js-dead")?.value) || 0;
     const haul = Number(document.querySelector(".js-haul")?.value) || Number(document.querySelector(".js-km")?.value) || 0;
     if (typeof estimateTripFuel !== "function") return;
-    const f = estimateTripFuel(dead, haul, truck.hp || 370, diesel);
+    const f = estimateTripFuel(dead + haul, haul, truck, diesel);
     const L = document.querySelector(".js-litres");
     const C = document.querySelector(".js-fuel");
     if (L) L.value = f.litres;
@@ -4255,6 +4453,7 @@ function bindRouteCalc() {
   writePlaces();
   const kmBox = document.querySelector(".js-km");
   if (kmBox) kmBox.oninput = fillFuel;
+  const tSel = document.querySelector("form[data-form=job] [name=truckId]"); if (tSel) tSel.addEventListener("change", fillFuel);
   const dBox = document.querySelector(".js-diesel");
   if (dBox) dBox.oninput = fillFuel;
   const gps = document.getElementById("useGps");

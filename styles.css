@@ -734,3 +734,23 @@ details.views { margin-top: 6px; }
 details.views summary { cursor: pointer; color: #f5c400; font-size: 12px; font-weight: 700; list-style: none; }
 details.views summary::-webkit-details-marker { display: none; }
 .view-line { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; padding: 5px 0; border-top: 1px solid rgba(255,255,255,.08); font-size: 12px; }
+
+/* truck profit */
+.profit-total .row b:last-child { font-size: 22px; }
+.profit-grid { margin-top: 10px; gap: 8px; }
+.profit-grid > div { display: grid; gap: 2px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,.05); }
+.profit-grid b { font-size: 14px; }
+.neg { color: #ff8b7a; } .pos { color: #3dff7a; }
+.lf-head b.pos, .lf-head b.neg { white-space: nowrap; }
+.fuel-check { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border-left: 3px solid rgba(255,255,255,.2); }
+.fuel-check p { margin: 6px 0 0; }
+.fuel-check.green { border-left-color: #3dff7a; } .fuel-check.gold { border-left-color: #f5c400; } .fuel-check.red { border-left-color: #ff3b3b; }
+.fuel-check .fine { font-size: 11px; }
+
+/* price suggestion */
+.price-box { padding: 12px; border-radius: 12px; background: rgba(245,196,0,.08); border: 1px solid rgba(245,196,0,.35); }
+.price-box .eyebrow { display: block; }
+.price-big { display: block; font-size: 20px; color: #f5c400; margin: 2px 0; }
+.pricing-card summary { cursor: pointer; }
+.profit-head { display: grid; gap: 2px; }
+.profit-head b { font-size: 26px; }
