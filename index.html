@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon-w.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <link rel="stylesheet" href="./styles.css?v=168" />
+  <link rel="stylesheet" href="./styles.css?v=170" />
   <script>
     // Runs before the page is drawn, so a signed-in phone never sees the sign-in form flash.
     (function () {
@@ -45,6 +45,8 @@
         <p class="err" id="err" style="margin:10px 0 0"></p>
         <button class="btn btn-primary wide" style="margin-top:14px" id="loginBtn">Enter Conacrew</button>
       </form>
+      <a class="get-app" id="getApp" href="https://github.com/petermuta/conacrewlog/releases/latest/download/conacrew.apk" hidden>📱 Get the Android app</a>
+      <script>(function () { var a = /Android/i.test(navigator.userAgent), n = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform(); if (a && !n) document.getElementById("getApp").hidden = false; })();</script>
       <div class="or-line" aria-hidden="true"><span>or</span></div>
       <a class="client-entry" href="./book.html">
         <img src="./truck-8x4-sm.jpg" alt="" />
@@ -53,7 +55,7 @@
       </a>
     </div>
   </div>
-  <script src="./store.js?v=168"></script>
+  <script src="./store.js?v=170"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>

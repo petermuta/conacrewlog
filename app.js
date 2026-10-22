@@ -3158,6 +3158,7 @@ function checkArrivals(fromOthers) {
   const fresh = seen ? now.filter(([k]) => !seen.includes(k)) : [];
   try { localStorage.setItem(key, JSON.stringify(now.map(([k]) => k).slice(0, 400))); } catch (e) {}
   if (!fresh.length || !fromOthers) return;
+  if (native() && document.hidden) { nativeNotify(fresh[0][1].split(" · ")[0], fresh.length > 1 ? fresh[0][1].split(" · ").slice(1).join(" · ") + ` (+${fresh.length - 1} more)` : fresh[0][1].split(" · ").slice(1).join(" · "), fresh[0][2]); return; }
   ring();
   toast(fresh[0][1] + (fresh.length > 1 ? ` (+${fresh.length - 1} more)` : ""), fresh.length > 1 && DATA.me.role === "admin" ? "#home" : fresh[0][2] || "#home");
 }
@@ -3236,6 +3237,7 @@ function viewTeam() {
       ${trusted.filter((d) => d.id !== myDev).map((d) => `<div class="pay-line"><div><b>${esc(d.label)}</b><div class="muted">Trusted ${whenShort(d.addedAt)}</div></div><button type="button" class="btn btn-ghost btn-sm" data-act="untrust_device" data-device="${esc(d.id)}">Remove</button></div>`).join("")}
     </div>` : ""}
     ${isMain ? `<div id="backupBox" style="margin-top:12px"></div><div id="blocksBox"></div>` : ""}
+    ${isMain ? `<div class="card item app-card" style="margin-top:12px"><div class="row keep" style="align-items:center"><div><b>📱 Android app</b><div class="muted">For the team's Android phones</div></div><div style="display:flex;gap:6px"><button type="button" class="btn btn-ghost btn-sm js-copylink" data-link="https://github.com/petermuta/conacrewlog/releases/latest/download/conacrew.apk">Copy</button><a class="btn btn-whatsapp btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent("Conacrew app for Android: open this link on your phone, download, then open the file to install. https://github.com/petermuta/conacrewlog/releases/latest/download/conacrew.apk")}">Share</a></div></div></div>` : ""}
     ${payInfoCard().replace("<summary>Where clients pay</summary>", "<summary><b>Where clients pay</b></summary>").replace('style="margin-top:10px"', 'style="margin-top:12px"')}
     <div class="grid g3" style="margin-top:14px">
       <div class="card kpi"><span class="eyebrow">People</span><b>${users.length}</b></div>
@@ -4179,7 +4181,48 @@ function keepScreenOn() {
   }).catch(() => {});
 }
 
+// ---- inside the Android app ----
+function native() { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); }
+function plugin(name) { return native() && window.Capacitor.Plugins ? window.Capacitor.Plugins[name] : null; }
+let BG_WATCH = null, BG_SYNC_AT = 0, NOTE_ID = 1;
+function nativeNotify(title, body, url) {
+  const LN = plugin("LocalNotifications"); if (!LN) return false;
+  LN.schedule({ notifications: [{ id: (Date.now() % 2000000000) + (NOTE_ID++), title, body: body || "", smallIcon: "ic_stat_conacrew", iconColor: "#f5c400", extra: { url: url || "" } }] }).catch(() => {});
+  return true;
+}
+(function nativeSetup() {
+  if (!native()) return;
+  const LN = plugin("LocalNotifications");
+  if (LN) {
+    LN.requestPermissions().catch(() => {});
+    LN.addListener("localNotificationActionPerformed", (a) => { const u = a && a.notification && a.notification.extra && a.notification.extra.url; if (u) location.hash = u; });
+  }
+})();
+// background tracking for drivers: Android keeps a small "sharing location" notice while it runs
+function startNativeWatch(ask) {
+  const BG = plugin("BackgroundGeolocation");
+  if (!BG || BG_WATCH) return !!BG;
+  LIVE.status = "starting"; updateLiveStatus();
+  BG.addWatcher({ backgroundTitle: "Conacrew", backgroundMessage: "Sharing your truck's location with the office", requestPermissions: true, stale: false, distanceFilter: 30 }, (loc, err) => {
+    if (err) {
+      LIVE.status = err.code === "NOT_AUTHORIZED" ? "denied" : "nosignal";
+      if (err.code === "NOT_AUTHORIZED" && ask && confirm("Allow location for Conacrew in settings?")) BG.openSettings();
+      updateLiveStatus(); return;
+    }
+    if (!loc) return;
+    LIVE.status = "on";
+    sendPing({ coords: { latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy, speed: loc.speed } });
+    // the app may be in the background: check for new items about once a minute
+    if (Date.now() - BG_SYNC_AT > 60000) { BG_SYNC_AT = Date.now(); try { Conacrew.syncNow(); } catch (e) {} }
+  }).then((id) => { BG_WATCH = id; try { localStorage.setItem("conacrew-live-on", "1"); } catch (e) {} }).catch(() => { LIVE.status = "nosignal"; updateLiveStatus(); });
+  return true;
+}
 function startLiveWatch(ask) {
+  if (DATA && DATA.me.role === "driver" && DATA.truck && native() && plugin("BackgroundGeolocation")) {
+    let on = false; try { on = localStorage.getItem("conacrew-live-on") === "1"; } catch (e) {}
+    if (ask || on) startNativeWatch(ask); else { LIVE.status = LIVE.status || "off"; updateLiveStatus(); }
+    return;
+  }
   if (!DATA || DATA.me.role !== "driver") return;
   if (!navigator.geolocation || !DATA.truck) { updateLiveStatus(); return; }
   const begin = () => {
@@ -4249,7 +4292,7 @@ function updateLiveStatus() {
   box.innerHTML = `
     <div class="row"><div><b>${title}</b>${body ? `<p class="muted">${body}</p>` : ""}</div><span class="badge ${tone}">GPS</span></div>
     ${button ? `<button type="button" class="btn btn-primary wide" id="liveOn" style="margin-top:10px">${LIVE.status === "denied" ? "Try again" : "Turn on live tracking"}</button>` : ""}
-    ${LIVE.status === "on" && "wakeLock" in navigator ? `<label class="muted" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="liveAwake" ${awake ? "checked" : ""}/> Keep screen on</label>` : ""}`;
+    ${LIVE.status === "on" && "wakeLock" in navigator && !native() ? `<label class="muted" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="liveAwake" ${awake ? "checked" : ""}/> Keep screen on</label>` : ""}`;
   const on = document.getElementById("liveOn");
   if (on) on.onclick = () => startLiveWatch(true);
   const aw = document.getElementById("liveAwake");

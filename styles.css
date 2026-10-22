@@ -799,3 +799,5 @@ details.views summary::-webkit-details-marker { display: none; }
 .push-card .muted { font-size: 12px; }
 .push-btns { display: flex; gap: 6px; flex: 0 0 auto; }
 @media (max-width: 420px) { .push-card { flex-direction: column; align-items: stretch; } .push-btns .btn { flex: 1; } }
+.get-app { display: block; margin: 14px auto 0; width: max-content; padding: 10px 16px; border-radius: 999px; background: rgba(255,255,255,.1); color: #fff; font-weight: 700; text-decoration: none; }
+.get-app[hidden] { display: none; }

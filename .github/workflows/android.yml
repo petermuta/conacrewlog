@@ -1,0 +1,77 @@
+# Builds the Conacrew Android app and publishes it on the repository's Releases page.
+# Download link for phones: https://github.com/petermuta/conacrewlog/releases/latest/download/conacrew.apk
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths: ["android-app/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install
+        run: npm ci
+
+      - name: Prepare the Android project
+        run: npx cap sync android
+
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/conacrew.jks"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "SIGNED_WITH=Conacrew key" >> "$GITHUB_ENV"
+          else
+            # no key saved yet: a one-off test key (each test build needs the old one uninstalled first)
+            keytool -genkeypair -keystore "$RUNNER_TEMP/conacrew.jks" -storepass testpass123 -keypass testpass123 -alias conacrew -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=Conacrew test build"
+            echo "KEYSTORE_PASSWORD=testpass123" >> "$GITHUB_ENV"
+            echo "SIGNED_WITH=test key" >> "$GITHUB_ENV"
+          fi
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/conacrew.jks" >> "$GITHUB_ENV"
+
+      - name: Build
+        working-directory: android-app/android
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease bundleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/conacrew.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/conacrew.aab"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ github.run_number }}
+          name: Conacrew Android 1.0.${{ github.run_number }}
+          body: |
+            Install on Android: download conacrew.apk on the phone and open it.
+            Google Play: upload conacrew.aab.
+            Signed with: ${{ env.SIGNED_WITH }}
+          files: |
+            ${{ runner.temp }}/conacrew.apk
+            ${{ runner.temp }}/conacrew.aab
+          make_latest: true

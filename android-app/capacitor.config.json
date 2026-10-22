@@ -1,0 +1,14 @@
+{
+  "appId": "com.conacrewlogs.app",
+  "appName": "Conacrew",
+  "webDir": "www",
+  "server": {
+    "url": "https://conacrewlogs.com/index.html",
+    "allowNavigation": ["conacrewlogs.com", "*.conacrewlogs.com"],
+    "androidScheme": "https"
+  },
+  "android": { "backgroundColor": "#0b1626" },
+  "plugins": {
+    "LocalNotifications": { "smallIcon": "ic_stat_conacrew", "iconColor": "#f5c400" }
+  }
+}

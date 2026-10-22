@@ -1,0 +1,13 @@
+{
+  "name": "conacrew-android",
+  "private": true,
+  "description": "Conacrew Android app: opens conacrewlogs.com, adds background GPS for drivers and phone notifications",
+  "scripts": { "sync": "cap sync android" },
+  "dependencies": {
+    "@capacitor/android": "6.2.1",
+    "@capacitor/core": "6.2.1",
+    "@capacitor/local-notifications": "6.1.2",
+    "@capacitor-community/background-geolocation": "1.2.21"
+  },
+  "devDependencies": { "@capacitor/cli": "6.2.1" }
+}
