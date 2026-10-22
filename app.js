@@ -392,6 +392,14 @@ function route() {
   lockForViewing();
   updateLiveStatus();
   startLiveMap();
+  checkArrivals(window.__fromOthers); window.__fromOthers = false;
+  bellIcon();
+}
+function bellIcon() { const b = document.getElementById("bell"); if (b) { b.textContent = soundOn() ? "🔔" : "🔕"; b.title = soundOn() ? "Sound on for new items" : "Sound off"; b.setAttribute("aria-pressed", soundOn() ? "true" : "false"); } }
+function toggleSound() {
+  try { localStorage.setItem("conacrew.sound", soundOn() ? "off" : "on"); } catch (e) {}
+  bellIcon();
+  if (soundOn()) { unlockAudio(); ring(); toast("Sound on. You'll hear this when something new comes in."); } else toast("Sound off on this phone.");
 }
 
 function bizBar() {
@@ -3031,6 +3039,66 @@ function whereLine(p, opts) {
   if (!bits.length && !(opts && opts.ip && p.ip)) return "";
   return `<div class="where">${bits.join(" ")}${opts && opts.ip && p.ip ? `<span class="muted where-ip">Network ${esc(p.ip)}</span>` : ""}</div>`;
 }
+// ---- ring and buzz when something new arrives ----
+function arrivals() {
+  const me = DATA.me, out = [];
+  const add = (key, text, href) => out.push([key, text, href]);
+  if (me.role === "admin") {
+    (DATA.bookings || []).filter((b) => !b.trashed && ["new", "seen", "payment_check", "accepted"].includes(b.status)).forEach((b) => add("bk:" + b.id + ":" + b.status, (b.status === "payment_check" ? "Payment to check · " : b.status === "accepted" ? "Booking confirmed · " : "New booking · ") + ((b.client || {}).company || (b.client || {}).name || b.ref), "#trucks-book"));
+    (DATA.moneyRequests || []).filter((r) => r.status === "open" || r.status === "partial").forEach((r) => add("rq:" + r.id, "Money request · " + (r.byName || r.by || ""), "#money-spend"));
+    (DATA.fleetTasks || []).filter((t) => t.status === "done").forEach((t) => add("tk:" + t.id + ":" + (t.doneAt || ""), "Task reply · " + taskTitle(t), "#trucks-work"));
+    (DATA.issues || []).filter((i) => i.status === "open").forEach((i) => add("is:" + i.id, "Driver issue · " + (i.title || ""), "#trucks-issues"));
+    if (!me.assistant) (DATA.users || []).forEach((u) => (u.pendingDevices || []).forEach((p) => add("ph:" + p.id, "New phone · " + u.name, "#team")));
+    (DATA.docs || []).filter((x) => docFromTeam(x) && !x.seenAt).forEach((x) => add("dc:" + x.id, "New document · " + (x.by || ""), "#home"));
+  } else {
+    if (me.role === "driver") {
+      const my = me.driverId;
+      (DATA.fleetTasks || []).filter((t) => t.driverId === my && t.status === "open").forEach((t) => add("tk:" + t.id + ":" + (t.sentBack || ""), (t.sentBack ? "Task sent back · " : "New task · ") + taskTitle(t), "#drive-tasks"));
+      (DATA.jobs || []).filter((j) => j.driverId === my && newOfficeLoad(j)).forEach((j) => add("ld:" + j.id, "New load · " + (j.code || "") + " " + (j.cargo || ""), "#drive-jobs"));
+      (DATA.notifications || []).filter((n) => n.status === "unread" && !n.taskId).forEach((n) => add("nt:" + n.id, n.title || "From the office", "#drive"));
+    }
+    (DATA.disbursements || []).filter((f) => f.status === "sent").forEach((f) => add("fl:" + f.id, "Money sent · " + ugx(f.amountUgx), DATA.me.role === "driver" ? "#drive-money" : DATA.me.role === "cane_manager" ? "#cane-spend" : "#passion-spend"));
+  }
+  return out;
+}
+function soundOn() { try { return localStorage.getItem("conacrew.sound") !== "off"; } catch (e) { return true; } }
+let AUDIO = null;
+function unlockAudio() { try { AUDIO = AUDIO || new (window.AudioContext || window.webkitAudioContext)(); if (AUDIO.state === "suspended") AUDIO.resume(); } catch (e) {} }
+["pointerdown", "keydown", "touchstart"].forEach((ev) => window.addEventListener(ev, unlockAudio, { passive: true }));
+function ring() {
+  if (!soundOn()) return;
+  try { if (navigator.vibrate) navigator.vibrate([220, 120, 220, 120, 220]); } catch (e) {}
+  try {
+    unlockAudio(); if (!AUDIO) return;
+    const t0 = AUDIO.currentTime + 0.02;
+    // two bright bell taps, twice: ding-dong, ding-dong
+    [[0, 1318.5], [0.18, 987.8], [0.62, 1318.5], [0.8, 987.8]].forEach(([dt, f]) => {
+      const o = AUDIO.createOscillator(), o2 = AUDIO.createOscillator(), g = AUDIO.createGain();
+      o.type = "sine"; o.frequency.value = f; o2.type = "triangle"; o2.frequency.value = f * 2;
+      g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(0.5, t0 + dt + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.55);
+      o.connect(g); o2.connect(g); g.connect(AUDIO.destination);
+      o.start(t0 + dt); o2.start(t0 + dt); o.stop(t0 + dt + 0.6); o2.stop(t0 + dt + 0.6);
+    });
+  } catch (e) {}
+}
+function toast(text, href) {
+  let el = document.getElementById("toast");
+  if (!el) { el = document.createElement("a"); el.id = "toast"; el.className = "toast"; document.body.appendChild(el); }
+  el.textContent = "🔔 " + text; el.href = href || "#"; el.classList.add("on");
+  el.onclick = () => el.classList.remove("on");
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 7000);
+}
+function checkArrivals(fromOthers) {
+  if (!DATA || !DATA.me || DATA.viewingAs) return;
+  const key = "conacrew.seen." + DATA.me.id;
+  const now = arrivals();
+  let seen = null; try { seen = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) {}
+  const fresh = seen ? now.filter(([k]) => !seen.includes(k)) : [];
+  try { localStorage.setItem(key, JSON.stringify(now.map(([k]) => k).slice(0, 400))); } catch (e) {}
+  if (!fresh.length || !fromOthers) return;
+  ring();
+  toast(fresh[0][1] + (fresh.length > 1 ? ` (+${fresh.length - 1} more)` : ""), fresh.length > 1 && DATA.me.role === "admin" ? "#home" : fresh[0][2] || "#home");
+}
 function phonesWaiting() {
   return (DATA.users || []).reduce((n, u) => n + ((u.pendingDevices || []).length), 0);
 }
@@ -4277,8 +4345,8 @@ window.addEventListener("conacrew:signin", () => { syncLight(); if (!Conacrew.se
 window.addEventListener("conacrew:changed", () => {
   syncLight();
   if (!DATA) return;
-  if (busyTyping()) { window.__syncPending = true; return; }
-  try { const y = window.scrollY; DATA = Conacrew.bootstrap(); route(); window.scrollTo(0, y); } catch (e) { if (e.status === 401) location.href = "./index.html"; }
+  if (busyTyping()) { window.__syncPending = true; try { const keep = DATA; DATA = Conacrew.bootstrap(); checkArrivals(true); DATA = keep; } catch (e) {} return; }
+  try { const y = window.scrollY; DATA = Conacrew.bootstrap(); window.__fromOthers = true; route(); window.scrollTo(0, y); } catch (e) { if (e.status === 401) location.href = "./index.html"; }
 });
 document.addEventListener("input", (e) => { const f = e.target.closest && e.target.closest("#app form"); if (f) f.classList.add("dirty"); }, true);
 document.addEventListener("focusout", () => { setTimeout(() => { if (window.__syncPending && !busyTyping()) { window.__syncPending = false; window.dispatchEvent(new CustomEvent("conacrew:changed")); } }, 400); });

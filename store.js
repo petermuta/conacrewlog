@@ -2412,7 +2412,9 @@ const Conacrew = {
   autoSync() {
     if (this._auto || typeof window === "undefined") return;
     this._auto = true;
-    const tick = () => { if (!document.hidden && this.session() && this.server !== "none") this.syncNow(); };
+    // on screen: every 45 s; in a background tab (office computer): every 90 s so new items still ring
+    let n = 0;
+    const tick = () => { n++; if (document.hidden && n % 2) return; if (this.session() && this.server !== "none") this.syncNow(); };
     setInterval(tick, 45000);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
     window.addEventListener("online", () => { this.server = ""; tick(); });
