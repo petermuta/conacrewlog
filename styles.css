@@ -788,3 +788,8 @@ details.views summary::-webkit-details-marker { display: none; }
 }
 .insp-btns { display: flex; gap: 6px; }
 .js-clear-all[hidden] { display: none !important; }
+
+/* live location inside a truck card */
+.truck-live { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); }
+.truck-live p { margin: 4px 0 0; }
+.truck-map { height: 240px; margin-top: 10px; border-radius: 12px; overflow: hidden; }

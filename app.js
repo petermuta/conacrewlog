@@ -512,7 +512,7 @@ function viewTrucks() {
       ["Insurance", when(t.insuranceExpiry)],
       ["Road licence", when(t.roadLicenceExpiry)],
       n ? ["Open tasks", `<a href="#trucks-work">${n}</a>`] : null,
-    ]) + `<a class="btn btn-ghost btn-sm" href="#truck/${t.id}" style="margin-top:10px">Service history</a><details class="settings" style="margin-top:10px"><summary>Edit truck</summary>${truckForm(t)}</details>`;
+    ]) + `<div class="truck-live" data-truck="${t.id}"><div class="row keep" style="align-items:center"><b>Live location</b><span class="badge js-live-badge">…</span></div><p class="muted js-live-state">Loading…</p><div class="truck-map"></div></div><a class="btn btn-ghost btn-sm" href="#truck/${t.id}" style="margin-top:10px">Service history</a><details class="settings" style="margin-top:10px"><summary>Edit truck</summary>${truckForm(t)}</details>`;
     return foldCard(head, body);
   };
   return `
@@ -526,9 +526,7 @@ function viewTrucks() {
     </div>
     <div class="list" style="margin-top:12px">${DATA.trucks.map(card).join("")}</div>
     ${DATA.viewingAs ? "" : `<details class="card team-row" style="margin-top:10px"><summary><div class="avatar">＋</div><div style="flex:1"><b>Add a truck</b></div></summary><div style="margin-top:12px">${truckForm(null)}</div></details>`}
-    <div class="row" style="margin-top:18px"><h2 style="margin:0">Live locations</h2><span class="muted" id="liveNote">Loading…</span></div>
-    <div id="liveMap" style="height:320px;margin-top:10px;border-radius:16px"></div>
-    <div class="list" id="liveList" style="margin-top:10px"></div>`;
+`;
 }
 
 // ---- truck profit and fuel check ----
@@ -3376,7 +3374,38 @@ function bindFolds() {
     const card = b.closest(".js-fold"), body = card.querySelector(".lf-body"), open = body.hidden;
     document.querySelectorAll(".js-fold").forEach((c) => { c.querySelector(".lf-body").hidden = true; c.classList.remove("open"); c.querySelector(".js-fold-btn").setAttribute("aria-expanded", "false"); });
     if (open) { body.hidden = false; card.classList.add("open"); b.setAttribute("aria-expanded", "true"); }
+    if (open && body.querySelector(".truck-live")) drawTruckLive(body.querySelector(".truck-live"));
   }; });
+}
+// one truck's live spot, shown only inside its open card
+async function drawTruckLive(box) {
+  if (!box || box.closest(".lf-body").hidden) return;
+  const id = box.dataset.truck, t = (DATA.trucks || []).find((x) => x.id === id);
+  const pings = livePings();
+  let reached = false;
+  try {
+    const res = await fetch("/.netlify/functions/live", { cache: "no-store", headers: { authorization: "Bearer " + Conacrew.token() } });
+    if (res.ok) { mergePings(pings, normalizePings(await res.json())); reached = true; }
+  } catch (e) {}
+  saveLivePings(pings);
+  if (!document.body.contains(box) || box.closest(".lf-body").hidden) return;
+  const p = pings[id], now = Date.now(), age = p ? now - p.at : Infinity;
+  const tone = age < 10 * 60000 ? "green" : age < 24 * 3600000 ? "gold" : "red";
+  const badgeEl = box.querySelector(".js-live-badge"), stateEl = box.querySelector(".js-live-state"), mapEl = box.querySelector(".truck-map");
+  badgeEl.className = "badge js-live-badge " + (p ? tone : "");
+  badgeEl.textContent = !p ? "No signal" : tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old";
+  stateEl.textContent = !p ? "No location yet" + (reached ? "" : " · offline") : (age < 3 * 60000 && p.moving ? "Moving · " : "Last seen ") + agoText(p.at) + " · " + whenText(p.at);
+  if (!p || !window.L || !L.map) { mapEl.style.display = "none"; return; }
+  mapEl.style.display = "";
+  if (!mapEl._map) {
+    mapEl._map = L.map(mapEl, { zoomControl: true }).setView([p.lat, p.lng], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(mapEl._map);
+  }
+  const colours = { green: "#3dff7a", gold: "#f5c400", red: "#ff8b7a" };
+  if (mapEl._dot) mapEl._dot.remove();
+  mapEl._dot = L.circleMarker([p.lat, p.lng], { radius: 10, weight: 2, color: "#0d1b2a", fillColor: colours[tone], fillOpacity: 0.95 }).addTo(mapEl._map).bindTooltip(t ? t.plate : "", { permanent: true, direction: "top", offset: [0, -8] });
+  mapEl._map.setView([p.lat, p.lng], mapEl._map.getZoom() || 13);
+  setTimeout(() => mapEl._map && mapEl._map.invalidateSize(), 150);
 }
 function jobOfStub(s) { return (DATA.jobs || []).find((j) => (s.refId && j.id === s.refId) || (s.loadId && j.code === s.loadId)); }
 function paidLine(s) {
@@ -4187,6 +4216,14 @@ let LIVE_MAP_TIMER = null;
 function startLiveMap() {
   clearInterval(LIVE_MAP_TIMER);
   LIVE_MAP_TIMER = null;
+  if (document.querySelector(".truck-live")) {
+    LIVE_MAP_TIMER = setInterval(() => {
+      const open = [...document.querySelectorAll(".truck-live")].find((b) => !b.closest(".lf-body").hidden);
+      if (!document.querySelector(".truck-live")) { clearInterval(LIVE_MAP_TIMER); LIVE_MAP_TIMER = null; return; }
+      if (open && !document.hidden) drawTruckLive(open);
+    }, 30000);
+    return;
+  }
   if (!document.getElementById("liveMap")) return;
   drawLiveMap();
   LIVE_MAP_TIMER = setInterval(() => {
