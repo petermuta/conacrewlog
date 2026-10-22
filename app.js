@@ -29,7 +29,7 @@ const INSPECT = [
   ["Papers", [["licence","Driving licence"],["insurance","Insurance"],["road","Road licence"]]],
 ];
 function inspectForm() {
-  return `<div class="inspect-top"><span class="muted js-insp-count">0 of ${INSPECT.reduce((n, [, p]) => n + p.length, 0)} checked</span><button type="button" class="btn btn-ghost btn-sm js-all-ok">Mark all OK</button></div>` + INSPECT.map(([g, parts]) => `
+  return `<div class="inspect-top"><span class="muted js-insp-count">0 of ${INSPECT.reduce((n, [, p]) => n + p.length, 0)} checked</span><span class="insp-btns"><button type="button" class="btn btn-ghost btn-sm js-clear-all" hidden>Clear all</button><button type="button" class="btn btn-ghost btn-sm js-all-ok">Mark all OK</button></span></div>` + INSPECT.map(([g, parts]) => `
     <section class="insp-group">
     <div class="insp-head"><b>${g}</b><span class="insp-n js-group-n">0/${parts.length}</span></div>
     <div class="insp-body">
@@ -961,6 +961,7 @@ function inspCount(form) {
   const el = form && form.querySelector(".js-insp-count"); if (!el) return;
   const all = form.querySelectorAll(".inspect-part").length, done = [...form.querySelectorAll(".inspect-part")].filter((b) => b.querySelector("input[type=radio]:checked")).length;
   el.textContent = done + " of " + all + " checked"; el.classList.toggle("ok-t", done === all);
+  const clr = form.querySelector(".js-clear-all"); if (clr) clr.hidden = !done;
   // each area shows its own count, green when done, red when something is not OK
   form.querySelectorAll(".insp-group").forEach((g) => {
     const parts = [...g.querySelectorAll(".inspect-part")], vals = parts.map((b) => (b.querySelector("input[type=radio]:checked") || {}).value).filter(Boolean);
@@ -987,9 +988,12 @@ function bindTasks() {
     kind.onchange = sync; sync();
   }
   document.querySelectorAll("form[data-form=task-reply] .mark").forEach((lab) => {
-    lab.onclick = () => {
-      const box = lab.closest(".task-part"); box.querySelectorAll(".mark").forEach((c) => c.classList.remove("on")); lab.classList.add("on"); lab.querySelector("input").checked = true;
-      const bad = lab.querySelector("input").value !== "pass";
+    lab.onclick = (e) => {
+      e.preventDefault();
+      const box = lab.closest(".task-part"), again = lab.classList.contains("on");
+      box.querySelectorAll(".mark").forEach((c) => { c.classList.remove("on"); c.querySelector("input").checked = false; });
+      if (!again) { lab.classList.add("on"); lab.querySelector("input").checked = true; }
+      const bad = !again && lab.querySelector("input").value !== "pass";
       const extra = box.querySelector(".js-if-bad"); if (extra) extra.hidden = !bad;
       showVoiceIfBad(lab.closest("form"));
     };
@@ -3644,18 +3648,25 @@ function bind() {
   document.querySelectorAll(".js-tripset").forEach((sel) => { sel.onchange = () => act("update_job", { id: sel.dataset.id, status: sel.value }); });
   bindLoadFromBooking();
   document.querySelectorAll("form[data-form=inspect] .mark").forEach((lab) => {
-    lab.onclick = () => {
+    lab.onclick = (e) => {
+      e.preventDefault();
       const box = lab.closest(".inspect-part");
-      box.querySelectorAll(".mark").forEach((c) => c.classList.remove("on"));
-      lab.classList.add("on");
-      const val = lab.querySelector("input").value;
+      const again = lab.classList.contains("on"); // tap the chosen answer again to clear it
+      box.querySelectorAll(".mark").forEach((c) => { c.classList.remove("on"); c.querySelector("input").checked = false; });
+      const val = again ? "" : lab.querySelector("input").value;
+      if (!again) { lab.classList.add("on"); lab.querySelector("input").checked = true; }
       const shot = box.querySelector(".js-shot");
-      if (shot) { shot.style.display = (val === "warn" || val === "fail") ? "" : "none"; if (val === "pass") shot.value = ""; }
-      lab.querySelector("input").checked = true;
+      if (shot) { shot.style.display = (val === "warn" || val === "fail") ? "" : "none"; if (!val || val === "pass") shot.value = ""; }
       showVoiceIfBad(lab.closest("form"));
       inspCount(lab.closest("form"));
     };
   });
+  document.querySelectorAll(".js-clear-all").forEach((b) => { b.onclick = () => {
+    const form = b.closest("form");
+    if (!confirm("Clear every answer and start again?")) return;
+    form.querySelectorAll(".inspect-part").forEach((box) => { box.querySelectorAll(".mark").forEach((c) => { c.classList.remove("on"); c.querySelector("input").checked = false; }); const s = box.querySelector(".js-shot"); if (s) { s.style.display = "none"; s.value = ""; } });
+    showVoiceIfBad(form); inspCount(form);
+  }; });
   document.querySelectorAll(".js-all-ok").forEach((b) => { b.onclick = () => {
     const form = b.closest("form");
     if (!confirm("Mark every part OK? Only do this after checking the truck.")) return;

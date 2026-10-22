@@ -786,3 +786,5 @@ details.views summary::-webkit-details-marker { display: none; }
   .top-left .btn, .top-user #out { padding-left: 10px; padding-right: 10px; }
   .top-bar .logo-lockup strong { font-size: 15px; }
 }
+.insp-btns { display: flex; gap: 6px; }
+.js-clear-all[hidden] { display: none !important; }
