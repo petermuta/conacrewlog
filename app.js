@@ -487,8 +487,8 @@ function truckForm(t) {
       <label class="lbl">Road licence expires<input class="field" type="date" name="roadLicenceExpiry" value="${esc(v.roadLicenceExpiry || "")}" /></label>
     </div>
     <div class="grid g2" style="margin-top:10px">
-      <label class="lbl">Fuel use loaded (L per 100 km)<input class="field" name="loadedL100" inputmode="decimal" value="${v.loadedL100 || ""}" placeholder="${truckRates(v.hp ? v : { hp: 420 }).loaded}" /></label>
-      <label class="lbl">Fuel use empty (L per 100 km)<input class="field" name="emptyL100" inputmode="decimal" value="${v.emptyL100 || ""}" placeholder="${truckRates(v.hp ? v : { hp: 420 }).empty}" /></label>
+      <label class="lbl">Fuel loaded (L/100 km)<input class="field" name="loadedL100" inputmode="decimal" value="${v.loadedL100 || ""}" placeholder="${truckRates(v.hp ? v : { hp: 420 }).loaded}" /></label>
+      <label class="lbl">Fuel empty (L/100 km)<input class="field" name="emptyL100" inputmode="decimal" value="${v.emptyL100 || ""}" placeholder="${truckRates(v.hp ? v : { hp: 420 }).empty}" /></label>
     </div>
     ${t ? `<label class="lbl" style="margin-top:10px">Status<select class="field" name="status">${[["idle", "Ready"], ["workshop", "In the workshop"], ["parked", "Parked"]].map(([k, l]) => `<option value="${k}" ${v.status === k ? "selected" : ""}>${l}</option>`).join("")}${["on_trip", "loading"].includes(v.status) ? `<option value="" selected>On a trip (set by the load)</option>` : ""}</select></label>` : ""}
     <button class="btn btn-primary wide" style="margin-top:12px">${t ? "Save truck" : "Add truck"}</button>
@@ -605,9 +605,8 @@ function viewTruckProfit() {
     ]) + `<div class="fuel-check ${v ? v.tone : ""}">
       <b>Fuel check</b>
       ${v ? `<p>Bought <b>${Math.round(r.litres).toLocaleString()} L</b> · the loads needed about <b>${Math.round(r.expected).toLocaleString()} L</b> · <span class="badge ${v.tone}">${v.pct}% · ${v.word}</span></p>
-      ${v.word !== "OK" ? `<p class="muted">More fuel bought than the loads need. Check the fuel receipts, odometer and trips for ${esc(r.t.plate)}.</p>${v.word === "High" ? (r.t.fuelCheckedAt && r.t.fuelCheckedAt >= new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10) ? `<p class="muted">Checked ${fmtDay(r.t.fuelCheckedAt)}</p>` : `<button type="button" class="btn btn-ghost btn-sm js-fuelok" data-id="${r.t.id}" style="margin-top:8px">I've checked this</button>`) : ""}` : ""}`
-      : `<p class="muted">${r.litres ? `Bought ${Math.round(r.litres).toLocaleString()} L, but no delivered loads with distance to compare.` : r.expected ? "No fuel logged for these loads." : "Nothing to compare yet."}</p>`}
-      <p class="muted fine">Uses ${truckRates(r.t).loaded} L/100 km loaded and ${truckRates(r.t).empty} L/100 km empty. Change these under Trucks › Edit truck.</p>
+      ${v.word !== "OK" ? `${v.word === "High" ? (r.t.fuelCheckedAt && r.t.fuelCheckedAt >= new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10) ? `<p class="muted">Checked ${fmtDay(r.t.fuelCheckedAt)}</p>` : `<button type="button" class="btn btn-ghost btn-sm js-fuelok" data-id="${r.t.id}" style="margin-top:8px">I've checked this</button>`) : ""}` : ""}`
+      : `<p class="muted">${r.litres ? `Bought ${Math.round(r.litres).toLocaleString()} L · no loads to compare` : r.expected ? "No fuel logged" : "Nothing yet"}</p>`}
     </div>`;
     return foldCard(head, body, v && v.word === "High" && !(r.t.fuelCheckedAt && r.t.fuelCheckedAt >= new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10)) ? "flash" : "");
   };
@@ -625,8 +624,8 @@ function viewTruckProfit() {
       <p class="muted" style="margin:8px 0 0">${tot.loads} load${tot.loads === 1 ? "" : "s"} delivered · ${Math.round(tot.km).toLocaleString()} km${tot.owed ? ` · clients still owe ${ugx(tot.owed)}` : ""}</p>
     </div>
     <div class="list" style="margin-top:12px">${rows.map(card).join("")}</div>
-    ${none.income || none.costTotal ? `<div class="card item" style="margin-top:10px"><b>Not linked to a truck</b>${facts([["Money in", ugx(none.income)], ...COST_ORDER.filter((g) => none.costs[g]).map((g) => [g, "− " + ugx(none.costs[g])])])}<p class="muted" style="margin:6px 0 0">Pick a truck when you record spending so it lands on the right truck.</p></div>` : ""}
-    <p class="muted" style="margin-top:12px;font-size:12px">Money in is what clients paid in this period. Costs are what was spent: office spending, money spent from advances, and driver pay. Advances not yet spent aren't counted.</p>`;
+    ${none.income || none.costTotal ? `<div class="card item" style="margin-top:10px"><b>Not linked to a truck</b>${facts([["Money in", ugx(none.income)], ...COST_ORDER.filter((g) => none.costs[g]).map((g) => [g, "− " + ugx(none.costs[g])])])}</div>` : ""}
+`;
 }
 
 function viewDrivers() {
@@ -659,7 +658,7 @@ function viewDrivers() {
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-drivers")}
     <div class="list" style="margin-top:14px">${(DATA.drivers || []).map(card).join("") || `<div class="card item muted">No drivers yet.</div>`}</div>
-    <p class="muted" style="margin-top:10px">New drivers are added on <a href="#team">Team</a>, so they get a login and PIN.</p>`;
+    <a class="btn btn-ghost btn-sm" href="#team" style="margin-top:10px">＋ Add a driver</a>`;
 }
 function foldCard(head, body, cls) {
   return `<div class="card load-fold js-fold ${cls || ""}">
@@ -772,7 +771,7 @@ function fmtSec(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ":" + S
 function voiceBox(label) {
   return `<div class="voice-box js-voice">
     <input type="hidden" name="voice" value="" /><input type="hidden" name="voiceSec" value="0" />
-    <p class="lbl" style="margin:0">${label || "Voice note (max 3 min)"}</p>
+    <p class="lbl" style="margin:0">${label || "🎙 Voice note"}</p>
     <div class="voice-row">
       <button type="button" class="btn btn-rec js-rec">● Record</button>
       <button type="button" class="btn btn-ghost js-stop" disabled>■ Stop</button>
@@ -916,8 +915,8 @@ function driverTasksView() {
       ${parts.length ? `<ul class="todo-parts">${parts.map((p) => `<li>${esc((t.partNames || {})[p] || partName(p))}</li>`).join("")}</ul>` : ""}
       <p class="muted">Send back: ${[t.needPhoto ? "📷 photo" + (parts.length > 1 ? "s" : "") : "", t.needVoice ? "🎙 voice note" : ""].filter(Boolean).join(" + ") || "a short note"}</p>
       ${action ? `<a class="btn btn-primary wide" style="margin-top:10px;text-align:center" href="#drive-task/${esc(t.id)}">${parts.length ? "Start check" : "Reply"}</a>` : ""}
-      ${!action && t.status === "done" ? `<p class="muted" style="margin-top:8px">Sent ${whenShort(t.reply && t.reply.at)} · waiting for the office to check</p>` : ""}
-      ${!action && t.status === "closed" ? `<p class="muted" style="margin-top:8px">✓ Accepted by the office</p>` : ""}
+      ${!action && t.status === "done" ? `<p class="muted" style="margin-top:8px">Sent ${whenShort(t.reply && t.reply.at)}</p>` : ""}
+      ${!action && t.status === "closed" ? `<p class="muted" style="margin-top:8px">✓ Accepted</p>` : ""}
     </div>`;
   };
   return `
@@ -952,8 +951,8 @@ function driverTaskReply(id) {
       </div>`).join("")}
       ${!parts.length ? `<label class="lbl">📷 Photo of the work${t.needPhoto ? "" : " (optional)"}<input class="field js-part-photo" type="file" accept="image/*" capture="environment" data-part="work" /></label><div class="thumbs js-part-prev"></div>` : ""}
       ${parts.length ? `<label class="lbl" style="margin-top:12px">Odometer (optional)<input class="field" name="odometerKm" inputmode="numeric" value="${DATA.truck ? DATA.truck.odometerKm || "" : ""}" /></label>` : ""}
-      <div style="margin-top:12px" class="${parts.length ? "js-voice-if-bad" : ""}" ${parts.length ? "hidden" : ""}>${voiceBox(t.needVoice ? "🎙 Voice note (required, up to 3 minutes)" : "🎙 Voice note (optional, up to 3 minutes)")}</div>
-      <label class="lbl" style="margin-top:12px">Written note (optional)<input class="field" name="driverNote" placeholder="e.g. Rear left brake line was leaking, tightened it" /></label>
+      <div style="margin-top:12px" class="${parts.length ? "js-voice-if-bad" : ""}" ${parts.length ? "hidden" : ""}>${voiceBox(t.needVoice ? "🎙 Voice note (required)" : "🎙 Voice note")}</div>
+      <label class="lbl" style="margin-top:12px">Written note (optional)<input class="field" name="driverNote" placeholder="Optional" /></label>
       <button class="btn btn-primary wide" style="margin-top:14px">Send to office</button>
     </form>`;
 }
@@ -1097,7 +1096,7 @@ function viewLoadFromBooking(bk) {
     ${fleetTabs("trucks-new")}
     <form class="card item" data-form="job" style="margin-top:16px;max-width:560px">
       <input type="hidden" name="bookingId" value="${esc(bk.id)}" />
-      <div class="row keep" style="align-items:center"><div><b>Booking ${esc(bk.ref)}</b><div class="muted">From the client, can't be changed here</div></div><button type="button" class="btn btn-ghost btn-sm" id="dropBooking">Cancel</button></div>
+      <div class="row keep" style="align-items:center"><div><b>Booking ${esc(bk.ref)}</b></div><button type="button" class="btn btn-ghost btn-sm" id="dropBooking">Cancel</button></div>
       <dl class="bk-facts">
         <dt>Client</dt><dd>${esc(c.company || c.name)}${c.company ? `<div class="muted">${esc(c.name)}</div>` : ""}<div class="muted">${esc(c.phone)}</div></dd>
         <dt>Load</dt><dd>${esc(bk.cargo)}${trips > 1 ? ", " + trips + " trips" : ""}${bk.tonnes ? ", " + bk.tonnes + " t per trip" : ""}</dd>
@@ -1264,20 +1263,20 @@ function pastPerKm() {
   return { n: done.length, perKm: Math.round(sum / done.length) };
 }
 function priceBox(b) {
-  if (!b.km) return `<div class="price-box"><b>Suggested price</b><p class="muted">Add the distance to get a suggestion.</p></div>`;
+  if (!b.km) return `<div class="price-box"><b>Suggested price</b><p class="muted">No distance yet</p></div>`;
   const s = suggestPrice(b), past = pastPerKm();
   return `<div class="price-box">
     <div class="row keep" style="align-items:center"><div><span class="eyebrow">Suggested price</span><b class="price-big">${ugx(s.total)}</b><div class="muted">${s.trips > 1 ? `${ugx(s.perTrip)} a trip × ${s.trips}` : "One trip"} · ${s.km} km each way</div></div>
       <button type="button" class="btn btn-primary btn-sm js-useprice" data-price="${s.total}">Use this price</button></div>
     <details class="settings" style="margin-top:8px"><summary>How it's worked out</summary>
       ${facts([["Diesel", `${Math.round(s.litres)} L × ${ugx(s.diesel)} = ${ugx(s.fuel)}`], ["Repairs & tyres", `${s.km * 2} km × ${ugx(pricing().wearPerKm)} = ${ugx(s.wear)}`], ["Driver pay", ugx(s.driver)], s.extra ? ["Other trip costs", ugx(s.extra)] : null, ["Cost a trip", `<b>${ugx(s.cost)}</b>`], ["Your margin", s.margin + "%" + (s.minUsed ? ` · raised to your minimum ${ugx(pricing().minTrip)}` : "")]])}
-      ${past ? `<p class="muted" style="margin:8px 0 0">Your last ${past.n} loads averaged ${ugx(past.perKm)} per km; this suggestion is ${ugx(Math.round(s.perTrip / s.km))} per km.</p>` : ""}
+      ${past ? `<p class="muted" style="margin:8px 0 0">Past loads ${ugx(past.perKm)}/km · this ${ugx(Math.round(s.perTrip / s.km))}/km</p>` : ""}
     </details>
   </div>`;
 }
 function pricingCard() {
   const p = pricing();
-  return `<details class="card item settings pricing-card" style="margin-top:10px"><summary><b>Pricing for quotes</b><div class="muted">${DATA.pricing ? `Margin ${p.marginPct}% · diesel ${ugx(DATA.dieselDefaultUgx || 5200)}/L` : "Starting values: set your own"}</div></summary>
+  return `<details class="card item settings pricing-card" style="margin-top:10px"><summary><b>Pricing for quotes</b><div class="muted">${DATA.pricing ? `Margin ${p.marginPct}% · diesel ${ugx(DATA.dieselDefaultUgx || 5200)}/L` : "Not set yet"}</div></summary>
     <form data-form="pricing" style="margin-top:10px">
       <div class="grid g2">
         <label class="lbl">Diesel today (UGX / litre)<input class="field" name="dieselUgx" inputmode="numeric" value="${DATA.dieselDefaultUgx || 5200}" /></label>
@@ -1288,7 +1287,7 @@ function pricingCard() {
         <label class="lbl">Driver pay a trip (UGX)<input class="field" name="driverPerTrip" inputmode="numeric" value="${p.driverPerTrip}" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">
-        <label class="lbl">Other costs a trip (UGX) <span class="muted">(loading, road fees)</span><input class="field" name="extraPerTrip" inputmode="numeric" value="${p.extraPerTrip}" /></label>
+        <label class="lbl">Other costs a trip (UGX)<input class="field" name="extraPerTrip" inputmode="numeric" value="${p.extraPerTrip}" /></label>
         <label class="lbl">Lowest price a trip (UGX)<input class="field" name="minTrip" inputmode="numeric" value="${p.minTrip}" /></label>
       </div>
       <button class="btn btn-primary wide" style="margin-top:12px">Save pricing</button>
@@ -1472,13 +1471,13 @@ function viewDrive(page, taskId) {
     </div>
     <div class="card item" id="liveStatus" style="margin-top:10px"></div>
     <div class="desk-grid">
-      <a class="card item" href="#drive-report"><b>Inspect</b><p class="muted">Before the truck moves</p></a>
+      <a class="card item" href="#drive-report"><b>Inspect</b></a>
       <a class="card item" href="#drive-jobs"><b>Loads</b><p class="muted">${jobs.filter(j=>!isPaid(j)).length} open</p></a>
       <a class="card item" href="#drive-paid"><b>Paid loads</b><p class="muted">${jobs.filter(isPaid).length} saved</p></a>
       <a class="card item" href="#drive-pay"><b>My pay</b><p class="muted">${ugx(paySums(DATA.payStubs).ytd)} YTD · ${owedTo("driver", { ...(DATA.driver || {}), id: DATA.me.driverId }, DATA.payStubs, DATA).waiting.length} waiting</p></a>
       <a class="card item" href="#drive-tasks"><b>Tasks</b><p class="muted">${tasks.length} open</p></a>
       <a class="card item" href="#drive-money"><b>Advance</b><p class="muted">${pendingMoney} to confirm</p></a>
-      <a class="card item" href="#drive-docs"><b>Docs</b><p class="muted">Receipts, licence, papers</p></a>
+      <a class="card item" href="#drive-docs"><b>Docs</b></a>
     </div>`;
 
   const money = driverAdvanceView();
@@ -1492,7 +1491,7 @@ function viewDrive(page, taskId) {
       <input class="field" name="odometerKm" placeholder="Odometer km" style="margin-top:8px" value="${DATA.truck ? DATA.truck.odometerKm : ""}" />
       ${inspectForm()}
       <input class="field" name="note" placeholder="Note" style="margin-top:12px" />
-      <div style="margin-top:12px" class="js-voice-if-bad" hidden>${voiceBox("🎙 Voice note about the problem (optional, up to 3 minutes)")}</div>
+      <div style="margin-top:12px" class="js-voice-if-bad" hidden>${voiceBox("🎙 Voice note")}</div>
       <button class="btn btn-primary wide" style="margin-top:12px">Send inspect</button>
     </form>
     <div class="list" style="margin-top:14px">
@@ -1504,7 +1503,7 @@ function viewDrive(page, taskId) {
   const jobPanel = `
     <h1>My loads</h1>
     <details class="card team-row" style="margin-top:14px">
-    <summary><div class="avatar">＋</div><div style="flex:1"><b>Add a load I found</b><div class="muted">The office sees it right away</div></div></summary>
+    <summary><div class="avatar">＋</div><div style="flex:1"><b>Add a load</b></div></summary>
     <form data-form="driver-load" class="form-card" style="margin-top:12px">
       <div class="grid g2">
         <label class="lbl">Client<select class="field js-contractor" name="contractorId">${(DATA.contractors || []).map((c) => `<option value="${c.id}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}<option value="new">＋ New client</option></select></label>
@@ -1942,7 +1941,6 @@ function viewDocs(tag) {
   const head = tag === "sugarcane" ? caneTabs("cane-docs") : tag === "passion" ? farmTabs("passion-docs") : "";
   return `${head}
     <h1>${driver ? "My docs" : { trucking: "Fleet", sugarcane: "Cane", passion: "Passion" }[tag] + " · Docs"}</h1>
-    ${DATA.me.role !== "admin" ? `<p class="muted" style="margin-top:6px">What you add here goes straight to the office.</p>` : ""}
     ${expiring.length ? `<div class="card item req-box" style="margin-top:10px"><p class="eyebrow">Expiring or expired</p>${expiring.map((x) => `<div class="pay-line"><b>${esc(x.title)}</b><span class="badge ${x.expiry < today ? "red" : "gold"}">${x.expiry < today ? "Expired" : "Expires"} ${fmtDay(x.expiry)}</span></div>`).join("")}</div>` : ""}
     ${DATA.viewingAs ? "" : `<details class="card team-row" style="margin-top:10px" ${!all.length ? "open" : ""}>
       <summary><div class="avatar">＋</div><div style="flex:1"><b>Add a document</b></div></summary>
@@ -2600,7 +2598,7 @@ function advanceCard(f, admin) {
     </div>
     <div class="adv-bar"><span style="width:${pct}%"></span></div>
     <div class="adv-nums"><span>Spent <b>${ugx(used)}</b></span><span>${f.status === "closed" ? `Returned <b>${ugx(back)}</b>` : `Left <b>${ugx(left)}</b>`}</span></div>
-    ${(f.usages || []).length ? `<div class="use-list">${f.usages.map((u) => useRow(u, tag)).join("")}</div>` : `<p class="muted" style="margin-top:8px">${f.status === "sent" ? (admin ? "Not yet confirmed as received." : "Confirm below once the money reaches you.") : "No spending recorded yet."}</p>`}
+    ${(f.usages || []).length ? `<div class="use-list">${f.usages.map((u) => useRow(u, tag)).join("")}</div>` : `<p class="muted" style="margin-top:8px">${f.status === "sent" ? (admin ? "Not confirmed yet" : "") : "No spending yet"}</p>`}
     ${admin && f.status !== "closed" && f.status !== "sent" ? `<details class="settings" style="margin-top:10px"><summary>Close this advance</summary>
       <form data-form="close-advance" data-id="${esc(f.id)}" style="margin-top:10px">
         <div class="grid g2">
@@ -2660,7 +2658,7 @@ function sendForm(tag, req) {
       ${!req && tag === "trucking" ? linkSelect(tag) : ""}
     </div>
     ${req ? `<div class="part-choice js-part" style="display:none">
-      <p class="muted">You're sending less than the UGX ${left.toLocaleString("en-UG")} still requested.</p>
+      <p class="muted">Less than the UGX ${left.toLocaleString("en-UG")} requested</p>
       <label class="check"><input type="radio" name="final" value="0" checked /> <span><b>Part payment</b>, the rest will follow later (request stays open)</span></label>
       <label class="check"><input type="radio" name="final" value="1" /> <span><b>Final</b>, this amount settles the request (not declined, just less)</span></label>
     </div>` : ""}
@@ -2957,7 +2955,7 @@ function bindDriverAdvance() {
     if (cat && lit) {
       const fuel = cat.dataset.fuel, viaFuel = DATA.me.role === "driver" && fuel === "diesel";
       let note = form.querySelector(".js-fuel-note");
-      if (viaFuel && !note) { note = document.createElement("div"); note.className = "card item req-box js-fuel-note"; note.innerHTML = `<b>Diesel goes on the Fuel page</b><p class="muted" style="margin:4px 0 8px">Pick this advance under “Paid from” so it's counted once.</p><a class="btn btn-primary wide" href="#drive-fuel">Log fuel</a>`; cat.closest(".grid").after(note); }
+      if (viaFuel && !note) { note = document.createElement("div"); note.className = "card item req-box js-fuel-note"; note.innerHTML = `<b>Log diesel on the Fuel page</b><a class="btn btn-primary wide" href="#drive-fuel" style="margin-top:8px">Log fuel</a>`; cat.closest(".grid").after(note); }
       const s = () => {
         const isFuel = fuel && cat.value === fuel;
         lit.style.display = isFuel && !viaFuel ? "" : "none";
@@ -2987,16 +2985,15 @@ async function backupCall(op) {
 async function loadBackups() {
   const box = document.getElementById("backupBox");
   if (!box) return;
-  if (!Conacrew.token()) { box.innerHTML = `<div class="card item backup-card"><b>Backups</b><p class="muted">Connect to the office (green sync light) to see backups.</p></div>`; return; }
+  if (!Conacrew.token()) { box.innerHTML = `<div class="card item backup-card"><b>Backups</b><p class="muted">Not connected</p></div>`; return; }
   let s = null; try { s = await backupCall("backup_status"); } catch (e) {}
   const last = s && s.last;
   const age = last ? (Date.now() - Date.parse(last.at)) / 36e5 : null;
   box.innerHTML = `<div class="card item backup-card">
-    <div class="row keep" style="align-items:center"><div><b>Backups</b><div class="muted">A full copy is saved every night at 4 AM Kampala time</div></div><span class="badge ${!last ? "gold" : age > 36 ? "red" : "green"}">${!last ? "None yet" : age > 36 ? "Late" : "OK"}</span></div>
+    <div class="row keep" style="align-items:center"><div><b>Backups</b></div><span class="badge ${!last ? "gold" : age > 36 ? "red" : "green"}">${!last ? "None yet" : age > 36 ? "Late" : "OK"}</span></div>
     ${last ? `<p style="margin:10px 0 0">Last copy <b>${whenShort(last.at)}</b> <span class="muted">· ${Math.max(1, Math.round(last.bytes / 1024)).toLocaleString()} KB · ${esc(last.why)}</span></p>` : ""}
-    ${s ? `<p class="muted" style="margin:4px 0 0">${s.daily.length} daily cop${s.daily.length === 1 ? "y" : "ies"} (last 30 days) · ${s.months.length} monthly (last 12 months)</p>` : ""}
+    ${s ? `<p class="muted" style="margin:4px 0 0">${s.daily.length} daily · ${s.months.length} monthly</p>` : ""}
     <div class="grid g2" style="margin-top:12px"><button type="button" class="btn btn-ghost js-bk-now">Back up now</button><button type="button" class="btn btn-primary js-bk-dl">Download a copy</button></div>
-    <p class="muted" style="margin:8px 0 0;font-size:12px">The download keeps everything except PINs. Keep it somewhere safe, like your Google Drive.</p>
   </div>`;
   box.querySelector(".js-bk-now").onclick = async (e) => { const b = e.target; b.disabled = true; b.textContent = "Saving…"; try { await backupCall("backup_now"); loadBackups(); } catch (x) { alert(x.message); b.disabled = false; b.textContent = "Back up now"; } };
   box.querySelector(".js-bk-dl").onclick = async (e) => {
@@ -3161,7 +3158,7 @@ function viewTeam() {
       <div class="team-actions">
         ${u.id !== DATA.me.id && !(iAmII && main) ? `<button type="button" class="btn btn-ghost btn-sm js-viewas" data-user="${esc(u.id)}">👁 View as ${esc((u.name || "").split(" ")[0])} (look only)</button>` : ""}
       </div>
-      ${!canEdit ? `<p class="muted" style="margin-top:12px">Only the main admin can change this login.</p>` : `<form data-form="login" style="margin-top:12px">
+      ${!canEdit ? `<p class="muted" style="margin-top:12px">Main admin only</p>` : `<form data-form="login" style="margin-top:12px">
         <input type="hidden" name="id" value="${esc(u.id)}" />
         <div class="grid g3">
           <label class="lbl">Name<input class="field" name="name" value="${esc(u.name)}" /></label>
@@ -3184,12 +3181,12 @@ function viewTeam() {
   return `
     <h1>Team &amp; logins</h1>
     ${isMain ? `<div class="card item trust-card ${thisTrusted ? "on" : ""}" style="margin-top:12px">
-      <div class="row keep" style="align-items:center"><div><b>This computer</b><div class="muted">${esc(deviceLabel())}${thisTrusted ? " · any staff login works here" : ""}</div></div>
+      <div class="row keep" style="align-items:center"><div><b>This computer</b><div class="muted">${esc(deviceLabel())}${thisTrusted ? " · trusted" : ""}</div></div>
       <button type="button" class="btn ${thisTrusted ? "btn-ghost" : "btn-primary"} btn-sm" data-act="${thisTrusted ? "untrust_device" : "trust_device"}" data-device="${esc(myDev)}" data-label="${esc(deviceLabel())}">${thisTrusted ? "Stop trusting" : "Trust this computer"}</button></div>
       ${trusted.filter((d) => d.id !== myDev).map((d) => `<div class="pay-line"><div><b>${esc(d.label)}</b><div class="muted">Trusted ${whenShort(d.addedAt)}</div></div><button type="button" class="btn btn-ghost btn-sm" data-act="untrust_device" data-device="${esc(d.id)}">Remove</button></div>`).join("")}
     </div>` : ""}
     ${isMain ? `<div id="backupBox" style="margin-top:12px"></div><div id="blocksBox"></div>` : ""}
-    ${payInfoCard().replace("<summary>Where clients pay</summary>", "<summary><b>Where clients pay</b><div class=\"muted\">Airtel Money and bank details shown on booking links</div></summary>").replace('style="margin-top:10px"', 'style="margin-top:12px"')}
+    ${payInfoCard().replace("<summary>Where clients pay</summary>", "<summary><b>Where clients pay</b></summary>").replace('style="margin-top:10px"', 'style="margin-top:12px"')}
     <div class="grid g3" style="margin-top:14px">
       <div class="card kpi"><span class="eyebrow">People</span><b>${users.length}</b></div>
       <div class="card kpi steel"><span class="eyebrow">Ready to sign in</span><b>${ok}</b></div>
@@ -4148,24 +4145,23 @@ function updateLiveStatus() {
   if (!box || !DATA) return;
   let awake = false;
   try { awake = localStorage.getItem("conacrew-live-awake") === "1"; } catch (e) {}
-  let tone = "gold", title = "Live tracking is off", body = "The office can't see your truck.", button = true;
+  let tone = "gold", title = "Live tracking is off", body = "", button = true;
   if (!navigator.geolocation) { tone = "red"; title = "Location not available"; body = "This phone or browser can't share location."; button = false; }
-  else if (!DATA.truck) { tone = "blue"; title = "No truck assigned"; body = "Tracking starts once the office assigns you a truck."; button = false; }
-  else if (LIVE.status === "starting") { tone = "blue"; title = "Finding your location…"; body = "Allow location if your phone asks."; button = false; }
-  else if (LIVE.status === "nosignal") { tone = "gold"; title = "Waiting for GPS signal"; body = "It will keep trying while the app is open."; button = false; }
+  else if (!DATA.truck) { tone = "blue"; title = "No truck assigned"; body = ""; button = false; }
+  else if (LIVE.status === "starting") { tone = "blue"; title = "Finding your location…"; body = ""; button = false; }
+  else if (LIVE.status === "nosignal") { tone = "gold"; title = "Waiting for GPS signal"; body = ""; button = false; }
   else if (LIVE.status === "denied") {
     tone = "red"; title = "Location is blocked";
     body = "iPhone: Settings › Privacy & Security › Location Services › Safari Websites (or your browser) › While Using. Android: tap the lock icon next to the web address › Permissions › Location › Allow. Then tap Try again.";
     button = true;
   } else if (LIVE.status === "on") {
     tone = "green"; title = "Live tracking on"; button = false;
-    body = LIVE.lastOk ? "Office got your location " + agoText(LIVE.lastOk) + "." : LIVE.lastSent ? "Location saved on phone; not reaching the office yet." : "Getting first position…";
-    body += " Updates while this app is open.";
+    body = LIVE.lastOk ? "Sent " + agoText(LIVE.lastOk) : LIVE.lastSent ? "Not reaching the office yet" : "Getting position…";
   }
   box.innerHTML = `
-    <div class="row"><div><b>${title}</b><p class="muted">${body}</p></div><span class="badge ${tone}">GPS</span></div>
+    <div class="row"><div><b>${title}</b>${body ? `<p class="muted">${body}</p>` : ""}</div><span class="badge ${tone}">GPS</span></div>
     ${button ? `<button type="button" class="btn btn-primary wide" id="liveOn" style="margin-top:10px">${LIVE.status === "denied" ? "Try again" : "Turn on live tracking"}</button>` : ""}
-    ${LIVE.status === "on" && "wakeLock" in navigator ? `<label class="muted" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="liveAwake" ${awake ? "checked" : ""}/> Keep screen on while app is open</label>` : ""}`;
+    ${LIVE.status === "on" && "wakeLock" in navigator ? `<label class="muted" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="liveAwake" ${awake ? "checked" : ""}/> Keep screen on</label>` : ""}`;
   const on = document.getElementById("liveOn");
   if (on) on.onclick = () => startLiveWatch(true);
   const aw = document.getElementById("liveAwake");
