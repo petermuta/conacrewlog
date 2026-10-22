@@ -793,3 +793,9 @@ details.views summary::-webkit-details-marker { display: none; }
 .truck-live { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); }
 .truck-live p { margin: 4px 0 0; }
 .truck-map { height: 240px; margin-top: 10px; border-radius: 12px; overflow: hidden; }
+
+/* turn on notifications */
+.push-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; border: 1.5px solid rgba(245,196,0,.6); }
+.push-card .muted { font-size: 12px; }
+.push-btns { display: flex; gap: 6px; flex: 0 0 auto; }
+@media (max-width: 420px) { .push-card { flex-direction: column; align-items: stretch; } .push-btns .btn { flex: 1; } }

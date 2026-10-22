@@ -1,4 +1,4 @@
-const CACHE = "conacrew-v167";
+const CACHE = "conacrew-v168";
 const SHELL = [
   "./index.html",
   "./app.html",
@@ -58,4 +58,30 @@ self.addEventListener("fetch", (event) => {
         })
       )
   );
+});
+
+// Notifications from the office, even when the app is closed.
+self.addEventListener("push", (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: "Conacrew", body: event.data ? event.data.text() : "" }; }
+  event.waitUntil(self.registration.showNotification(d.title || "Conacrew", {
+    body: d.body || "",
+    icon: "./icon-192-w.png",
+    badge: "./favicon.png",
+    tag: d.tag || "conacrew",
+    renotify: true,
+    vibrate: [220, 120, 220, 120, 220],
+    data: { url: d.url || "#home" },
+  }));
+});
+// Tapping a notification opens the app on the right page.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const hash = (event.notification.data && event.notification.data.url) || "#home";
+  const target = new URL("./app.html" + (hash.startsWith("#") ? hash : "#" + hash), self.location.href).href;
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.includes("/app.html"));
+    if (open) { open.navigate(target).catch(() => {}); return open.focus(); }
+    return self.clients.openWindow(target);
+  }));
 });

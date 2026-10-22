@@ -4,6 +4,7 @@
 // - Photos, voice notes and files are moved out of the book into their own storage, so the book stays small.
 // Storage is passed in (Netlify Blobs in production, memory in tests).
 import crypto from "node:crypto";
+import webpush from "web-push";
 
 export const SESSION_HOURS = 24;
 const MAIN_ADMIN_DAYS = 30;
@@ -293,6 +294,73 @@ function placeOf(geo, ip, gps) {
   if (gps && isFinite(gps.lat) && isFinite(gps.lng) && Math.abs(gps.lat) <= 90 && Math.abs(gps.lng) <= 180) out.gps = { lat: Math.round(gps.lat * 1e5) / 1e5, lng: Math.round(gps.lng * 1e5) / 1e5, acc: Math.round(Number(gps.acc) || 0), at: new Date().toISOString() };
   return out;
 }
+// ---- web push: notifications on phones even when the app is closed ----
+// The server makes its own key pair once and keeps it in storage.
+async function vapidKeys(kv) {
+  const got = await kv.get("push/vapid");
+  if (got) return JSON.parse(got.text);
+  const k = webpush.generateVAPIDKeys();
+  await kv.set("push/vapid", JSON.stringify(k), { onlyIfNew: true });
+  const again = await kv.get("push/vapid");
+  return again ? JSON.parse(again.text) : k;
+}
+async function loadJson(kv, key, empty) { const g = await kv.get(key); try { return g ? JSON.parse(g.text) : empty; } catch (e) { return empty; } }
+// what is waiting on this person right now (same idea as the app's ring)
+function waitingFor(book, user) {
+  const out = [];
+  const add = (key, title, body, url) => out.push({ key, title, body, url });
+  const name = (b) => (b.client || {}).company || (b.client || {}).name || b.ref;
+  const task = (t) => t.title || (t.kind ? t.kind.charAt(0).toUpperCase() + t.kind.slice(1) : "Task");
+  if (user.role === "admin") {
+    (book.bookings || []).filter((b) => !b.trashed && ["new", "seen", "payment_check", "accepted"].includes(b.status)).forEach((b) => add("bk:" + b.id + ":" + (b.status === "seen" ? "new" : b.status), b.status === "payment_check" ? "Payment to check" : b.status === "accepted" ? "Booking confirmed" : "New booking", name(b) + " · " + (b.cargo || ""), "#trucks-book"));
+    (book.moneyRequests || []).filter((r) => r.status === "open" || r.status === "partial").forEach((r) => add("rq:" + r.id, "Money request", (r.byName || r.by || "") + (r.amountUgx ? " · UGX " + Number(r.amountUgx).toLocaleString("en-UG") : ""), "#money-spend"));
+    (book.fleetTasks || []).filter((t) => t.status === "done").forEach((t) => add("tk:" + t.id + ":" + (t.doneAt || ""), "Task reply", task(t), "#trucks-work"));
+    (book.issues || []).filter((i) => i.status === "open").forEach((i) => add("is:" + i.id, "Driver issue", i.title || "", "#trucks-issues"));
+    if (isMainAdmin(user)) (book.users || []).forEach((u) => (u.pendingDevices || []).forEach((p) => add("ph:" + p.id, "New phone", u.name + " wants to sign in", "#team")));
+    (book.docs || []).filter((x) => x.byRole && x.byRole !== "admin" && !x.seenAt).forEach((x) => add("dc:" + x.id, "New document", (x.by || "") + " · " + (x.title || ""), "#home"));
+  } else if (user.role === "driver") {
+    const my = user.driverId;
+    (book.fleetTasks || []).filter((t) => t.driverId === my && t.status === "open").forEach((t) => add("tk:" + t.id + ":" + (t.sentBack || ""), t.sentBack ? "Task sent back" : "New task", task(t), "#drive-tasks"));
+    (book.jobs || []).filter((j) => j.driverId === my && j.fromOffice && j.status === "booked" && !j.paid).forEach((j) => add("ld:" + j.id, "New load", (j.code || "") + " · " + (j.cargo || "") + " · " + (j.origin || "") + " → " + (j.destination || ""), "#drive-jobs"));
+    (book.notifications || []).filter((n) => n.toDriverId === my && n.status === "unread" && !n.taskId).forEach((n) => add("nt:" + n.id, n.title || "From the office", n.text || n.body || "", "#drive"));
+    (book.disbursements || []).filter((f) => f.toDriverId === my && f.status === "sent").forEach((f) => add("fl:" + f.id, "Money sent", "UGX " + Number(f.amountUgx || 0).toLocaleString("en-UG"), "#drive-money"));
+  } else {
+    (book.disbursements || []).filter((f) => f.toUserId === user.id && f.status === "sent").forEach((f) => add("fl:" + f.id, "Money sent", "UGX " + Number(f.amountUgx || 0).toLocaleString("en-UG"), user.role === "cane_manager" ? "#cane-spend" : "#passion-spend"));
+  }
+  return out;
+}
+// after a change: tell everyone with notifications on about anything new for them (not the person who made the change)
+export async function pushNews(kv, book, actorId, sender) {
+  try {
+    const subs = await loadJson(kv, "push/subs", {});
+    const ids = Object.keys(subs).filter((id) => (subs[id] || []).length);
+    if (!ids.length || !book) return 0;
+    const seen = await loadJson(kv, "push/seen", {});
+    const keys = await vapidKeys(kv);
+    const send = sender || ((sub, payload) => webpush.sendNotification(sub, payload, { vapidDetails: { subject: "mailto:noreply@conacrewlogs.com", publicKey: keys.publicKey, privateKey: keys.privateKey }, TTL: 3600 * 12, urgency: "high" }));
+    let sent = 0, subsChanged = false;
+    for (const id of ids) {
+      const user = (book.users || []).find((u) => u.id === id && u.active !== false);
+      if (!user) continue;
+      const now = waitingFor(book, user);
+      const before = seen[id];
+      seen[id] = now.map((x) => x.key).slice(0, 400);
+      if (!before || id === actorId) continue;
+      const fresh = now.filter((x) => !before.includes(x.key));
+      if (!fresh.length) continue;
+      const first = fresh[0];
+      const payload = JSON.stringify({ title: first.title + (fresh.length > 1 ? ` (+${fresh.length - 1} more)` : ""), body: first.body, url: fresh.length > 1 && user.role === "admin" ? "#home" : first.url, tag: "conacrew-" + id });
+      for (const sub of subs[id].slice()) {
+        try { await send(sub, payload); sent++; }
+        catch (e) { if (e && (e.statusCode === 404 || e.statusCode === 410)) { subs[id] = subs[id].filter((s) => s.endpoint !== sub.endpoint); subsChanged = true; } }
+      }
+    }
+    await kv.set("push/seen", JSON.stringify(seen), {});
+    if (subsChanged) await kv.set("push/subs", JSON.stringify(subs), {});
+    return sent;
+  } catch (e) { return 0; }
+}
+
 // ---- backups: a copy of the whole office book every night ----
 // daily copies are kept 30 days, one copy per month is kept for a year
 export async function runBackup(kv, why) {
@@ -393,6 +461,7 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
       out = { status: 200, body: { ok: true, user: { id: user.id, role: user.role, driverId: user.driverId || null, name: user.name }, token: await makeToken(kv, user, dev) } };
       return { book };
     });
+    if (out && out.body && out.body.needsApproval) { const { book: nb } = await loadBook(kv); await pushNews(kv, nb, null); }
     if (wrong && !mainLogin) {
       strike(guard, "d", dev, DEVICE_TRIES);
       strike(guard, "i", where, IP_TRIES);
@@ -409,6 +478,25 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
     return out;
   }
 
+  if (op === "push_key") return { status: 200, body: { key: (await vapidKeys(kv)).publicKey } };
+  if (op === "push_sub" || op === "push_unsub") {
+    const { book } = await loadBook(kv);
+    const who = await readToken(kv, book, token);
+    if (!who) return { status: 401, body: { error: "signin" } };
+    const s = body.sub || {};
+    if (!s.endpoint || !/^https:\/\//.test(s.endpoint) || !s.keys || !s.keys.p256dh || !s.keys.auth) return { status: 400, body: { error: "bad subscription" } };
+    const subs = await loadJson(kv, "push/subs", {});
+    const mine = (subs[who.user.id] || []).filter((x) => x.endpoint !== s.endpoint);
+    // one phone moves to a new login: drop it from everyone else
+    Object.keys(subs).forEach((id) => { if (id !== who.user.id) subs[id] = (subs[id] || []).filter((x) => x.endpoint !== s.endpoint); });
+    if (op === "push_sub") mine.unshift({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth }, dev: String(body.dev || "").slice(0, 60), at: new Date().toISOString() });
+    subs[who.user.id] = mine.slice(0, 6);
+    await kv.set("push/subs", JSON.stringify(subs), {});
+    // start this person's list now, so only things that arrive later notify
+    const seen = await loadJson(kv, "push/seen", {});
+    if (!seen[who.user.id]) { seen[who.user.id] = waitingFor(book, who.user).map((x) => x.key); await kv.set("push/seen", JSON.stringify(seen), {}); }
+    return { status: 200, body: { ok: true } };
+  }
   if (op === "backup_status" || op === "backup_now" || op === "backup_download") {
     const { book } = await loadBook(kv);
     const who = await readToken(kv, book, token);
@@ -512,8 +600,10 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
       let refused = null;
       if (has) refused = await applyChanges(kv, book, who.user, ch);
       out = { status: 200, body: delta(book, who.user, Number(body.since) || 0, refused) };
+      if (has) { out.news = book; out.actor = who.user.id; }
       return has || mig ? { book } : { write: false };
     });
+    if (out && out.news) { const nb = out.news, actor = out.actor; delete out.news; delete out.actor; await pushNews(kv, nb, actor); }
     return out;
   }
   return { status: 400, body: { error: "unknown op" } };
@@ -702,6 +792,7 @@ export async function handleBook(kv, { method, body, query, ip, geo, ua }) {
       out = { status: 200, body: { ref: rec.ref, key: rec.key } };
       return { book };
     });
+    if (out && out.status === 200) await pushNews(kv, (await loadBook(kv)).book, null);
     return out;
   }
   if (op === "pay") {
@@ -726,6 +817,7 @@ export async function handleBook(kv, { method, body, query, ip, geo, ua }) {
       out = { status: 200, body: bookingPublic(b, book) };
       return { book };
     });
+    if (out && out.status === 200) await pushNews(kv, (await loadBook(kv)).book, null);
     return out;
   }
   if (op === "find") {
@@ -761,6 +853,7 @@ export async function handleBook(kv, { method, body, query, ip, geo, ua }) {
       out = { status: 200, body: bookingPublic(b, book) };
       return { book };
     });
+    if (out && out.status === 200) await pushNews(kv, (await loadBook(kv)).book, null);
     return out;
   }
   return { status: 400, body: { error: "unknown" } };

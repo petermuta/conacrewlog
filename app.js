@@ -396,6 +396,8 @@ function route() {
   updateLiveStatus();
   startLiveMap();
   checkArrivals(window.__fromOthers); window.__fromOthers = false;
+  if (["home", "drive", "cane", "passion"].includes(parseRoute().name)) { const b = pushBanner(); if (b) { const at = document.querySelector("#app .attn-card-list, #app .notice-bar, #app h1"); if (at && !document.querySelector(".push-card")) at.insertAdjacentHTML(at.tagName === "H1" ? "afterend" : "beforebegin", b); } }
+  bindPush();
   bellIcon();
 }
 function bellIcon() { const b = document.getElementById("bell"); if (b) { b.textContent = soundOn() ? "🔔" : "🔕"; b.title = soundOn() ? "Sound on for new items" : "Sound off"; b.setAttribute("aria-pressed", soundOn() ? "true" : "false"); } }
@@ -3074,6 +3076,52 @@ function arrivals() {
     (DATA.disbursements || []).filter((f) => f.status === "sent").forEach((f) => add("fl:" + f.id, "Money sent · " + ugx(f.amountUgx), DATA.me.role === "driver" ? "#drive-money" : DATA.me.role === "cane_manager" ? "#cane-spend" : "#passion-spend"));
   }
   return out;
+}
+// ---- notifications when the app is closed (web push: iPhone home-screen app, Android Chrome) ----
+function pushSupported() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+function isIos() { return /iPhone|iPad|iPod/.test(navigator.userAgent); }
+function inHomeScreenApp() { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
+function b64ToBytes(s) { const pad = "=".repeat((4 - (s.length % 4)) % 4); const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))); }
+async function pushCall(op, extra) {
+  const res = await fetch("/.netlify/functions/sync", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ op, ...(extra || {}) }) });
+  const j = await res.json().catch(() => ({})); if (!res.ok || j.error) throw new Error(j.error || "Couldn't reach the office"); return j;
+}
+async function subscribePush(ask) {
+  if (!pushSupported() || !Conacrew.token()) return false;
+  if (ask) { const p = await Notification.requestPermission(); if (p !== "granted") return false; }
+  if (Notification.permission !== "granted") return false;
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) { const { key } = await pushCall("push_key"); sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) }); }
+  await pushCall("push_sub", { sub: sub.toJSON(), dev: deviceLabel() });
+  try { localStorage.setItem("conacrew.push", DATA.me.id); } catch (e) {}
+  return true;
+}
+function pushBanner() {
+  if (!DATA || DATA.viewingAs || (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return "";
+  let dismissed = false; try { dismissed = sessionStorage.getItem("pushLater") === "1"; } catch (e) {}
+  if (dismissed) return "";
+  if (isIos() && !inHomeScreenApp()) return "";
+  if (!pushSupported() || Notification.permission !== "default") return "";
+  return `<div class="card item push-card"><div><b>🔔 Notifications</b><div class="muted">Get new items on this phone, even with the app closed.</div></div><div class="push-btns"><button type="button" class="btn btn-primary btn-sm js-push-on">Turn on</button><button type="button" class="btn btn-ghost btn-sm js-push-later">Later</button></div></div>`;
+}
+async function signOut() {
+  try {
+    if (pushSupported() && Conacrew.token()) {
+      const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(() => r(null), 1500))]);
+      const sub = reg && (await reg.pushManager.getSubscription());
+      if (sub) { await Promise.race([pushCall("push_unsub", { sub: sub.toJSON() }), new Promise((r) => setTimeout(r, 2500))]).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+    }
+  } catch (e) {}
+  try { Conacrew.logout(); } catch (e) {}
+  location.href = "./index.html";
+}
+function bindPush() {
+  const on = document.querySelector(".js-push-on"), later = document.querySelector(".js-push-later");
+  if (on) on.onclick = async () => { on.disabled = true; on.textContent = "Turning on…"; try { const ok = await subscribePush(true); toast(ok ? "Notifications on for this phone." : "Notifications are blocked. Allow them in the phone's settings."); } catch (e) { toast(e.message); } route(); };
+  if (later) later.onclick = () => { try { sessionStorage.setItem("pushLater", "1"); } catch (e) {} route(); };
+  // keep this phone's subscription current (new login on the phone, or the browser renewed it)
+  if (pushSupported() && Notification.permission === "granted" && !window.__pushChecked) { window.__pushChecked = true; subscribePush(false).catch(() => {}); }
 }
 function soundOn() { try { return localStorage.getItem("conacrew.sound") !== "off"; } catch (e) { return true; } }
 let AUDIO = null;
