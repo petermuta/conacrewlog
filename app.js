@@ -30,9 +30,11 @@ const INSPECT = [
 ];
 function inspectForm() {
   return `<div class="inspect-top"><span class="muted js-insp-count">0 of ${INSPECT.reduce((n, [, p]) => n + p.length, 0)} checked</span><button type="button" class="btn btn-ghost btn-sm js-all-ok">Mark all OK</button></div>` + INSPECT.map(([g, parts]) => `
-    <p class="eyebrow" style="margin-top:14px">${g}</p>
+    <section class="insp-group">
+    <div class="insp-head"><b>${g}</b><span class="insp-n js-group-n">0/${parts.length}</span></div>
+    <div class="insp-body">
     ${parts.map(([id, name]) => `
-      <div class="inspect-part" data-part="${id}" style="padding:8px 0;border-bottom:1px solid rgba(15,28,46,.08)">
+      <div class="inspect-part" data-part="${id}">
         <div class="row">
           <span>${name}</span>
           <span style="display:flex;gap:6px">
@@ -43,6 +45,7 @@ function inspectForm() {
         </div>
         <input class="field js-shot" type="file" accept="image/*" capture="environment" data-part="${id}" aria-label="Photo of the problem: ${name}" style="display:none;margin-top:8px" />
       </div>`).join("")}
+    </div></section>
   `).join("");
 }
 function cargoSelect(val) {
@@ -732,7 +735,7 @@ function viewInspectReport() {
         const bad = Object.keys(r.items||{}).filter((k) => r.items[k] === "fail" || r.items[k] === "warn");
         return `<div class="card item">
           <div class="row"><div><b>${r.date}</b><p class="muted">${t?.plate || ""} · ${d?.name || r.by || ""} · ${r.odometerKm||0} km</p></div>${badge(r.status === "fail" ? "fail" : r.status === "warn" ? "warning" : "pass")}</div>
-          ${bad.map((k) => `<div style="margin-top:10px"><p>${names[k]||k} · ${label(r.items[k])}</p>${(r.photos&&r.photos[k])?`<img src="${r.photos[k]}" alt="" style="max-width:220px;border-radius:10px;margin-top:6px" />`:""}</div>`).join("")}
+          ${bad.map((k) => `<div style="margin-top:10px"><p>${partArea(k) ? `<span class="area-tag">${esc(partArea(k))}</span>` : ""}<b>${names[k] || k}</b> · ${badge(r.items[k])}</p>${(r.photos&&r.photos[k])?`<img src="${r.photos[k]}" alt="" style="max-width:220px;border-radius:10px;margin-top:6px" />`:""}</div>`).join("")}
           ${r.note ? `<p class="muted" style="margin-top:8px">${r.note}</p>` : ""}${r.voice ? `<audio class="voice-play" controls src="${r.voice}" style="width:100%;margin-top:8px"></audio>` : ""}
         </div>`;
       }).join("") : `<div class="card item">None</div>`}
@@ -742,6 +745,10 @@ function viewInspectReport() {
 // ───────────── Fleet tasks: clear instructions → focused check → photo + voice reply → review ─────────────
 const TASK_KINDS = [["inspect", "Inspect / check parts"], ["repair", "Repair"], ["service", "Service"], ["tyres", "Tyres"], ["fuel", "Fuel"], ["wash", "Wash"], ["papers", "Papers / licence"], ["other", "Other"]];
 const RESULT = { pass: ["green", "OK"], warn: ["gold", "Needs attention"], fail: ["red", "Not OK"] };
+function partArea(id) {
+  for (const [g, parts] of INSPECT) for (const [pid] of parts) if (pid === id) return g;
+  return "";
+}
 function partName(id) {
   for (const [, parts] of INSPECT) for (const [pid, n] of parts) if (pid === id) return n;
   return id;
@@ -934,7 +941,7 @@ function driverTaskReply(id) {
     <form class="card item" data-form="task-reply" data-id="${esc(t.id)}" data-needphoto="${t.needPhoto ? 1 : 0}" style="margin-top:12px">
       <p class="eyebrow">${DATA.truck ? esc(DATA.truck.plate) : "Truck"} · ${parts.length ? "check " + (parts.length === 1 ? "this part" : "these " + parts.length + " parts") + " only" : "show the work"}</p>
       ${parts.map((p) => `<div class="inspect-part task-part" data-part="${esc(p)}">
-        <b class="tp-name">${esc((t.partNames || {})[p] || partName(p))}</b>
+        ${partArea(p) ? `<span class="area-tag">${esc(partArea(p))}</span>` : ""}<b class="tp-name">${esc((t.partNames || {})[p] || partName(p))}</b>
         <div class="tp-marks">
           <label class="mark pass"><input type="radio" name="r_${esc(p)}" value="pass" hidden />OK</label>
           <label class="mark warn"><input type="radio" name="r_${esc(p)}" value="warn" hidden />NEEDS ATTENTION</label>
@@ -955,6 +962,14 @@ function inspCount(form) {
   const el = form && form.querySelector(".js-insp-count"); if (!el) return;
   const all = form.querySelectorAll(".inspect-part").length, done = [...form.querySelectorAll(".inspect-part")].filter((b) => b.querySelector("input[type=radio]:checked")).length;
   el.textContent = done + " of " + all + " checked"; el.classList.toggle("ok-t", done === all);
+  // each area shows its own count, green when done, red when something is not OK
+  form.querySelectorAll(".insp-group").forEach((g) => {
+    const parts = [...g.querySelectorAll(".inspect-part")], vals = parts.map((b) => (b.querySelector("input[type=radio]:checked") || {}).value).filter(Boolean);
+    const n = g.querySelector(".js-group-n"); if (n) n.textContent = vals.length + "/" + parts.length;
+    g.classList.toggle("done", vals.length === parts.length);
+    g.classList.toggle("has-fail", vals.includes("fail"));
+    g.classList.toggle("has-warn", !vals.includes("fail") && vals.includes("warn"));
+  });
 }
 function showVoiceIfBad(form) {
   const v = form && form.querySelector(".js-voice-if-bad");
