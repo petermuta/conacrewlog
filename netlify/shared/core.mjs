@@ -119,6 +119,30 @@ function meta(book) {
   return book._meta;
 }
 const bump = (book) => ++meta(book).seq;
+// one-time clean start (Oct 22, 2026): all activity and money cleared; logins, phones, trucks, drivers, blocks and settings stay
+const CLEAN_ID = "clean-2026-10-22";
+const CLEAN_WIPE = ["jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "moneyRequests", "cash", "payStubs", "notifications", "receivables", "docs", "bookings", "caneBuys", "caneSales", "caneExpenses", "farmWorks", "fruitSales", "harvests", "fieldLogs", "farmInputs", "contractors", "sellers", "mills"];
+function cleanStart(book) {
+  const m = meta(book); m.mig = m.mig || {};
+  if (m.mig[CLEAN_ID]) return null;
+  const s = bump(book), counts = {};
+  for (const coll of CLEAN_WIPE) {
+    const list = Array.isArray(book[coll]) ? book[coll] : [];
+    counts[coll] = list.length;
+    m.del[coll] = m.del[coll] || {};
+    list.forEach((r) => { if (r && r.id != null) m.del[coll][r.id] = { at: now(), s }; });
+    book[coll] = [];
+    if (m.top[coll]) m.top[coll] = { u: now(), s };
+  }
+  if (Array.isArray(book.cargoTypes)) { book.cargoTypes = []; m.top.cargoTypes = { u: now(), s }; }
+  const touch = (r) => { r._u = now(); r._s = s; };
+  (book.trucks || []).forEach((t) => { t.status = "idle"; delete t.fuelCheckedAt; touch(t); });
+  (book.drivers || []).forEach((d) => { d.advanceUgx = 0; touch(d); });
+  (book.users || []).forEach((u) => { u.pendingDevices = []; u.failCount = 0; delete u.lockedAt; touch(u); });
+  book.loginLog = []; m.top.loginLog = { u: now(), s };
+  m.mig[CLEAN_ID] = new Date().toISOString();
+  return counts;
+}
 // one-time fixes to office data, run once on the server
 function migrateBook(book) {
   const m = meta(book); m.mig = m.mig || {};
@@ -596,13 +620,19 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
       const who = await readToken(kv, book, token);
       if (!who) { out = { status: 401, body: { error: "signin" } }; return { write: false }; }
       const has = Object.keys(ch.set || {}).some((k) => (ch.set[k] || []).length) || Object.keys(ch.del || {}).some((k) => (ch.del[k] || []).length) || Object.keys(ch.top || {}).length;
-      const mig = migrateBook(book);
+      let cleaned = null;
+      if (!(meta(book).mig || {})[CLEAN_ID]) { await kv.set("backup/before-" + CLEAN_ID, JSON.stringify(book), {}); cleaned = cleanStart(book); }
+      const mig = migrateBook(book) || !!cleaned;
+      if (cleaned) out = { cleaned: true };
       let refused = null;
       if (has) refused = await applyChanges(kv, book, who.user, ch);
+      const wasCleaned = out && out.cleaned;
       out = { status: 200, body: delta(book, who.user, Number(body.since) || 0, refused) };
+      if (wasCleaned) out.cleaned = true;
       if (has) { out.news = book; out.actor = who.user.id; }
       return has || mig ? { book } : { write: false };
     });
+    if (out && out.cleaned) { delete out.cleaned; await kv.set("live", "{}", {}); await kv.set("guard", "{}", {}); await kv.set("push/seen", "{}", {}); }
     if (out && out.news) { const nb = out.news, actor = out.actor; delete out.news; delete out.actor; await pushNews(kv, nb, actor); }
     return out;
   }

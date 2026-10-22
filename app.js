@@ -2430,6 +2430,7 @@ function payoutText(p) {
   if (m === "bank") return `${METHOD_LABEL.bank} · ${esc(p.bankName || "")} ${esc(p.bankAccount || "")}${who}`;
   return `${METHOD_LABEL[m] || label(m)}${p.payPhone ? " · " + esc(p.payPhone) : ""}${who}`;
 }
+const PAY_START = "2026-10"; // clean start: salaries before October 2026 were settled outside the app
 function deliveredOn(j) {
   return j.deliveredAt || (j.dropAt || "").slice(0, 10) || j.paidAt || j.startDate || "";
 }
@@ -2448,7 +2449,7 @@ function owedTo(kind, person, stubs, src) {
         });
     }
     if (plan !== "trip") {
-      [thisMonth(-1), thisMonth(0)].forEach((ym) => {
+      [thisMonth(-1), thisMonth(0)].filter((ym) => ym >= PAY_START).forEach((ym) => {
         if (paidRef(ym, "month")) return;
         waiting.push({ kind: "month", refId: ym, title: "Salary · " + monthName(ym), sub: ym === thisMonth(0) ? "This month" : "Last month", date: "", amount: Number(person.monthRateUgx) || 0 });
       });
