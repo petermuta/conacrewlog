@@ -485,7 +485,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -522,7 +522,7 @@ function addFloatUse(db, fl, body, user) {
   const amount = Number(body.amountUgx) || 0;
   if (amount <= 0) throw new Error("Enter the amount spent");
   const usedSoFar = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
-  const left = fl.amountUgx - usedSoFar;
+  const left = fl.amountUgx - usedSoFar - (fl.returnedUgx || 0) - (fl.movedUgx || 0);
   if (amount > left + 0.5) throw new Error("Only UGX " + left.toLocaleString("en-UG") + " left on this advance");
   const payee = payeeFrom({ ...body, method: body.method || "cash" }, true);
   const use = {
@@ -2116,9 +2116,11 @@ function applyAction(db, user, body) {
     if (!fl) throw new Error("Advance not found");
     if (fl.status === "closed") throw new Error("Already closed");
     const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
-    const left = Math.max(0, fl.amountUgx - used);
+    const left = Math.max(0, fl.amountUgx - used - (fl.movedUgx || 0));
     const back = Number(body.returnedUgx) || 0;
     if (back < 0 || back > left) throw new Error("Returned cash can be 0 to " + left.toLocaleString("en-UG"));
+    // anything neither spent on record nor returned was still spent: count it, marked as not accounted for
+    if (left - back > 0) { fl.usages = fl.usages || []; fl.usages.unshift({ id: uid("fu"), amountUgx: left - back, category: "unaccounted", note: "Not accounted for when closed" + (body.note ? " · " + String(body.note).trim() : ""), date: dayOf(body), method: "cash", payeeName: "", unaccounted: true }); }
     fl.status = "closed";
     fl.closedAt = dayOf(body);
     fl.returnedUgx = back;
@@ -2127,6 +2129,28 @@ function applyAction(db, user, body) {
       const who = db.drivers.find((d) => d.id === fl.toDriverId) || (db.users || []).find((u) => u.id === fl.toUserId);
       db.cash.unshift({ id: uid("k"), date: fl.closedAt, direction: "in", amountUgx: back, tag: fl.tag || "trucking", category: "advance_return", method: body.method || "cash", note: "Advance balance returned · " + (who ? who.name : ""), refId: fl.id, driverId: fl.toDriverId || "", userId: fl.toUserId || "", truckId: fl.truckId || "" });
     }
+  }
+
+  // the leftover of one advance goes to another team member: no new money leaves the company
+  if (action === "move_advance") {
+    const fl = (db.disbursements || []).find((x) => x.id === body.id);
+    if (!fl) throw new Error("Advance not found");
+    if (fl.status === "closed") throw new Error("This advance is closed");
+    if (fl.status === "sent") throw new Error("Wait until it's confirmed as received");
+    const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
+    const left = Math.max(0, fl.amountUgx - used - (fl.returnedUgx || 0) - (fl.movedUgx || 0));
+    if (left <= 0) throw new Error("Nothing left to move");
+    const [kind, pid] = String(body.to || "").split(":");
+    const d = kind === "d" ? db.drivers.find((x) => x.id === pid) : null;
+    const u = kind === "u" ? (db.users || []).find((x) => x.id === pid && ["cane_manager", "passion_manager"].includes(x.role)) : null;
+    if (!d && !u) throw new Error("Choose who gets it");
+    const from = db.drivers.find((x) => x.id === fl.toDriverId) || (db.users || []).find((x) => x.id === fl.toUserId);
+    const now = todayStr();
+    const nf = { id: uid("fl"), tag: d ? "trucking" : u.role === "cane_manager" ? "sugarcane" : "passion", toDriverId: d ? d.id : "", toUserId: u ? u.id : "", truckId: d ? d.assignedTruckId || "" : "", amountUgx: left, activity: fl.activity || "other", method: "moved", note: String(body.note || "").trim() || "Leftover from " + (from ? from.name : "an advance"), date: now, status: "sent", usages: [], movedFrom: fl.id, by: user.name };
+    db.disbursements.unshift(nf);
+    fl.movedUgx = (fl.movedUgx || 0) + left; fl.movedTo = nf.id;
+    fl.status = "closed"; fl.closedAt = now; fl.closeNote = "Leftover " + left.toLocaleString("en-UG") + " moved to " + (d ? d.name : u.name);
+    if (d) db.notifications.unshift({ id: uid("n"), toDriverId: d.id, type: "float", title: "Money sent", text: "UGX " + left.toLocaleString("en-UG") + " from " + (from ? from.name + "'s" : "an") + " advance. Confirm you have it.", status: "unread", createdAt: new Date().toISOString() });
   }
 
   if (action === "ack_float") {

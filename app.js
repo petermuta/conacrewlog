@@ -183,7 +183,7 @@ const PAGES = {
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -293,6 +293,8 @@ function route() {
     "trucks-book": viewBookings,
     "trucks-trash": viewJobTrash,
     "trucks-profit": viewTruckProfit,
+    "cane-profit": () => viewBizProfit("sugarcane"),
+    "passion-profit": () => viewBizProfit("passion"),
     "trucks-drivers": viewDrivers,
     "truck-id": () => viewTruck(r.id),
     "trucks-issues": viewReports,
@@ -341,6 +343,8 @@ function route() {
     "trucks-trash": "trucks",
     "trucks-issues": "trucks",
     "trucks-profit": "trucks",
+    "cane-profit": "cane",
+    "passion-profit": "passion",
     "trucks-drivers": "trucks",
     "trucks-spend": "trucks",
     "trucks-docs": "trucks",
@@ -418,8 +422,8 @@ function bizBar() {
     fleet: [["#trucks-book", "Bookings", bookingsWaiting().length, "Loads"], ["#trucks-jobs", "Loads", 0, "Loads"], ["#trucks-new", "New load", 0, "Loads"], ["#trucks-paid", "Paid loads", 0, "Loads"],
       ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-profit", "Profit", fuelAlerts().length, "Trucks"], ["#trucks-inspect", "Inspections", 0, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Issues", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
       ["#trucks-spend", "Advances", req.trucking, "Money & papers"], ["#trucks-docs", "Docs", docsWaiting("trucking"), "Money & papers"], ["#trucks-trash", "Trash", 0, "Money & papers"]],
-    cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Advances", req.sugarcane], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
-    passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-spend", "Advances", req.passion], ["#passion-docs", "Docs", docsWaiting("passion")]],
+    cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-profit", "Profit"], ["#cane-spend", "Advances", req.sugarcane], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
+    passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-profit", "Profit"], ["#passion-spend", "Advances", req.passion], ["#passion-docs", "Docs", docsWaiting("passion")]],
     money: [["#money", "Flow"], ["#money-spend", "Expenses"], ["#money-pay", "Pay", pay]],
   }[biz] || [];
   return `<nav class="admin-nav">
@@ -541,13 +545,14 @@ function fleetReport(from, to) {
   const drvT = Object.fromEntries((DATA.drivers || []).map((d) => [d.id, d.assignedTruckId]));
   const blank = (t) => ({ t, income: 0, owed: 0, costs: {}, loads: 0, km: 0, litres: 0, expected: 0, fuelKnown: true });
   const rep = Object.fromEntries(trucks.map((t) => [t.id, blank(t)])); rep._none = blank(null);
+  const floatIds = new Set((DATA.disbursements || []).map((f) => f.id));
   const at = (id) => rep[id] || rep._none;
   const cost = (r, cat, amt) => { const g = COST_GROUP[cat] || "Other"; r.costs[g] = (r.costs[g] || 0) + (Number(amt) || 0); };
   (DATA.cash || []).forEach((c) => {
     if ((c.tag || "") !== "trucking" || !inP(c.date)) return;
     const tid = c.truckId || jobT[c.jobId] || drvT[c.driverId] || "";
     if (c.direction === "in") { if (c.category === "load_income") at(tid).income += Number(c.amountUgx) || 0; return; }
-    if (["to_driver", "advance_return"].includes(c.category)) return; // advances count when they're spent
+    if (["to_driver", "advance_return"].includes(c.category) || floatIds.has(c.refId)) return; // advances count when they're spent
     cost(at(tid), c.category, c.amountUgx);
   });
   (DATA.disbursements || []).filter((f) => (f.tag || "trucking") === "trucking").forEach((f) => (f.usages || []).forEach((u) => {
@@ -626,6 +631,36 @@ function viewTruckProfit() {
     <div class="list" style="margin-top:12px">${rows.map(card).join("")}</div>
     ${none.income || none.costTotal ? `<div class="card item" style="margin-top:10px"><b>Not linked to a truck</b>${facts([["Money in", ugx(none.income)], ...COST_ORDER.filter((g) => none.costs[g]).map((g) => [g, "− " + ugx(none.costs[g])])])}</div>` : ""}
 `;
+}
+
+// ---- Cane and Passion profit: earned minus spent (advances count when they're spent) ----
+function viewBizProfit(tag) {
+  const key = "profitPer." + tag, per = sessionStorage.getItem(key) || "month";
+  const [from, to, title] = periodRange(per);
+  const rows = flowRows(tag, "", per, "").filter(countsInTotals);
+  const group = (dir) => { const g = {}; rows.filter((c) => c.direction === dir).forEach((c) => { const k = c._type === "payroll" ? "Pay" : dir === "in" ? (c.category === "load_income" ? "Loads" : c.category ? catLabel(tag, c.category) : tag === "sugarcane" ? "Mill sales" : "Fruit sales") : catLabel(tag, c.category) || "Other"; g[k] = (g[k] || 0) + (Number(c.amountUgx) || 0); }); return Object.entries(g).sort((x, y) => y[1] - x[1]); };
+  const ins = group("in"), outs = group("out");
+  const tin = ins.reduce((s, [, v]) => s + v, 0), tout = outs.reduce((s, [, v]) => s + v, 0), profit = tin - tout;
+  const held = (DATA.disbursements || []).filter((f) => f.tag === tag && f.status !== "closed").reduce((s, f) => s + advLeft(f).left, 0);
+  const money = (n) => `<b class="${n < 0 ? "neg" : "pos"}">${n < 0 ? "−" : ""}${ugx(Math.abs(n))}</b>`;
+  let extra = [];
+  if (tag === "sugarcane") {
+    const sold = (DATA.caneSales || []).filter((s) => s.date >= from && s.date <= to).reduce((s, x) => s + (Number(x.tonnes) || 0), 0);
+    const owe = (DATA.caneBuys || []).filter((b) => !b.sellerPaid).reduce((s, b) => s + (b.buyPriceUgx || 0), 0);
+    extra = [["Tonnes sold", sold ? sold.toLocaleString() + " t" + (sold && profit ? ` · ${profit < 0 ? "−" : ""}${ugx(Math.round(Math.abs(profit) / sold))} a tonne` : "") : "None"], owe ? ["Still owed to sellers", ugx(owe)] : null];
+  } else {
+    const kg = (DATA.fruitSales || []).filter((s) => s.date >= from && s.date <= to).reduce((s, x) => s + (Number(x.kg) || 0), 0);
+    const owed = (DATA.fruitSales || []).filter((s) => (s.amountUgx || 0) > (s.paidUgx || 0)).reduce((s, x) => s + (x.amountUgx - (x.paidUgx || 0)), 0);
+    extra = [["Kg sold", kg ? kg.toLocaleString() + " kg" + (profit ? ` · ${profit < 0 ? "−" : ""}${ugx(Math.round(Math.abs(profit) / kg))} a kg` : "") : "None"], owed ? ["Buyers still owe", ugx(owed)] : null];
+  }
+  const head = tag === "sugarcane" ? caneTabs("cane-profit") : farmTabs("passion-profit");
+  return `<h1>${tag === "sugarcane" ? "Cane" : "Passion"}</h1>${head}
+    <div class="seg seg-sm" style="margin-top:14px">${[["month", "This month"], ["lastmonth", "Last month"], ["quarter", "Quarter"], ["year", "Year"], ["all", "All"]].map(([k, l]) => `<button type="button" class="seg-btn ${per === k ? "on" : ""}" data-bizper="${k}" data-key="${key}">${l}</button>`).join("")}</div>
+    <div class="card item profit-total" style="margin-top:12px">
+      <div class="profit-head"><span class="eyebrow">Profit · ${esc(title)}</span>${money(profit)}</div>
+      <div class="grid g3 profit-grid"><div><span class="eyebrow">Earned</span><b>${ugx(tin)}</b></div><div><span class="eyebrow">Spent</span><b>${ugx(tout)}</b></div><div><span class="eyebrow">With the team</span><b>${ugx(held)}</b></div></div>
+    </div>
+    <div class="card item" style="margin-top:10px">${facts([...ins.map(([k, v]) => [k, ugx(v)]), ...outs.map(([k, v]) => [k, "− " + ugx(v)]), ["Profit", money(profit) + (tin ? ` <span class="muted">· ${profit < 0 ? "−" : ""}${Math.abs(Math.round((profit / tin) * 100))}% of earnings</span>` : "")], ...extra.filter(Boolean)])}</div>`;
 }
 
 function viewDrivers() {
@@ -2043,10 +2078,22 @@ function periodRange(p) {
   if (p === "custom") { const f = sessionStorage.getItem("flowFrom") || today.slice(0, 8) + "01", to = sessionStorage.getItem("flowTo") || today; return [f, to, fmtDay(f) + " – " + fmtDay(to)]; }
   return ["0000-00-00", "9999-99-99", "All time"];
 }
+// what counts in Money in / Money out: income, spending (incl. what was spent from advances) and payroll.
+// Sending an advance, moving it to someone else, or getting leftover back only moves the company's own money.
+function countsInTotals(c) { return c._type === "income" || c._type === "spending" || c._type === "payroll"; }
+function advanceSpendRows() {
+  const out = [];
+  (DATA.disbursements || []).forEach((f) => {
+    const p = recipientOf(f), who = p ? p.name : "";
+    (f.usages || []).forEach((u) => out.push({ id: "use-" + u.id, date: u.date || f.date, direction: "out", amountUgx: Number(u.amountUgx) || 0, tag: f.tag || "trucking", category: u.category, note: u.note || "", payeeName: u.payeeName || "", payeePhone: u.payeePhone || "", bankName: u.bankName || "", bankAccount: u.bankAccount || "", reference: u.reference || "", method: u.method || "cash", truckId: f.truckId || "", driverId: f.toDriverId || "", userId: f.toUserId || "", fromAdvance: who, floatId: f.id, _type: "spending" }));
+    if (f.movedFrom) { const src = (DATA.disbursements || []).find((x) => x.id === f.movedFrom); const sp = src ? recipientOf(src) : null; out.push({ id: "mv-" + f.id, date: f.date, direction: "out", amountUgx: Number(f.amountUgx) || 0, tag: f.tag || "trucking", category: "moved", note: "Leftover moved" + (sp ? " from " + sp.name : "") + (who ? " to " + who : ""), payeeName: who, method: "moved", floatId: f.id, _type: "advance" }); }
+  });
+  return out;
+}
 function flowRows(biz, type, period, q) {
   const floats = Object.fromEntries((DATA.disbursements || []).map((f) => [f.id, f]));
   const [from, to] = periodRange(period);
-  return (DATA.cash || []).map((c) => ({ ...c, _type: flowType(c, floats) }))
+  return (DATA.cash || []).map((c) => ({ ...c, _type: flowType(c, floats) })).concat(advanceSpendRows())
     .filter((c) => (!biz || c.tag === biz || (biz === "overhead" && !["trucking", "sugarcane", "passion"].includes(c.tag))) && (!type || c._type === type) && String(c.date || "") >= from && String(c.date || "") <= to)
     .filter((c) => !q || [c.note, c.payeeName, c.reference, catLabel(c.tag, c.category), cashRef(c)].join(" ").toLowerCase().includes(q))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -2058,10 +2105,11 @@ function viewMoney(tag) {
   const q = (sessionStorage.getItem("flowQ") || "").toLowerCase();
   const [from, to, plabel] = periodRange(period);
   const rows = flowRows(biz, type, period, q);
-  const inn = rows.filter((c) => c.direction === "in").reduce((s, c) => s + (c.amountUgx || 0), 0);
-  const out = rows.filter((c) => c.direction === "out").reduce((s, c) => s + (c.amountUgx || 0), 0);
+  const inn = rows.filter((c) => countsInTotals(c) && c.direction === "in").reduce((s, c) => s + (c.amountUgx || 0), 0);
+  const out = rows.filter((c) => countsInTotals(c) && c.direction === "out").reduce((s, c) => s + (c.amountUgx || 0), 0);
+  const withTeam = (DATA.disbursements || []).filter((f) => f.status !== "closed" && (!biz || f.tag === biz)).reduce((s, f) => s + advLeft(f).left, 0);
   const bizRows = [["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"], ["overhead", "Office"]].map(([k, n]) => {
-    const r = flowRows(k, "", period, "");
+    const r = flowRows(k, "", period, "").filter(countsInTotals);
     const i = r.filter((c) => c.direction === "in").reduce((s, c) => s + (c.amountUgx || 0), 0), o = r.filter((c) => c.direction === "out").reduce((s, c) => s + (c.amountUgx || 0), 0);
     return { k, n, i, o, net: i - o, count: r.length };
   }).filter((x) => x.count || x.k !== "overhead");
@@ -2085,8 +2133,8 @@ function viewMoney(tag) {
   const sum = (a) => a.reduce((s, x) => s + (x.amt || 0), 0);
   // group by day
   const days = []; let cur = null;
-  rows.slice(0, Number(sessionStorage.getItem("flowShow") || 150)).forEach((c) => { if (!cur || cur.d !== c.date) { cur = { d: c.date, rows: [], i: 0, o: 0 }; days.push(cur); } cur.rows.push(c); if (c.direction === "in") cur.i += c.amountUgx || 0; else cur.o += c.amountUgx || 0; });
-  const typeChip = { income: ["green", "Income"], spending: ["red", "Spending"], advance: ["gold", "Advance"], payroll: ["purple", "Payroll"], return: ["blue", "Return"] };
+  rows.slice(0, Number(sessionStorage.getItem("flowShow") || 150)).forEach((c) => { if (!cur || cur.d !== c.date) { cur = { d: c.date, rows: [], i: 0, o: 0 }; days.push(cur); } cur.rows.push(c); if (!countsInTotals(c)) return; if (c.direction === "in") cur.i += c.amountUgx || 0; else cur.o += c.amountUgx || 0; });
+  const typeChip = { income: ["green", "Income"], spending: ["red", "Spending"], advance: ["gold", "Advance"], payroll: ["purple", "Payroll"], return: ["blue", "Returned"] };
   const sideList = (title, arr, tone) => `<div class="card side-card"><div class="row" style="align-items:center"><b>${title}</b><b class="${tone}">${ugx(sum(arr))}</b></div>${arr.length ? arr.slice(0, 6).map((x) => `<div class="side-line"><span>${esc(x.who || x.what)}<span class="muted"> · ${esc(x.who ? x.what : BIZ_LABEL[x.tag] || "")}</span></span><b>${x.amt ? ugx(x.amt) : "—"}</b></div>`).join("") + (arr.length > 6 ? `<p class="muted">+${arr.length - 6} more</p>` : "") : `<p class="muted">Nothing</p>`}</div>`;
   return `
     <h1>Money · Flow</h1>
@@ -2097,10 +2145,11 @@ function viewMoney(tag) {
     </div>
     <div class="seg seg-sm" style="margin-top:8px">${[["", "All"], ["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"], ["overhead", "Office"]].map(([k, l]) => `<button type="button" class="seg-btn ${biz === k ? "on" : ""}" data-flowbiz="${k}">${l}</button>`).join("")}</div>
     <div class="seg seg-sm" style="margin-top:6px">${FLOW_TYPES.map(([k, l]) => `<button type="button" class="seg-btn ${type === k ? "on" : ""}" data-flowtype="${k}">${l}</button>`).join("")}</div>
-    <div class="grid g3 kpi4" style="margin-top:12px">
+    <div class="grid g4 kpi4" style="margin-top:12px">
       <div class="card kpi in-kpi"><span class="eyebrow">Money in</span><b>${ugx(inn)}</b></div>
       <div class="card kpi out-kpi"><span class="eyebrow">Money out</span><b>${ugx(out)}</b></div>
       <div class="card kpi gold"><span class="eyebrow">Net · ${esc(plabel)}</span><b class="${inn - out < 0 ? "neg" : "pos"}">${inn - out < 0 ? "−" : ""}${ugx(Math.abs(inn - out))}</b></div>
+      <div class="card kpi steel"><span class="eyebrow">With the team</span><b>${ugx(withTeam)}</b></div>
     </div>
     ${!biz ? `<div class="card biz-table"><table><thead><tr><th>UGX</th><th style="text-align:right">In</th><th style="text-align:right">Out</th><th style="text-align:right">Net</th></tr></thead><tbody>
       ${bizRows.map((x) => `<tr class="js-bizrow" data-flowbiz="${x.k}"><td><b>${x.n}</b></td><td class="num pos">${Number(x.i).toLocaleString("en-UG")}</td><td class="num neg">${Number(x.o).toLocaleString("en-UG")}</td><td class="num ${x.net < 0 ? "neg" : "pos"}"><b>${x.net < 0 ? "−" : ""}${Math.abs(x.net).toLocaleString("en-UG")}</b></td></tr>`).join("")}
@@ -2114,13 +2163,14 @@ function viewMoney(tag) {
     ${days.length ? days.map((d) => `<div class="day-head"><b>${fmtDay(d.d)}</b><span>${d.i ? `<span class="pos">+${ugx(d.i)}</span>` : ""}${d.i && d.o ? " · " : ""}${d.o ? `<span class="neg">−${ugx(d.o)}</span>` : ""}</span></div>
       <div class="card ledger">${d.rows.map((c) => { const ch = typeChip[c._type]; const who = c.payeeName || ""; const how = (METHOD_LABEL[c.method] || label(c.method || "")) + (c.payeePhone ? " " + c.payeePhone : c.bankAccount ? " · " + (c.bankName || "") + " " + c.bankAccount : "") + (c.reference ? " · Ref " + c.reference : ""); const link = cashRef(c); return `<details class="led-row"><summary>
         <span class="badge ${ch[0]}">${ch[1]}</span>
-        <span class="led-main"><b>${esc(c.direction === "in" ? (c.category === "advance_return" ? "Advance returned" : c.note || "Income") : catLabel(c.tag, c.category) || "Spend")}${who && !(c.direction === "in" && String(c.note || "").includes(who)) ? " · " + esc(who) : ""}</b><span class="muted">${esc(BIZ_LABEL[c.tag] || c.tag || "Office")}${link ? " · " + esc(link) : ""}</span></span>
-        <b class="led-amt ${c.direction === "in" ? "pos" : "neg"}">${c.direction === "in" ? "+" : "−"}${ugx(c.amountUgx)}</b>
+        <span class="led-main"><b>${esc(c.direction === "in" ? (c.category === "advance_return" ? "Advance returned" : c.note || "Income") : c.category === "moved" ? "Leftover moved" : c._type === "advance" ? "Advance sent" : catLabel(c.tag, c.category) || "Spend")}${who && !(c.direction === "in" && String(c.note || "").includes(who)) ? " · " + esc(who) : ""}</b><span class="muted">${esc(BIZ_LABEL[c.tag] || c.tag || "Office")}${c.fromAdvance ? " · from " + esc(c.fromAdvance) + "'s advance" : ""}${link ? " · " + esc(link) : ""}</span></span>
+        ${countsInTotals(c) ? `<b class="led-amt ${c.direction === "in" ? "pos" : "neg"}">${c.direction === "in" ? "+" : "−"}${ugx(c.amountUgx)}</b>` : `<b class="led-amt muted" title="Company money moving, not in the totals">⇄ ${ugx(c.amountUgx)}</b>`}
       </summary><div class="led-detail">
         ${c.note ? `<div><span class="muted">Note</span> ${esc(c.note)}</div>` : ""}
         <div><span class="muted">Method</span> ${esc(how || "—")}</div>
         ${c.by ? `<div><span class="muted">Recorded by</span> ${esc(c.by)}</div>` : ""}
-        ${c._type === "advance" ? `<div><a href="${FUND_HOME[c.tag] || "#money-spend"}">See how it was spent ›</a></div>` : ""}
+        ${!countsInTotals(c) ? `<div class="muted">Not in Money in / Money out: the company's own money moving to or from the team.</div>` : ""}
+        ${c._type === "advance" || c.fromAdvance ? `<div><a href="${FUND_HOME[c.tag] || "#money-spend"}">Open the advance ›</a></div>` : ""}
       </div></details>`; }).join("")}</div>`).join("") : `<div class="card item muted" style="margin-top:8px">No money movements for ${esc(plabel.toLowerCase())}.</div>`}
     ${rows.length > Number(sessionStorage.getItem("flowShow") || 150) ? `<button type="button" class="btn btn-ghost wide" id="flowMore" style="margin-top:10px">Show more</button>` : ""}`;
 }
@@ -2147,8 +2197,9 @@ async function moneyPdf() {
   const biz = sessionStorage.getItem("flowBiz") || "", type = sessionStorage.getItem("flowType") || "", q = (sessionStorage.getItem("flowQ") || "").toLowerCase();
   const rows = flowRows(biz, type, period, q).slice().reverse();
   const [from, to] = periodRange(period);
-  const sum = (dir) => rows.filter((c) => c.direction === dir).reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
+  const sum = (dir) => rows.filter((c) => countsInTotals(c) && c.direction === dir).reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
   const tin = sum("in"), tout = sum("out");
+  const held = (DATA.disbursements || []).filter((f) => f.status !== "closed" && (!biz || f.tag === biz)).reduce((s, f) => s + advLeft(f).left, 0);
   const n = (v) => Math.round(Number(v) || 0).toLocaleString("en-UG");
   const day = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); } catch (e) { return d; } };
   const range = from === "0000-00-00" ? "All time" : day(from) + " to " + day(to === "9999-99-99" ? todayYmd() : to);
@@ -2164,7 +2215,7 @@ async function moneyPdf() {
   doc.setFontSize(10); doc.text(range, W - 36, 36, { align: "right" });
   doc.text([biz ? BIZ_LABEL[biz] || biz : "All businesses", type ? "Only: " + type : "", q ? 'Search: "' + q + '"' : ""].filter(Boolean).join("   |   "), W - 36, 54, { align: "right" });
   // totals
-  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]]];
+  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]], ["With the team (advances)", held, [160, 120, 0]]];
   boxes.forEach(([t, v, col], i) => {
     const x = 36 + i * 180;
     doc.setDrawColor(211, 221, 231); doc.roundedRect(x, 86, 168, 48, 6, 6, "S");
@@ -2175,7 +2226,7 @@ async function moneyPdf() {
   doc.autoTable({
     startY: 150,
     head: [["Date", "Business", "Type", "Category", "Paid to / from", "Method", "Reference", "Linked to", "In (UGX)", "Out (UGX)"]],
-    body: rows.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", String(c._type || "").replace(/^./, (x) => x.toUpperCase()), catLabel(c.tag, c.category) || c.note || "", [c.payeeName, c.payeePhone || ((c.bankName || "") + " " + (c.bankAccount || "")).trim()].filter(Boolean).join("\n"), METHOD_LABEL[c.method] || c.method || "", c.reference || "", cashRef(c) || "", c.direction === "in" ? n(c.amountUgx) : "", c.direction === "out" ? n(c.amountUgx) : ""]),
+    body: rows.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", countsInTotals(c) ? String(c._type || "").replace(/^./, (x) => x.toUpperCase()) + (c.fromAdvance ? "\nfrom " + c.fromAdvance + "'s advance" : "") : (c._type === "return" ? "Returned" : "Advance") + "\n(not in totals)", c.category === "moved" ? c.note : catLabel(c.tag, c.category) || c.note || "", [c.payeeName, c.payeePhone || ((c.bankName || "") + " " + (c.bankAccount || "")).trim()].filter(Boolean).join("\n"), METHOD_LABEL[c.method] || c.method || "", c.reference || "", cashRef(c) || "", countsInTotals(c) && c.direction === "in" ? n(c.amountUgx) : !countsInTotals(c) && c.direction === "in" ? "(" + n(c.amountUgx) + ")" : "", countsInTotals(c) && c.direction === "out" ? n(c.amountUgx) : !countsInTotals(c) && c.direction === "out" ? "(" + n(c.amountUgx) + ")" : ""]),
     foot: [["", "", "", "", "", "", "", "Total", n(tin), n(tout)]],
     styles: { font: "helvetica", fontSize: 8, cellPadding: 4, textColor: [16, 36, 63], lineColor: [211, 221, 231], lineWidth: 0.4 },
     headStyles: { fillColor: [16, 36, 63], textColor: 255, fontStyle: "bold" },
@@ -2215,7 +2266,7 @@ function viewHome() {
   if (payN) attn.push(["#money-pay", "purple", `${payN} payment${payN > 1 ? "s" : ""} waiting`, "Payroll"]);
   (DATA.alerts || []).forEach((a) => attn.push([a.href || "#trucks", a.tone === "bad" ? "red" : "gold", a.text, ""]));
   const [mFrom] = periodRange("month");
-  const mRows = (DATA.cash || []).filter((c) => String(c.date || "") >= mFrom);
+  const mRows = flowRows("", "", "month", "").filter(countsInTotals);
   const mIn = mRows.filter((c) => c.direction === "in").reduce((s, c) => s + (c.amountUgx || 0), 0);
   const mOut = mRows.filter((c) => c.direction === "out").reduce((s, c) => s + (c.amountUgx || 0), 0);
   const bizNet = (t) => mRows.filter((c) => c.tag === t).reduce((s, c) => s + (c.direction === "in" ? 1 : -1) * (c.amountUgx || 0), 0);
@@ -2541,7 +2592,7 @@ const WORKER_HOME = { trucking: "#drive-money", sugarcane: "#cane-spend", passio
 function catLabel(tag, key) {
   const hit = (FUND_FOR[tag] || []).find(([k]) => k === key) || Object.values(FUND_FOR).flat().find(([k]) => k === key);
   if (hit) return hit[1];
-  return { load_income: "Load income", employee_pay: "Employee pay", to_driver: "Driver advance", advance_return: "Advance returned", food: "Food", toll: "Toll", fuel: "Fuel" }[key] || (key ? label(key) : "");
+  return { unaccounted: "Not accounted for", moved: "Leftover moved", load_income: "Load income", employee_pay: "Employee pay", to_driver: "Driver advance", advance_return: "Advance returned", food: "Food", toll: "Toll", fuel: "Fuel" }[key] || (key ? label(key) : "");
 }
 function openRequests(tag) {
   return (DATA.moneyRequests || []).filter((r) => r.tag === tag && (r.status === "open" || r.status === "partial"));
@@ -2551,7 +2602,7 @@ function toConfirm(tag) {
 }
 function advLeft(f) {
   const used = (f.usages || []).reduce((s, u) => s + (u.amountUgx || 0), 0);
-  return { used, left: Math.max(0, (f.amountUgx || 0) - used - (f.returnedUgx || 0)), back: f.returnedUgx || 0 };
+  return { used, left: Math.max(0, (f.amountUgx || 0) - used - (f.returnedUgx || 0) - (f.movedUgx || 0)), back: f.returnedUgx || 0, moved: f.movedUgx || 0 };
 }
 function recipientOf(f) {
   if (f.toDriverId) return (DATA.drivers || []).find((x) => x.id === f.toDriverId) || (DATA.driver && DATA.driver.id === f.toDriverId ? { ...DATA.driver, name: DATA.me.name } : null);
@@ -2616,8 +2667,22 @@ function advanceCard(f, admin) {
         <div class="grid g2" style="margin-top:10px">${dateField("date", "Date closed")}<label class="lbl">Note<input class="field" name="note" placeholder="Optional" /></label></div>
         <button class="btn btn-steel wide" style="margin-top:10px">Close advance</button>
       </form></details>` : ""}
+    ${admin && f.status !== "closed" && f.status !== "sent" && left > 0 ? `<details class="settings" style="margin-top:10px"><summary>Move what's left (${ugx(left)}) to someone else</summary>
+      <form data-form="move-advance" data-id="${esc(f.id)}" style="margin-top:10px">
+        <label class="lbl">Give it to<select class="field" name="to" required>${moveTargets(f).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("")}</select></label>
+        <label class="lbl" style="margin-top:10px">What for <span class="muted">(optional)</span><input class="field" name="note" placeholder="e.g. Diesel for Busia trip" /></label>
+        <button class="btn btn-primary wide" style="margin-top:10px">Move ${ugx(left)}</button>
+      </form></details>` : ""}
+    ${f.movedFrom ? `<p class="muted" style="margin-top:8px">Moved from ${esc((recipientOf((DATA.disbursements || []).find((x) => x.id === f.movedFrom) || {}) || {}).name || "another advance")}</p>` : ""}
     ${f.status === "closed" ? `<p class="muted" style="margin-top:8px">Closed ${fmtDay(f.closedAt)}${f.closeNote ? " · " + esc(f.closeNote) : ""}</p>` : ""}
   </section>`;
+}
+// people a leftover can move to: drivers and the two managers (not the person holding it)
+function moveTargets(f) {
+  const out = [];
+  (DATA.drivers || []).forEach((d) => { if (d.id !== f.toDriverId) out.push(["d:" + d.id, d.name + " · driver"]); });
+  (DATA.users || []).filter((u) => u.active !== false && ["cane_manager", "passion_manager"].includes(u.role) && u.id !== f.toUserId).forEach((u) => out.push(["u:" + u.id, u.name + " · " + (u.role === "cane_manager" ? "Cane" : "Passion")]));
+  return out;
 }
 function linkSelect(tag, name) {
   if (tag === "trucking") {
@@ -3717,6 +3782,7 @@ function bind() {
   bindBookings();
   bindFolds();
   document.querySelectorAll(".js-fuelok").forEach((b) => { b.onclick = () => act("save_truck", { id: b.dataset.id, fuelCheckedAt: todayYmd() }); });
+  document.querySelectorAll("[data-bizper]").forEach((b) => { b.onclick = () => { sessionStorage.setItem(b.dataset.key, b.dataset.bizper); route(); }; });
   document.querySelectorAll("[data-profitper]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("profitPer", b.dataset.profitper); route(); }; });
   document.querySelectorAll("[data-jobsrc]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("jobSrc", b.dataset.jobsrc); route(); }; });
   document.querySelectorAll(".js-openbk").forEach((b) => { b.onclick = () => {
@@ -3825,6 +3891,9 @@ function bind() {
         await act("quote_booking", fd);
       } else if (kind === "pricing") {
         await act("save_pricing", fd);
+      } else if (kind === "move-advance") {
+        if (!confirm("Move this leftover? It becomes a new advance for that person, who confirms receiving it.")) return;
+        await act("move_advance", { id: form.dataset.id, to: fd.to, note: fd.note });
       } else if (kind === "payinfo") {
         await act("save_payinfo", fd);
       } else if (kind === "book-decline") {
