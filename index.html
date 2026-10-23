@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon-w.png" />
   <title>Conacrew Logistics</title>
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <link rel="stylesheet" href="./styles.css?v=171" />
+  <link rel="stylesheet" href="./styles.css?v=172" />
   <script>
     // Runs before the page is drawn, so a signed-in phone never sees the sign-in form flash.
     (function () {
@@ -39,7 +39,6 @@
       <form class="card" id="login" style="padding:22px;width:min(420px,100%)">
         <div class="who-tag team"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>Members</div>
         <h2 id="loginTitle">Member login</h2>
-        <input class="field" name="name" placeholder="Your name" style="display:none" />
         <input class="field" name="phone" placeholder="Phone" style="margin-top:10px" />
         <input class="field" name="pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" style="margin-top:10px" />
         <p class="err" id="err" style="margin:10px 0 0"></p>
@@ -55,7 +54,7 @@
       </a>
     </div>
   </div>
-  <script src="./store.js?v=171"></script>
+  <script src="./store.js?v=172"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
   </script>
@@ -66,17 +65,13 @@
       if (Conacrew.session() && localStorage.getItem("conacrew.db.v2")) { const u = Conacrew.user(); if (u) { location.replace(HOME[u.role]); document.documentElement.classList.add("going"); } }
     } catch (e) {}
     Conacrew.init().then(() => {
-      const hasOwner = (Conacrew.db().users || []).some((u) => u.role === "admin") || Conacrew.server === "ok" || Conacrew.server === "signin";
-      if (!hasOwner && Conacrew.server === "offline") {
-        // New phone with no connection: wait for the office book.
+      // the office always exists: if this phone can't reach it, just say so (never offer to set up a new office)
+      const reached = Conacrew.server === "ok" || Conacrew.server === "signin";
+      const known = (Conacrew.db().users || []).some((u) => u.role === "admin");
+      if (!reached && !known) {
         document.getElementById("loginBtn").textContent = "Try again";
-        document.getElementById("err").textContent = "No connection. Connect to the internet, then tap Try again.";
+        document.getElementById("err").textContent = "Can't reach the office. Check the connection, then tap Try again.";
         window.__waitServer = true;
-      } else if (!hasOwner) {
-        // brand-new site with no office book yet: first person creates the main admin
-        document.getElementById("loginTitle").textContent = "Create admin";
-        document.querySelector("[name=name]").style.display = "";
-        document.getElementById("loginBtn").textContent = "Create and enter";
       }
       if (Conacrew.user() && !document.documentElement.classList.contains("going")) location.replace(HOME[Conacrew.user().role]);
     });
@@ -110,12 +105,12 @@
       document.getElementById("err").textContent = "";
       const fd = new FormData(e.target);
       await Conacrew.init();
-      if (window.__waitServer) { location.reload(); return; }
+      if (window.__waitServer) {
+        await Conacrew.probe();
+        if (Conacrew.server !== "ok" && Conacrew.server !== "signin") { btn.disabled = false; btn.textContent = "Try again"; document.getElementById("err").textContent = "Still can't reach the office. Check the connection, then tap Try again."; return; }
+        window.__waitServer = false; document.getElementById("err").textContent = "";
+      }
       try {
-        const users = Conacrew.db().users || [];
-        if (!users.some((u) => u.role === "admin") && Conacrew.server !== "ok" && Conacrew.server !== "signin") {
-          Conacrew.createOwner(fd.get("name"), fd.get("phone"), fd.get("pin"));
-        }
         // location is only asked for when this login needs it (the main admin is never asked);
         // once allowed, the phone gives it silently every time
         let gps = { pos: null, why: "skip" }, asked = false;
@@ -131,7 +126,7 @@
         if (json.needsApproval) {
           const nm = String(json.name || "").replace(/[<>&"]/g, "");
           document.getElementById("login").innerHTML = `<h2>Waiting for approval</h2>
-            <p style="margin-top:8px">Hi ${nm}. The office will approve this phone. Then sign in again.</p>
+            <p style="margin-top:8px">Hi ${nm.replace(/\.+$/, "")}, the office will approve this phone. Then sign in again.</p>
             <button class="btn btn-primary wide" style="margin-top:14px" type="button" onclick="location.reload()">Sign in again</button>`;
           return;
         }
