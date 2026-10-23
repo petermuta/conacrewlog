@@ -813,3 +813,31 @@ details.views summary::-webkit-details-marker { display: none; }
 /* the map always keeps its tiles inside its box */
 #routeMap, .truck-map, #liveMap { position: relative; overflow: hidden; }
 .js-new-mill[hidden] { display: none !important; }
+
+/* Money › Advances */
+.avatar.sm { width: 34px; height: 34px; font-size: 14px; flex: 0 0 34px; }
+.adv-fold .lf-head { align-items: center; }
+.adv-h { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.adv-h b { font-size: 15px; }
+.adv-h .muted { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adv-mini { display: block; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 4px; }
+.adv-mini i { display: block; height: 100%; background: #f5c400; }
+.adv-r { display: grid; justify-items: end; gap: 4px; flex: 0 0 auto; }
+.adv-r b { font-size: 14px; white-space: nowrap; }
+.adv-fold .lf-body .adv-card { border: 0; background: none; padding: 0; margin: 0; box-shadow: none; }
+.adv-fold .lf-body .adv-card .adv-title, .adv-fold .lf-body .adv-card .adv-right { display: none; }
+.adv-fold .lf-body .adv-card .adv-head { margin-top: 8px; }
+.adv-fold.waiting { border-color: rgba(245,196,0,.6); }
+.adv-sum { display: grid; gap: 10px; margin-top: 12px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 760px) { .adv-sum { grid-template-columns: 1fr; } }
+.bar-line { display: grid; grid-template-columns: minmax(90px, 1fr) 1.2fr auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.bar-line:first-of-type { margin-top: 8px; }
+.bar { display: block; height: 8px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; }
+.bar i { display: block; height: 100%; background: linear-gradient(90deg, #f5c400, #ff8b7a); border-radius: 8px; }
+.person-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 10px 0; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.person-line:first-of-type { margin-top: 8px; }
+.pl-nums { display: grid; justify-items: end; font-size: 12px; }
+.link-card { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+.link-card b { flex: 0 0 auto; }
+.link-card .muted { flex: 1; font-size: 12px; }
+.link-card .chev { font-size: 22px; color: rgba(244,247,251,.5); }

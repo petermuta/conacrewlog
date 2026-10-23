@@ -179,11 +179,11 @@ const PAGES = {
   fleet: [["#trucks", "Trucks"], ["#trucks-jobs", "Loads"], ["#trucks-work", "Tasks"], ["#trucks-inspect", "Inspections"], ["#trucks-paid", "Paid loads"], ["#trucks-trash", "Trash"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New load"]],
   cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Advances"]],
   passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"]],
-  money: [["#money", "Flow"], ["#money-spend", "Expenses"], ["#money-pay", "Pay"]],
+  money: [["#money", "Flow"], ["#money-tx", "Transactions"], ["#money-adv", "Advances"], ["#money-spend", "Expenses"], ["#money-pay", "Pay"]],
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -319,6 +319,8 @@ function route() {
     "passion-sell": viewPassionSell,
     "passion-pay": viewPassionPay,
     money: () => viewMoney(""),
+    "money-tx": () => viewMoney("", "tx"),
+    "money-adv": viewAllAdvances,
     "money-fleet": () => viewMoney("trucking"),
     "money-cane": () => viewMoney("sugarcane"),
     "money-passion": () => viewMoney("passion"),
@@ -382,6 +384,8 @@ function route() {
     "money-spend": "money",
     "money-pl": "money",
     "money-pl-q": "money",
+    "money-tx": "money",
+    "money-adv": "money",
     "money-pay": "money",
     team: "home",
   }[r.name] || "home";
@@ -424,7 +428,7 @@ function bizBar() {
       ["#trucks-spend", "Advances", req.trucking, "Money & papers"], ["#trucks-docs", "Docs", docsWaiting("trucking"), "Money & papers"], ["#trucks-trash", "Trash", 0, "Money & papers"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-profit", "Profit"], ["#cane-spend", "Advances", req.sugarcane], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-profit", "Profit"], ["#passion-spend", "Advances", req.passion], ["#passion-docs", "Docs", docsWaiting("passion")]],
-    money: [["#money", "Flow"], ["#money-spend", "Expenses"], ["#money-pay", "Pay", pay]],
+    money: [["#money", "Flow"], ["#money-tx", "Transactions"], ["#money-adv", "Advances"], ["#money-spend", "Expenses"], ["#money-pay", "Pay", pay]],
   }[biz] || [];
   return `<nav class="admin-nav">
     <div class="biz">
@@ -2098,7 +2102,8 @@ function flowRows(biz, type, period, q) {
     .filter((c) => !q || [c.note, c.payeeName, c.reference, catLabel(c.tag, c.category), cashRef(c)].join(" ").toLowerCase().includes(q))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
-function viewMoney(tag) {
+function viewMoney(tag, mode) {
+  const tx = mode === "tx";
   const period = sessionStorage.getItem("flowPeriod") || "month";
   const biz = tag !== undefined && tag !== null && tag !== "" ? tag : sessionStorage.getItem("flowBiz") || "";
   const type = sessionStorage.getItem("flowType") || "";
@@ -2137,21 +2142,21 @@ function viewMoney(tag) {
   const typeChip = { income: ["green", "Income"], spending: ["red", "Spending"], advance: ["gold", "Advance"], payroll: ["purple", "Payroll"], return: ["blue", "Returned"] };
   const sideList = (title, arr, tone) => `<div class="card side-card"><div class="row" style="align-items:center"><b>${title}</b><b class="${tone}">${ugx(sum(arr))}</b></div>${arr.length ? arr.slice(0, 6).map((x) => `<div class="side-line"><span>${esc(x.who || x.what)}<span class="muted"> · ${esc(x.who ? x.what : BIZ_LABEL[x.tag] || "")}</span></span><b>${x.amt ? ugx(x.amt) : "—"}</b></div>`).join("") + (arr.length > 6 ? `<p class="muted">+${arr.length - 6} more</p>` : "") : `<p class="muted">Nothing</p>`}</div>`;
   return `
-    <h1>Money · Flow</h1>
+    <h1>Money · ${tx ? "Transactions" : "Flow"}</h1>
     <div class="flow-filters">
       <select class="field js-flow" data-k="flowPeriod" aria-label="Period">${[["week", "This week"], ["month", "This month"], ["lastmonth", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["all", "All time"], ["custom", "Custom dates"]].map(([k, l]) => `<option value="${k}" ${period === k ? "selected" : ""}>${l}</option>`).join("")}</select>
       ${period === "custom" ? `<input class="field js-flow" type="date" data-k="flowFrom" value="${from}" /><input class="field js-flow" type="date" data-k="flowTo" value="${to}" />` : ""}
       <input class="field js-flow" data-k="flowQ" placeholder="Search" value="${esc(sessionStorage.getItem("flowQ") || "")}" />
     </div>
     <div class="seg seg-sm" style="margin-top:8px">${[["", "All"], ["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"], ["overhead", "Office"]].map(([k, l]) => `<button type="button" class="seg-btn ${biz === k ? "on" : ""}" data-flowbiz="${k}">${l}</button>`).join("")}</div>
-    <div class="seg seg-sm" style="margin-top:6px">${FLOW_TYPES.map(([k, l]) => `<button type="button" class="seg-btn ${type === k ? "on" : ""}" data-flowtype="${k}">${l}</button>`).join("")}</div>
+    ${tx ? `<div class="seg seg-sm" style="margin-top:6px">${FLOW_TYPES.map(([k, l]) => `<button type="button" class="seg-btn ${type === k ? "on" : ""}" data-flowtype="${k}">${l}</button>`).join("")}</div>` : ""}
     <div class="grid g4 kpi4" style="margin-top:12px">
       <div class="card kpi in-kpi"><span class="eyebrow">Money in</span><b>${ugx(inn)}</b></div>
       <div class="card kpi out-kpi"><span class="eyebrow">Money out</span><b>${ugx(out)}</b></div>
       <div class="card kpi gold"><span class="eyebrow">Net · ${esc(plabel)}</span><b class="${inn - out < 0 ? "neg" : "pos"}">${inn - out < 0 ? "−" : ""}${ugx(Math.abs(inn - out))}</b></div>
       <div class="card kpi steel"><span class="eyebrow">With the team</span><b>${ugx(withTeam)}</b></div>
     </div>
-    ${!biz ? `<div class="card biz-table"><table><thead><tr><th>UGX</th><th style="text-align:right">In</th><th style="text-align:right">Out</th><th style="text-align:right">Net</th></tr></thead><tbody>
+    ${tx ? "" : `${!biz ? `<div class="card biz-table"><table><thead><tr><th>UGX</th><th style="text-align:right">In</th><th style="text-align:right">Out</th><th style="text-align:right">Net</th></tr></thead><tbody>
       ${bizRows.map((x) => `<tr class="js-bizrow" data-flowbiz="${x.k}"><td><b>${x.n}</b></td><td class="num pos">${Number(x.i).toLocaleString("en-UG")}</td><td class="num neg">${Number(x.o).toLocaleString("en-UG")}</td><td class="num ${x.net < 0 ? "neg" : "pos"}"><b>${x.net < 0 ? "−" : ""}${Math.abs(x.net).toLocaleString("en-UG")}</b></td></tr>`).join("")}
     </tbody></table></div>` : ""}
     <div class="side-grid">
@@ -2159,7 +2164,11 @@ function viewMoney(tag) {
       ${sideList("Owed to us", owedUs, "pos")}
       ${sideList("We owe", weOwe.concat(payWait), "neg")}
     </div>
-    <div class="row keep" style="margin-top:18px;align-items:center"><h2 style="margin:0">Transactions <span class="muted" style="font-size:14px">${rows.length}</span></h2><button type="button" class="btn btn-ghost btn-sm" id="flowPdf">⬇ Export PDF</button></div>
+    <div class="grid g2" style="margin-top:12px">
+      <a class="card item link-card" href="#money-tx"><b>Transactions</b><span class="muted">${rows.length} · ${esc(plabel.toLowerCase())}</span><span class="chev">›</span></a>
+      <a class="card item link-card" href="#money-adv"><b>Advances</b><span class="muted">${ugx(withTeam)} with the team</span><span class="chev">›</span></a>
+    </div>`}
+    ${!tx ? "" : `<div class="row keep" style="margin-top:18px;align-items:center"><h2 style="margin:0">${rows.length} transaction${rows.length === 1 ? "" : "s"}</h2><button type="button" class="btn btn-ghost btn-sm" id="flowPdf">⬇ Export PDF</button></div>
     ${days.length ? days.map((d) => `<div class="day-head"><b>${fmtDay(d.d)}</b><span>${d.i ? `<span class="pos">+${ugx(d.i)}</span>` : ""}${d.i && d.o ? " · " : ""}${d.o ? `<span class="neg">−${ugx(d.o)}</span>` : ""}</span></div>
       <div class="card ledger">${d.rows.map((c) => { const ch = typeChip[c._type]; const who = c.payeeName || ""; const how = (METHOD_LABEL[c.method] || label(c.method || "")) + (c.payeePhone ? " " + c.payeePhone : c.bankAccount ? " · " + (c.bankName || "") + " " + c.bankAccount : "") + (c.reference ? " · Ref " + c.reference : ""); const link = cashRef(c); return `<details class="led-row"><summary>
         <span class="badge ${ch[0]}">${ch[1]}</span>
@@ -2172,11 +2181,11 @@ function viewMoney(tag) {
         ${!countsInTotals(c) ? `<div class="muted">Not in Money in / Money out: the company's own money moving to or from the team.</div>` : ""}
         ${c._type === "advance" || c.fromAdvance ? `<div><a href="${FUND_HOME[c.tag] || "#money-spend"}">Open the advance ›</a></div>` : ""}
       </div></details>`; }).join("")}</div>`).join("") : `<div class="card item muted" style="margin-top:8px">No money movements for ${esc(plabel.toLowerCase())}.</div>`}
-    ${rows.length > Number(sessionStorage.getItem("flowShow") || 150) ? `<button type="button" class="btn btn-ghost wide" id="flowMore" style="margin-top:10px">Show more</button>` : ""}`;
+    ${rows.length > Number(sessionStorage.getItem("flowShow") || 150) ? `<button type="button" class="btn btn-ghost wide" id="flowMore" style="margin-top:10px">Show more</button>` : ""}`}`;
 }
 function bindFlow() {
   document.querySelectorAll(".js-flow").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); sessionStorage.removeItem("flowShow"); route(); }; });
-  document.querySelectorAll("[data-flowbiz]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("flowBiz", b.dataset.flowbiz); if (location.hash !== "#money") location.hash = "#money"; else route(); }; });
+  document.querySelectorAll("[data-flowbiz]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("flowBiz", b.dataset.flowbiz); if (!["#money", "#money-tx"].includes(location.hash)) location.hash = "#money"; else route(); }; });
   document.querySelectorAll("[data-flowtype]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("flowType", b.dataset.flowtype); route(); }; });
   const more = document.getElementById("flowMore"); if (more) more.onclick = () => { sessionStorage.setItem("flowShow", String(Number(sessionStorage.getItem("flowShow") || 150) + 300)); route(); };
   const pdf = document.getElementById("flowPdf");
@@ -2632,7 +2641,7 @@ function useRow(u, tag) {
   return `<div class="use-row">
     ${u.photo ? `<img class="receipt" src="${u.photo}" alt="Receipt" />` : `<div class="receipt none">No<br>receipt</div>`}
     <div style="flex:1;min-width:0"><b>${esc(catLabel(tag, u.category) || "Spend")}${u.litres ? " · " + u.litres + " L" : ""}</b>
-      <div class="muted">${fmtDay(u.date)} · Paid to ${u.payeeName ? `<b>${esc(u.payeeName)}</b>` : "—"} · ${METHOD_LABEL[u.method] || "Cash"}${u.payeePhone ? " " + esc(u.payeePhone) : ""}${u.bankAccount ? " " + esc(u.bankName || "") + " " + esc(u.bankAccount) : ""}${u.reference ? " · Ref " + esc(u.reference) : ""}</div>
+      <div class="muted">${fmtDay(u.date)}${u.category === "unaccounted" ? "" : ` · Paid to ${u.payeeName ? `<b>${esc(u.payeeName)}</b>` : "—"} · ${METHOD_LABEL[u.method] || "Cash"}`}${u.payeePhone ? " " + esc(u.payeePhone) : ""}${u.bankAccount ? " " + esc(u.bankName || "") + " " + esc(u.bankAccount) : ""}${u.reference ? " · Ref " + esc(u.reference) : ""}</div>
       ${u.note ? `<div class="muted">${esc(u.note)}</div>` : ""}</div>
     <b class="amt">${ugx(u.amountUgx)}</b>
   </div>`;
@@ -2676,6 +2685,57 @@ function advanceCard(f, admin) {
     ${f.movedFrom ? `<p class="muted" style="margin-top:8px">Moved from ${esc((recipientOf((DATA.disbursements || []).find((x) => x.id === f.movedFrom) || {}) || {}).name || "another advance")}</p>` : ""}
     ${f.status === "closed" ? `<p class="muted" style="margin-top:8px">Closed ${fmtDay(f.closedAt)}${f.closeNote ? " · " + esc(f.closeNote) : ""}</p>` : ""}
   </section>`;
+}
+// ---- Money › Advances: every advance, who has it and how it was spent ----
+function viewAllAdvances() {
+  const per = sessionStorage.getItem("advPer") || "month", biz = sessionStorage.getItem("advBiz") || "", st = sessionStorage.getItem("advSt") || "open", who = sessionStorage.getItem("advWho") || "";
+  const [from, to, plabel] = periodRange(per);
+  const inP = (d) => { d = String(d || "").slice(0, 10); return d >= from && d <= to; };
+  const all = (DATA.disbursements || []).map((f) => ({ f, p: recipientOf(f), ...advLeft(f) }));
+  const scope = all.filter(({ f }) => !biz || (f.tag || "trucking") === biz);
+  const pkey = (f) => (f.toDriverId ? "d:" + f.toDriverId : "u:" + f.toUserId);
+  const list = scope.filter(({ f }) => (st === "all" || (st === "open" ? f.status !== "closed" : f.status === "closed")) && (!who || pkey(f) === who) && (st === "open" || inP(f.date) || (f.usages || []).some((u) => inP(u.date))))
+    .sort((x, y) => (x.f.status === "closed") - (y.f.status === "closed") || String(y.f.date).localeCompare(String(x.f.date)));
+  const held = scope.filter(({ f }) => f.status !== "closed").reduce((s, x) => s + x.left, 0);
+  const sent = scope.filter(({ f }) => inP(f.date) && !f.movedFrom).reduce((s, x) => s + (x.f.amountUgx || 0), 0);
+  const uses = scope.flatMap(({ f, p }) => (f.usages || []).filter((u) => inP(u.date)).map((u) => ({ u, f, p })));
+  const spent = uses.reduce((s, x) => s + (Number(x.u.amountUgx) || 0), 0);
+  const waiting = scope.filter(({ f }) => f.status === "sent").length;
+  // spending by type and by person in the period
+  const byCat = {}; uses.forEach(({ u, f }) => { const k = catLabel(f.tag, u.category) || "Other"; byCat[k] = (byCat[k] || 0) + (Number(u.amountUgx) || 0); });
+  const cats = Object.entries(byCat).sort((x, y) => y[1] - x[1]);
+  const people = {}; scope.forEach(({ f, p, left }) => { const k = pkey(f); const e = people[k] = people[k] || { name: p ? p.name : "—", biz: BIZ_LABEL[f.tag] || "", held: 0, spent: 0, open: 0 }; if (f.status !== "closed") { e.held += left; e.open++; } });
+  uses.forEach(({ u, f }) => { const e = people[pkey(f)]; if (e) e.spent += Number(u.amountUgx) || 0; });
+  const ppl = Object.entries(people).filter(([, e]) => e.held || e.spent).sort((x, y) => y[1].held - x[1].held || y[1].spent - x[1].spent);
+  const max = Math.max(1, ...cats.map(([, v]) => v));
+  const card = ({ f, p, used, left }) => {
+    const pct = f.amountUgx ? Math.min(100, Math.round((used / f.amountUgx) * 100)) : 0;
+    const state = f.status === "sent" ? ["gold", "Not confirmed"] : f.status === "closed" ? ["green", "Closed"] : left > 0 ? ["blue", ugx(left) + " left"] : ["green", "All spent"];
+    const head = `<span class="avatar sm">${esc(((p && p.name) || "?").charAt(0).toUpperCase())}</span><span class="adv-h"><b>${esc(p ? p.name : "—")}</b><span class="muted">${esc(catLabel(f.tag, f.activity) || "Advance")} · ${esc(BIZ_LABEL[f.tag] || "")} · ${fmtDay(f.date)}</span><span class="adv-mini"><i style="width:${pct}%"></i></span></span><span class="adv-r"><b>${ugx(f.amountUgx)}</b><span class="badge ${state[0]}">${state[1]}</span></span>`;
+    return foldCard(head, advanceCard(f, true), f.status === "sent" ? "adv-fold waiting" : "adv-fold");
+  };
+  const peopleOpts = Object.entries(people).sort((x, y) => x[1].name.localeCompare(y[1].name));
+  return `
+    <h1>Money · Advances</h1>
+    <div class="flow-filters">
+      <select class="field js-advf" data-k="advPer" aria-label="Period">${[["week", "This week"], ["month", "This month"], ["lastmonth", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["all", "All time"]].map(([k, l]) => `<option value="${k}" ${per === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select class="field js-advf" data-k="advWho" aria-label="Person"><option value="">Everyone</option>${peopleOpts.map(([k, e]) => `<option value="${k}" ${who === k ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select>
+    </div>
+    <div class="seg seg-sm" style="margin-top:8px">${[["", "All"], ["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([k, l]) => `<button type="button" class="seg-btn ${biz === k ? "on" : ""}" data-advset="advBiz" data-v="${k}">${l}</button>`).join("")}</div>
+    <div class="grid g4 kpi4" style="margin-top:12px">
+      <div class="card kpi steel"><span class="eyebrow">With the team</span><b>${ugx(held)}</b></div>
+      <div class="card kpi out-kpi"><span class="eyebrow">Spent · ${esc(plabel)}</span><b>${ugx(spent)}</b></div>
+      <div class="card kpi"><span class="eyebrow">Sent · ${esc(plabel)}</span><b>${ugx(sent)}</b></div>
+      <div class="card kpi ${waiting ? "attn-kpi" : ""}"><span class="eyebrow">Not confirmed</span><b>${waiting}</b></div>
+    </div>
+    ${cats.length || ppl.length ? `<div class="adv-sum">
+      <div class="card item"><b>What it was spent on</b>${cats.length ? cats.map(([k, v]) => `<div class="bar-line"><span>${esc(k)}</span><span class="bar"><i style="width:${Math.round((v / max) * 100)}%"></i></span><b>${ugx(v)}</b></div>`).join("") : `<p class="muted">Nothing spent ${esc(plabel.toLowerCase())}</p>`}</div>
+      <div class="card item"><b>By person</b>${ppl.map(([k, e]) => `<button type="button" class="person-line" data-advset="advWho" data-v="${who === k ? "" : k}"><span><b>${esc(e.name)}</b><span class="muted"> · ${esc(e.biz)}</span></span><span class="pl-nums"><span>Holding <b>${ugx(e.held)}</b></span><span class="muted">Spent ${ugx(e.spent)}</span></span></button>`).join("") || `<p class="muted">No one</p>`}</div>
+    </div>` : ""}
+    <div class="row keep" style="margin-top:16px;align-items:center"><h2 style="margin:0">${list.length} advance${list.length === 1 ? "" : "s"}</h2>
+      <div class="seg seg-sm">${[["open", "Open"], ["closed", "Closed"], ["all", "All"]].map(([k, l]) => `<button type="button" class="seg-btn ${st === k ? "on" : ""}" data-advset="advSt" data-v="${k}">${l}</button>`).join("")}</div></div>
+    <div class="list" style="margin-top:10px">${list.length ? list.map(card).join("") : `<div class="card item muted">${st === "open" ? "No open advances." : "None for " + esc(plabel.toLowerCase()) + "."}</div>`}</div>
+    <p style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="${biz === "sugarcane" ? "#cane-spend" : biz === "passion" ? "#passion-spend" : "#trucks-spend"}">＋ Send money</a></p>`;
 }
 // people a leftover can move to: drivers and the two managers (not the person holding it)
 function moveTargets(f) {
@@ -2797,13 +2857,13 @@ function viewFundsAdmin(tag) {
       <summary><div class="avatar">＋</div><div style="flex:1"><b>Send money without a request</b></div></summary>
       <div style="margin-top:12px">${sendForm(tag)}</div>
     </details>
-    <h2 style="margin:22px 0 0">How the money was spent</h2>
+    <div class="row keep" style="margin:22px 0 0;align-items:center"><h2 style="margin:0">Open advances</h2><a class="btn btn-ghost btn-sm js-alladv" data-biz="${tag}" href="#money-adv">All advances ›</a></div>
     <div class="grid g3" style="margin-top:10px">
       <div class="card kpi gold"><span class="eyebrow">Not yet spent</span><b>${ugx(withThem)}</b></div>
       <div class="card kpi"><span class="eyebrow">Waiting confirmation</span><b>${floats.filter((f) => f.status === "sent").length}</b></div>
       <div class="card kpi steel"><span class="eyebrow">Spent this month</span><b>${ugx(spentMonth)}</b></div>
     </div>
-    <div class="list" style="margin-top:10px">${floats.length ? floats.map((f) => advanceCard(f, true)).join("") : `<div class="card item muted">Nothing sent yet.</div>`}</div>`;
+    <div class="list" style="margin-top:10px">${floats.filter((f) => f.status !== "closed").length ? floats.filter((f) => f.status !== "closed").map((f) => advanceCard(f, true)).join("") : `<div class="card item muted">No open advances.</div>`}</div>`;
 }
 function bindAdvanceForms() {
   document.querySelectorAll("form[data-form=advance]").forEach((af) => {
@@ -3782,6 +3842,9 @@ function bind() {
   bindBookings();
   bindFolds();
   document.querySelectorAll(".js-fuelok").forEach((b) => { b.onclick = () => act("save_truck", { id: b.dataset.id, fuelCheckedAt: todayYmd() }); });
+  document.querySelectorAll(".js-alladv").forEach((l) => { l.onclick = () => { sessionStorage.setItem("advBiz", l.dataset.biz); sessionStorage.setItem("advSt", "all"); }; });
+  document.querySelectorAll(".js-advf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
+  document.querySelectorAll("[data-advset]").forEach((b) => { b.onclick = () => { sessionStorage.setItem(b.dataset.advset, b.dataset.v); route(); }; });
   document.querySelectorAll("[data-bizper]").forEach((b) => { b.onclick = () => { sessionStorage.setItem(b.dataset.key, b.dataset.bizper); route(); }; });
   document.querySelectorAll("[data-profitper]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("profitPer", b.dataset.profitper); route(); }; });
   document.querySelectorAll("[data-jobsrc]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("jobSrc", b.dataset.jobsrc); route(); }; });
