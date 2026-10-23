@@ -4526,11 +4526,15 @@ function bindReqTotal() {
 function placeLine(v, t, d) {
   return [v, t, d].map((x) => (x || "").trim()).filter(Boolean).join(", ");
 }
+// a fetch that gives up after a few seconds, so nothing waits forever on a slow line
+async function fetchSoon(url, ms, opts) {
+  const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const t = setTimeout(() => ctl && ctl.abort(), ms || 8000);
+  try { return await fetch(url, { ...(opts || {}), ...(ctl ? { signal: ctl.signal } : {}) }); } finally { clearTimeout(t); }
+}
 async function geoPlace(q) {
-  const tries = [q + ", Uganda", q];
-  for (const item of tries) {
-    const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ug&q=" + encodeURIComponent(item);
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+  for (const item of [q + ", Uganda", q]) {
+    const res = await fetchSoon("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ug&q=" + encodeURIComponent(item), 9000, { headers: { Accept: "application/json" } });
     const rows = await res.json();
     if (rows[0]) return { lat: Number(rows[0].lat), lon: Number(rows[0].lon), label: rows[0].display_name };
   }
@@ -4543,113 +4547,106 @@ function havKm(a, b) {
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
+// road distance; if the route service is slow or down, a straight-line estimate (marked "about")
 async function roadKm(a, b) {
   try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`;
-    const res = await fetch(url);
+    const res = await fetchSoon(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`, 8000);
     const data = await res.json();
-    if (data.routes && data.routes[0]) return data.routes[0].distance / 1000;
+    if (data.routes && data.routes[0] && data.routes[0].distance > 0) return { km: data.routes[0].distance / 1000, road: true };
   } catch (e) {}
-  return havKm(a, b) * 1.25;
+  return { km: havKm(a, b) * 1.3, road: false };
 }
 function bindRouteCalc() {
   const box = document.getElementById("routeMap");
-  if (!box || typeof L === "undefined") return;
+  if (!box) return;
   const hint = document.querySelector(".js-route");
   const kmEl = document.querySelector(".js-km");
   const deadEl = document.querySelector(".js-dead");
   const haulEl = document.querySelector(".js-haul");
-  const map = L.map(box).setView([1.37, 32.3], 7);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
-  setTimeout(() => map.invalidateSize(), 200);
-  let now = null, pick = null, drop = null, m0 = null, m1 = null, m2 = null, line = null, nextPin = "pick";
-  const zoomFor = (v, t) => (v && v.trim() ? 14 : t && t.trim() ? 12 : 10);
+  const pv = document.querySelector(".js-pv");
+  const dv = document.querySelector(".js-dv");
+  const say = (html) => { if (hint) hint.innerHTML = html; };
+  // the map is a help, not a must: distance still works if the map can't load
+  let map = null;
+  if (typeof L !== "undefined" && L.map) {
+    try {
+      map = L.map(box).setView([0.6, 32.6], 7);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
+      setTimeout(() => map.invalidateSize(), 200);
+    } catch (e) { map = null; }
+  }
+  if (!map) box.style.display = "none";
+  let now = null, pick = null, drop = null, m0 = null, m1 = null, m2 = null, line = null, nextPin = "pick", run = 0;
   const pinBtns = [...document.querySelectorAll(".js-pinmode")];
   const setMode = (w) => { nextPin = w; pinBtns.forEach((b) => b.classList.toggle("on", b.dataset.pin === w)); };
   pinBtns.forEach((b) => { b.onclick = () => setMode(b.dataset.pin); });
-  if (hint && !hint.textContent) hint.textContent = "Type the places, or tap the map";
-  // the map sits in a closed section on the driver page: redraw it when it opens
-  const det = box.closest("details"); if (det) det.addEventListener("toggle", () => { if (det.open) setTimeout(() => map.invalidateSize(), 60); });
+  if (!map) pinBtns.forEach((b) => { b.style.display = "none"; });
+  say(map ? "Type the places, or tap the map" : "Type the pickup and drop-off places");
+  const det = box.closest("details"); if (det && map) det.addEventListener("toggle", () => { if (det.open) setTimeout(() => map.invalidateSize(), 60); });
   const icon = (cls) => L.divIcon({ className: "", html: `<span class="map-pin ${cls}"></span>`, iconSize: [22, 22], iconAnchor: [11, 11] });
-  const placePin = (which, pt) => {
-    if (which === "pick") { pick = pt; if (m1) map.removeLayer(m1); m1 = L.marker([pt.lat, pt.lon], { icon: icon("a") }).addTo(map).bindTooltip("Pickup", { permanent: true, direction: "top", offset: [0, -10] }); }
-    else { drop = pt; if (m2) map.removeLayer(m2); m2 = L.marker([pt.lat, pt.lon], { icon: icon("b") }).addTo(map).bindTooltip("Drop-off", { permanent: true, direction: "top", offset: [0, -10] }); }
-    if (pick && drop) { map.fitBounds([[pick.lat, pick.lon], [drop.lat, drop.lon]].concat(now ? [[now.lat, now.lon]] : []), { padding: [36, 36], maxZoom: 13 }); measure(); }
-    else { map.setView([pt.lat, pt.lon], 12); setMode(which === "pick" ? "drop" : "pick"); if (hint) hint.textContent = which === "pick" ? "Pickup set. Now the drop-off." : "Drop-off set. Now the pickup."; }
-  };
   const fillFuel = () => {
     const diesel = Number(document.querySelector(".js-diesel")?.value) || DATA.dieselDefaultUgx || 5200;
     const truck = DATA.truck || (DATA.trucks || []).find((t) => t.id === document.querySelector("[name=truckId]")?.value) || (DATA.trucks || [])[0] || {};
-    const dead = Number(document.querySelector(".js-dead")?.value) || 0;
-    const haul = Number(document.querySelector(".js-haul")?.value) || Number(document.querySelector(".js-km")?.value) || 0;
+    const dead = Number(deadEl?.value) || 0;
+    const haul = Number(haulEl?.value) || Number(kmEl?.value) || 0;
     if (typeof estimateTripFuel !== "function") return;
     const f = estimateTripFuel(dead + haul, haul, truck, diesel);
-    const L = document.querySelector(".js-litres");
-    const C = document.querySelector(".js-fuel");
-    if (L) L.value = f.litres;
+    const Lt = document.querySelector(".js-litres"), C = document.querySelector(".js-fuel");
+    if (Lt) Lt.value = f.litres;
     if (C) C.value = f.fuelUgx;
-  };
-  const flyPlace = async (which) => {
-    const v = document.querySelector(which === "pick" ? ".js-pv" : ".js-dv")?.value;
-    const q = (v || "").trim();
-    if (!q) return;
-    if (hint) hint.textContent = "Finding " + q + "…";
-    try {
-      const g = await geoPlace(q);
-      placePin(which, { lat: g.lat, lon: g.lon });
-    } catch (err) {
-      setMode(which); if (hint) hint.textContent = q + " not found. Tap it on the map.";
-    }
   };
   const measure = async () => {
     if (!pick || !drop) return;
-    if (hint) hint.textContent = "Measuring road…";
-    try {
-      const dead = now ? Math.round(await roadKm(now, pick)) : 0;
-      const haul = Math.round(await roadKm(pick, drop));
-      const km = dead + haul;
-      if (deadEl) deadEl.value = dead;
-      if (haulEl) haulEl.value = haul;
-      const o = document.querySelector(".js-origin"); const d = document.querySelector(".js-dest");
-      if (o && !(o.value||"").trim()) o.value = "Pickup";
-      if (d && !(d.value||"").trim()) d.value = "Drop";
-      if (kmEl) kmEl.value = haul;
-      fillFuel();
-      if (hint) hint.innerHTML = now
-        ? `<b>${haul} km</b> pickup → drop-off · truck to pickup ${dead} km`
-        : `<b>${haul} km</b> by road, pickup → drop-off`;
+    const my = ++run;
+    say("Working out the distance…");
+    const [d0, d1] = await Promise.all([now ? roadKm(now, pick) : Promise.resolve({ km: 0, road: true }), roadKm(pick, drop)]);
+    if (my !== run) return; // pins moved again meanwhile
+    const dead = Math.round(d0.km), haul = Math.max(1, Math.round(d1.km)), about = !(d0.road && d1.road);
+    if (deadEl) deadEl.value = dead;
+    if (haulEl) haulEl.value = haul;
+    if (kmEl) kmEl.value = haul;
+    fillFuel();
+    say(`<b>${about ? "About " : ""}${haul} km</b> ${about ? "(straight line, road route not reached)" : "by road"} · pickup → drop-off${now ? ` · truck to pickup ${dead} km` : ""}`);
+    if (map) {
       if (line) map.removeLayer(line);
-      const pts = [];
-      if (now) pts.push([now.lat, now.lon]);
-      pts.push([pick.lat, pick.lon], [drop.lat, drop.lon]);
+      const pts = (now ? [[now.lat, now.lon]] : []).concat([[pick.lat, pick.lon], [drop.lat, drop.lon]]);
       line = L.polyline(pts, { color: "#f5c400", weight: 4, dashArray: "6 6" }).addTo(map);
-    } catch (err) {
-      if (hint) hint.textContent = err.message || "Could not measure";
     }
   };
-  const setNow = (pt) => {
-    now = pt;
-    if (m0) map.removeLayer(m0);
-    m0 = L.marker([pt.lat, pt.lon], { icon: icon("t") }).addTo(map).bindTooltip("Truck", { permanent: true, direction: "top", offset: [0, -10] });
-    map.setView([pt.lat, pt.lon], 12);
-    if (pick && drop) measure();
-    else if (hint) hint.textContent = "Truck place added. Tap pickup and drop if not set.";
+  const placePin = (which, pt) => {
+    if (which === "pick") pick = pt; else drop = pt;
+    if (map) {
+      if (which === "pick") { if (m1) map.removeLayer(m1); m1 = L.marker([pt.lat, pt.lon], { icon: icon("a") }).addTo(map).bindTooltip("Pickup", { permanent: true, direction: "top", offset: [0, -10] }); }
+      else { if (m2) map.removeLayer(m2); m2 = L.marker([pt.lat, pt.lon], { icon: icon("b") }).addTo(map).bindTooltip("Drop-off", { permanent: true, direction: "top", offset: [0, -10] }); }
+    }
+    if (pick && drop) { if (map) map.fitBounds([[pick.lat, pick.lon], [drop.lat, drop.lon]].concat(now ? [[now.lat, now.lon]] : []), { padding: [36, 36], maxZoom: 13 }); measure(); }
+    else { if (map) map.setView([pt.lat, pt.lon], 12); setMode(which === "pick" ? "drop" : "pick"); say(which === "pick" ? "Pickup set. Now the drop-off." : "Drop-off set. Now the pickup."); }
   };
-  map.on("click", (e) => placePin(nextPin, { lat: e.latlng.lat, lon: e.latlng.lng }));
+  // a typed place: look it up and drop its pin (once per new name)
+  const looked = { pick: "", drop: "" };
+  const findPlace = async (which) => {
+    const el = which === "pick" ? pv : dv;
+    const q = ((el && el.value) || "").trim();
+    if (!q || q.length < 3 || looked[which] === q) return;
+    looked[which] = q;
+    say("Finding " + esc(q) + "…");
+    try { const g = await geoPlace(q); if (((el && el.value) || "").trim() === q) placePin(which, { lat: g.lat, lon: g.lon }); }
+    catch (err) { looked[which] = ""; setMode(which); say(esc(q) + (map ? " not found. Tap it on the map." : " not found. Try a nearby town name.")); }
+  };
+  if (map) map.on("click", (e) => placePin(nextPin, { lat: e.latlng.lat, lon: e.latlng.lng }));
   if (box.dataset.pick && box.dataset.drop) {
     const [pa, pb] = box.dataset.pick.split(",").map(Number); const [da, db] = box.dataset.drop.split(",").map(Number);
     placePin("pick", { lat: pa, lon: pb }); placePin("drop", { lat: da, lon: db });
   }
-  const pv = document.querySelector(".js-pv");
-  const dv = document.querySelector(".js-dv");
-  if (pv) {
-    pv.onblur = () => flyPlace("pick");
-    pv.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); flyPlace("pick"); } };
-  }
-  if (dv) {
-    dv.onblur = () => flyPlace("drop");
-    dv.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); flyPlace("drop"); } };
-  }
+  const typed = {};
+  [[pv, "pick"], [dv, "drop"]].forEach(([el, w]) => {
+    if (!el) return;
+    el.addEventListener("blur", () => findPlace(w));
+    el.addEventListener("change", () => findPlace(w));
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); findPlace(w); } });
+    // also after a short pause in typing, so nobody has to leave the box first
+    el.addEventListener("input", () => { clearTimeout(typed[w]); typed[w] = setTimeout(() => findPlace(w), 1400); });
+  });
   const jobForm = document.querySelector("[data-form=job], [data-form=driver-load]");
   if (jobForm) jobForm.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.tagName !== "TEXTAREA" && e.target.type !== "submit") e.preventDefault();
@@ -4660,30 +4657,36 @@ function bindRouteCalc() {
     if (o) o.value = (pv && pv.value.trim()) || "Pickup";
     if (d) d.value = (dv && dv.value.trim()) || "Drop";
   };
-  if (pv) pv.oninput = writePlaces;
-  if (dv) dv.oninput = writePlaces;
+  if (pv) pv.addEventListener("input", writePlaces);
+  if (dv) dv.addEventListener("input", writePlaces);
   writePlaces();
-  const kmBox = document.querySelector(".js-km");
-  if (kmBox) kmBox.oninput = fillFuel;
+  if (kmEl) kmEl.oninput = () => { if (haulEl) haulEl.value = kmEl.value; fillFuel(); };
   const tSel = document.querySelector("form[data-form=job] [name=truckId]"); if (tSel) tSel.addEventListener("change", fillFuel);
   const dBox = document.querySelector(".js-diesel");
   if (dBox) dBox.oninput = fillFuel;
+  const setNow = (pt) => {
+    now = pt;
+    if (map) { if (m0) map.removeLayer(m0); m0 = L.marker([pt.lat, pt.lon], { icon: icon("t") }).addTo(map).bindTooltip("Truck", { permanent: true, direction: "top", offset: [0, -10] }); }
+    if (pick && drop) measure();
+    else { if (map) map.setView([pt.lat, pt.lon], 12); say("Truck place added. Now the pickup and drop-off."); }
+  };
   const gps = document.getElementById("useGps");
   if (gps) gps.onclick = async () => {
     // office: the chosen truck's last live spot; driver: this phone (it's in the truck)
     if (DATA.me.role === "admin") {
       const tid = document.querySelector("form[data-form=job] [name=truckId]")?.value;
       const pings = livePings();
-      try { const res = await fetch("/.netlify/functions/live", { cache: "no-store", headers: { authorization: "Bearer " + Conacrew.token() } }); if (res.ok) mergePings(pings, normalizePings(await res.json())); } catch (e) {}
+      try { const res = await fetchSoon("/.netlify/functions/live", 6000, { cache: "no-store", headers: { authorization: "Bearer " + Conacrew.token() } }); if (res.ok) mergePings(pings, normalizePings(await res.json())); } catch (e) {}
       const p = pings[tid];
-      if (p) { setNow({ lat: p.lat, lon: p.lng }); if (hint && !(pick && drop)) hint.textContent = "Truck place added (" + agoText(p.at) + ")"; return; }
-      if (hint) hint.textContent = "No live location for this truck yet";
+      if (p) { setNow({ lat: p.lat, lon: p.lng }); return; }
+      say("No live location for this truck yet");
       return;
     }
     if (!navigator.geolocation) { alert("GPS not available"); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => setNow({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      () => alert("Allow location for truck now")
+      () => alert("Allow location for truck now"),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
     );
   };
 }
