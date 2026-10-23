@@ -810,3 +810,6 @@ details.views summary::-webkit-details-marker { display: none; }
 .pdot.a, .map-pin.a { background: #f5c400; } .pdot.b, .map-pin.b { background: #ff6b5e; } .map-pin.t { background: #3d9bff; }
 .map-pin { display: block; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.45); }
 .js-route b { color: #f5c400; font-size: 15px; }
+/* the map always keeps its tiles inside its box */
+#routeMap, .truck-map, #liveMap { position: relative; overflow: hidden; }
+.js-new-mill[hidden] { display: none !important; }

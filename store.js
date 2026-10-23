@@ -1211,10 +1211,21 @@ function applyAction(db, user, body) {
     const tonnes = Number(body.tonnes) || 0;
     const price = Number(body.pricePerTonne) || 0;
     if (tonnes <= 0 || price <= 0) throw new Error("Enter tonnes and price");
+    // a new mill can be added right here
+    if (!db.mills) db.mills = [];
+    let millId = body.millId && body.millId !== "new" ? body.millId : "";
+    if (body.millId === "new" || (!millId && body.millName)) {
+      const nm = String(body.millName || "").trim();
+      if (!nm) throw new Error("Enter the mill's name");
+      let m = db.mills.find((x) => String(x.name).toLowerCase() === nm.toLowerCase());
+      if (!m) { m = { id: uid("m"), name: nm }; db.mills.push(m); }
+      millId = m.id;
+    }
+    if (!millId) throw new Error("Choose the mill");
     const sale = {
       id: uid("cs"),
       date: dayOf(body),
-      millId: body.millId || "",
+      millId,
       buyId: body.buyId || "",
       tonnes,
       pricePerTonne: price,

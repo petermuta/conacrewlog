@@ -1688,9 +1688,10 @@ function viewCaneSell() {
     <form class="card item form-card" data-form="cane-sale" style="margin-top:14px">
       <p class="form-step">Sale to the mill</p>
       <div class="grid g2">
-        <label class="lbl">Mill<select class="field" name="millId">${mills.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></label>
+        <label class="lbl">Mill<select class="field js-mill" name="millId">${mills.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}<option value="new" ${mills.length ? "" : "selected"}>＋ New mill</option></select></label>
         ${dateField("date", "Sale date")}
       </div>
+      <label class="lbl js-new-mill" style="margin-top:10px" ${mills.length ? "hidden" : ""}>New mill name<input class="field" name="millName" placeholder="e.g. Kakira Sugar" /></label>
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Tonnes<input class="field" name="tonnes" id="saleT" required inputmode="decimal" placeholder="0" /></label>
         <label class="lbl">Price per tonne (UGX)<input class="field" name="pricePerTonne" id="saleP" required inputmode="numeric" placeholder="0" /></label>
@@ -4056,6 +4057,7 @@ function bind() {
     taskKind.onchange = syncParts;
     syncParts();
   }
+  document.querySelectorAll(".js-mill").forEach((sel) => { const box = sel.form.querySelector(".js-new-mill"); const s = () => { box.hidden = sel.value !== "new"; box.querySelector("input").required = sel.value === "new"; }; sel.onchange = s; s(); });
   document.querySelectorAll(".js-seller").forEach((sel) => { const box = sel.form.querySelector(".js-new-seller"); const s = () => { box.hidden = sel.value !== "new"; if (sel.value !== "new") { sel.form.sellerName.value = ""; sel.form.sellerPhone.value = ""; } }; sel.onchange = s; });
   document.querySelectorAll(".js-nl-truck").forEach((sel) => { const dr = sel.form.querySelector(".js-nl-driver"); const s = () => { const o = sel.selectedOptions[0]; if (o && o.dataset.driver && dr) dr.value = o.dataset.driver; }; sel.addEventListener("change", s); s(); });
   document.querySelectorAll(".js-unit").forEach((sel) => {
