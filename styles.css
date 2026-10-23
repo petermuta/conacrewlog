@@ -801,3 +801,12 @@ details.views summary::-webkit-details-marker { display: none; }
 @media (max-width: 420px) { .push-card { flex-direction: column; align-items: stretch; } .push-btns .btn { flex: 1; } }
 .get-app { display: block; margin: 14px auto 0; width: max-content; padding: 10px 16px; border-radius: 999px; background: rgba(255,255,255,.1); color: #fff; font-weight: 700; text-decoration: none; }
 .get-app[hidden] { display: none; }
+
+/* load map: which pin the next tap sets */
+.pin-pick { display: flex; gap: 6px; margin-top: 10px; }
+.pin-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 10px; border-radius: 999px; border: 1.5px solid rgba(255,255,255,.18); background: rgba(255,255,255,.04); color: #f4f7fb; font-weight: 700; font-size: 13px; cursor: pointer; }
+.pin-btn.on { border-color: #f5c400; background: rgba(245,196,0,.14); }
+.pdot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.pdot.a, .map-pin.a { background: #f5c400; } .pdot.b, .map-pin.b { background: #ff6b5e; } .map-pin.t { background: #3d9bff; }
+.map-pin { display: block; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.45); }
+.js-route b { color: #f5c400; font-size: 15px; }

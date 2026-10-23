@@ -1174,7 +1174,8 @@ function viewNewJob() {
       <button type="button" class="btn btn-ghost btn-sm" id="useGps" style="margin-top:4px">Use the truck's GPS for distance</button>
       <input type="hidden" name="kmToPickup" class="js-dead" />
       <input type="hidden" name="kmHaul" class="js-haul" />
-      <div id="routeMap" style="height:220px;margin-top:8px;border-radius:14px"></div>
+      <div class="pin-pick" role="group" aria-label="Map pin"><button type="button" class="pin-btn on js-pinmode" data-pin="pick"><span class="pdot a"></span>Pickup</button><button type="button" class="pin-btn js-pinmode" data-pin="drop"><span class="pdot b"></span>Drop-off</button></div>
+      <div id="routeMap" style="height:240px;margin-top:8px;border-radius:14px"></div>
       <p class="form-step">Truck and driver</p>
       <div class="grid g2">
         <label class="lbl">Truck<select class="field js-nl-truck" name="truckId">${DATA.trucks.map((t) => { const d = DATA.drivers.find((x) => x.id === t.assignedDriverId); return `<option value="${t.id}" data-driver="${d ? d.id : ""}">${esc(t.plate)}${t.hp ? " · " + t.hp + " hp" : ""}</option>`; }).join("")}</select></label>
@@ -1531,7 +1532,8 @@ function viewDrive(page, taskId) {
       <button type="button" class="btn btn-ghost btn-sm" id="useGps" style="margin-top:4px">Use my truck's GPS for distance</button>
       <input type="hidden" name="kmToPickup" class="js-dead" />
       <input type="hidden" name="kmHaul" class="js-haul" />
-      <div id="routeMap" style="height:220px;margin-top:8px;border-radius:14px"></div>
+      <div class="pin-pick" role="group" aria-label="Map pin"><button type="button" class="pin-btn on js-pinmode" data-pin="pick"><span class="pdot a"></span>Pickup</button><button type="button" class="pin-btn js-pinmode" data-pin="drop"><span class="pdot b"></span>Drop-off</button></div>
+      <div id="routeMap" style="height:240px;margin-top:8px;border-radius:14px"></div>
       <div class="grid g3" style="margin-top:10px">
         <label class="lbl">Distance (km)<input class="field js-km" name="km" inputmode="decimal" /></label>
         <label class="lbl">Client pays<select class="field" name="payBasis"><option value="trip">Per trip</option><option value="tonne">Per tonne</option></select></label>
@@ -3830,7 +3832,7 @@ function bind() {
         await act("create_job", fd);
         const fromBk = !!fd.bookingId;
         sessionStorage.removeItem("jobFromBooking");
-        location.hash = fromBk ? "#trucks-book" : "#trucks";
+        location.hash = "#trucks-jobs";
       } else if (kind === "save-truck") {
         await act("save_truck", fd);
         location.hash = "#trucks";
@@ -4039,8 +4041,8 @@ function bind() {
     };
   });
   document.querySelectorAll(".js-contractor").forEach((sel) => {
-    const box = sel.parentElement.querySelector(".js-new-contractor");
-    const sync = () => { if (box) box.style.display = sel.value === "new" ? "grid" : "none"; };
+    const box = (sel.form || document).querySelector(".js-new-contractor");
+    const sync = () => { if (box) { box.style.display = sel.value === "new" ? "grid" : "none"; const n = box.querySelector("[name=contractorName]"); if (n) n.required = sel.value === "new"; } };
     sel.onchange = sync;
     sync();
   });
@@ -4562,6 +4564,19 @@ function bindRouteCalc() {
   setTimeout(() => map.invalidateSize(), 200);
   let now = null, pick = null, drop = null, m0 = null, m1 = null, m2 = null, line = null, nextPin = "pick";
   const zoomFor = (v, t) => (v && v.trim() ? 14 : t && t.trim() ? 12 : 10);
+  const pinBtns = [...document.querySelectorAll(".js-pinmode")];
+  const setMode = (w) => { nextPin = w; pinBtns.forEach((b) => b.classList.toggle("on", b.dataset.pin === w)); };
+  pinBtns.forEach((b) => { b.onclick = () => setMode(b.dataset.pin); });
+  if (hint && !hint.textContent) hint.textContent = "Type the places, or tap the map";
+  // the map sits in a closed section on the driver page: redraw it when it opens
+  const det = box.closest("details"); if (det) det.addEventListener("toggle", () => { if (det.open) setTimeout(() => map.invalidateSize(), 60); });
+  const icon = (cls) => L.divIcon({ className: "", html: `<span class="map-pin ${cls}"></span>`, iconSize: [22, 22], iconAnchor: [11, 11] });
+  const placePin = (which, pt) => {
+    if (which === "pick") { pick = pt; if (m1) map.removeLayer(m1); m1 = L.marker([pt.lat, pt.lon], { icon: icon("a") }).addTo(map).bindTooltip("Pickup", { permanent: true, direction: "top", offset: [0, -10] }); }
+    else { drop = pt; if (m2) map.removeLayer(m2); m2 = L.marker([pt.lat, pt.lon], { icon: icon("b") }).addTo(map).bindTooltip("Drop-off", { permanent: true, direction: "top", offset: [0, -10] }); }
+    if (pick && drop) { map.fitBounds([[pick.lat, pick.lon], [drop.lat, drop.lon]].concat(now ? [[now.lat, now.lon]] : []), { padding: [36, 36], maxZoom: 13 }); measure(); }
+    else { map.setView([pt.lat, pt.lon], 12); setMode(which === "pick" ? "drop" : "pick"); if (hint) hint.textContent = which === "pick" ? "Pickup set. Now the drop-off." : "Drop-off set. Now the pickup."; }
+  };
   const fillFuel = () => {
     const diesel = Number(document.querySelector(".js-diesel")?.value) || DATA.dieselDefaultUgx || 5200;
     const truck = DATA.truck || (DATA.trucks || []).find((t) => t.id === document.querySelector("[name=truckId]")?.value) || (DATA.trucks || [])[0] || {};
@@ -4581,11 +4596,9 @@ function bindRouteCalc() {
     if (hint) hint.textContent = "Finding " + q + "…";
     try {
       const g = await geoPlace(q);
-      map.setView([g.lat, g.lon], zoomFor(v, ""));
-      nextPin = which;
-      if (hint) hint.textContent = "Zoomed to " + q + ". Tap the exact " + (which === "pick" ? "pickup" : "drop") + ".";
+      placePin(which, { lat: g.lat, lon: g.lon });
     } catch (err) {
-      if (hint) hint.textContent = "Name not found. Zoom and tap.";
+      setMode(which); if (hint) hint.textContent = q + " not found. Tap it on the map.";
     }
   };
   const measure = async () => {
@@ -4597,19 +4610,19 @@ function bindRouteCalc() {
       const km = dead + haul;
       if (deadEl) deadEl.value = dead;
       if (haulEl) haulEl.value = haul;
-      if (kmEl) kmEl.value = km;
-      fillFuel();
       const o = document.querySelector(".js-origin"); const d = document.querySelector(".js-dest");
       if (o && !(o.value||"").trim()) o.value = "Pickup";
       if (d && !(d.value||"").trim()) d.value = "Drop";
-      if (hint) hint.textContent = now
-        ? ("To pickup " + dead + " km + loaded " + haul + " km = " + km + " km")
-        : (haul + " km");
+      if (kmEl) kmEl.value = haul;
+      fillFuel();
+      if (hint) hint.innerHTML = now
+        ? `<b>${haul} km</b> pickup → drop-off · truck to pickup ${dead} km`
+        : `<b>${haul} km</b> by road, pickup → drop-off`;
       if (line) map.removeLayer(line);
       const pts = [];
       if (now) pts.push([now.lat, now.lon]);
       pts.push([pick.lat, pick.lon], [drop.lat, drop.lon]);
-      line = L.polyline(pts, { color: "#f09018" }).addTo(map);
+      line = L.polyline(pts, { color: "#f5c400", weight: 4, dashArray: "6 6" }).addTo(map);
     } catch (err) {
       if (hint) hint.textContent = err.message || "Could not measure";
     }
@@ -4617,35 +4630,15 @@ function bindRouteCalc() {
   const setNow = (pt) => {
     now = pt;
     if (m0) map.removeLayer(m0);
-    m0 = L.marker([pt.lat, pt.lon]).addTo(map).bindPopup("Truck now").openPopup();
+    m0 = L.marker([pt.lat, pt.lon], { icon: icon("t") }).addTo(map).bindTooltip("Truck", { permanent: true, direction: "top", offset: [0, -10] });
     map.setView([pt.lat, pt.lon], 12);
     if (pick && drop) measure();
     else if (hint) hint.textContent = "Truck place added. Tap pickup and drop if not set.";
   };
-  map.on("click", (e) => {
-    const pt = { lat: e.latlng.lat, lon: e.latlng.lng };
-    if (nextPin === "pick") {
-      pick = pt;
-      if (m1) map.removeLayer(m1);
-      m1 = L.marker([pt.lat, pt.lon]).addTo(map).bindPopup("Pickup").openPopup();
-      nextPin = "drop";
-      if (hint) hint.textContent = "Pickup marked. Tap drop.";
-      if (drop) measure();
-    } else {
-      drop = pt;
-      if (m2) map.removeLayer(m2);
-      m2 = L.marker([pt.lat, pt.lon]).addTo(map).bindPopup("Drop").openPopup();
-      measure();
-    }
-  });
+  map.on("click", (e) => placePin(nextPin, { lat: e.latlng.lat, lon: e.latlng.lng }));
   if (box.dataset.pick && box.dataset.drop) {
     const [pa, pb] = box.dataset.pick.split(",").map(Number); const [da, db] = box.dataset.drop.split(",").map(Number);
-    pick = { lat: pa, lon: pb }; drop = { lat: da, lon: db };
-    m1 = L.marker([pa, pb]).addTo(map).bindPopup("Pickup");
-    m2 = L.marker([da, db]).addTo(map).bindPopup("Drop");
-    map.fitBounds([[pa, pb], [da, db]], { padding: [30, 30] });
-    nextPin = "pick";
-    measure();
+    placePin("pick", { lat: pa, lon: pb }); placePin("drop", { lat: da, lon: db });
   }
   const pv = document.querySelector(".js-pv");
   const dv = document.querySelector(".js-dv");
@@ -4676,7 +4669,17 @@ function bindRouteCalc() {
   const dBox = document.querySelector(".js-diesel");
   if (dBox) dBox.oninput = fillFuel;
   const gps = document.getElementById("useGps");
-  if (gps) gps.onclick = () => {
+  if (gps) gps.onclick = async () => {
+    // office: the chosen truck's last live spot; driver: this phone (it's in the truck)
+    if (DATA.me.role === "admin") {
+      const tid = document.querySelector("form[data-form=job] [name=truckId]")?.value;
+      const pings = livePings();
+      try { const res = await fetch("/.netlify/functions/live", { cache: "no-store", headers: { authorization: "Bearer " + Conacrew.token() } }); if (res.ok) mergePings(pings, normalizePings(await res.json())); } catch (e) {}
+      const p = pings[tid];
+      if (p) { setNow({ lat: p.lat, lon: p.lng }); if (hint && !(pick && drop)) hint.textContent = "Truck place added (" + agoText(p.at) + ")"; return; }
+      if (hint) hint.textContent = "No live location for this truck yet";
+      return;
+    }
     if (!navigator.geolocation) { alert("GPS not available"); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => setNow({ lat: pos.coords.latitude, lon: pos.coords.longitude }),

@@ -754,6 +754,7 @@ function applyAction(db, user, body) {
     if (!db.contractors) db.contractors = [];
     let contractorId = body.contractorId && body.contractorId !== "new" ? body.contractorId : "";
     const newName = body.contractorId === "new" ? (body.contractorName || "").trim() : "";
+    if (body.contractorId === "new" && !newName && !body.bookingId) throw new Error("Enter the new client's name");
     if (newName) {
       let c = db.contractors.find((x) => x.name.toLowerCase() === newName.toLowerCase());
       if (!c) {
