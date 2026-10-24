@@ -2224,33 +2224,67 @@ async function moneyPdf() {
   doc.setFontSize(10); doc.text(range, W - 36, 36, { align: "right" });
   doc.text([biz ? BIZ_LABEL[biz] || biz : "All businesses", type ? "Only: " + type : "", q ? 'Search: "' + q + '"' : ""].filter(Boolean).join("   |   "), W - 36, 54, { align: "right" });
   // totals
-  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]], ["With the team (advances)", held, [160, 120, 0]]];
+  const main = rows.filter(countsInTotals), adv = rows.filter((c) => !countsInTotals(c));
+  const advKind = (c) => c._type === "return" ? "Returned" : c.category === "moved" ? "Moved" : "Sent";
+  const advSum = (k) => adv.filter((c) => advKind(c) === k).reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
+  const sent = advSum("Sent"), back = advSum("Returned");
+  const spentAdv = main.filter((c) => c.fromAdvance && c.direction === "out").reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
+  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]], ["Sent as advances", sent, [74, 93, 117]], ["With the team now", held, [160, 120, 0]]];
+  const bw = (W - 72 - 4 * 8) / 5;
   boxes.forEach(([t, v, col], i) => {
-    const x = 36 + i * 180;
-    doc.setDrawColor(211, 221, 231); doc.roundedRect(x, 86, 168, 48, 6, 6, "S");
-    doc.setTextColor(74, 93, 117); doc.setFontSize(9); doc.text(t, x + 12, 102);
+    const x = 36 + i * (bw + 8);
+    doc.setDrawColor(211, 221, 231); doc.roundedRect(x, 86, bw, 48, 6, 6, "S");
+    doc.setTextColor(74, 93, 117); doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text(t, x + 12, 102);
     doc.setTextColor(...col); doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("UGX " + n(v), x + 12, 124); doc.setFont("helvetica", "normal");
   });
-  doc.setTextColor(74, 93, 117); doc.setFontSize(9); doc.text(rows.length + " transactions", W - 36, 124, { align: "right" });
-  doc.autoTable({
-    startY: 150,
-    head: [["Date", "Business", "Type", "Category", "Paid to / from", "Method", "Reference", "Linked to", "In (UGX)", "Out (UGX)"]],
-    body: rows.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", countsInTotals(c) ? String(c._type || "").replace(/^./, (x) => x.toUpperCase()) + (c.fromAdvance ? "\nfrom " + c.fromAdvance + "'s advance" : "") : (c._type === "return" ? "Returned" : "Advance") + "\n(not in totals)", c.category === "moved" ? c.note : catLabel(c.tag, c.category) || c.note || "", [c.payeeName, c.payeePhone || ((c.bankName || "") + " " + (c.bankAccount || "")).trim()].filter(Boolean).join("\n"), METHOD_LABEL[c.method] || c.method || "", c.reference || "", cashRef(c) || "", countsInTotals(c) && c.direction === "in" ? n(c.amountUgx) : !countsInTotals(c) && c.direction === "in" ? "(" + n(c.amountUgx) + ")" : "", countsInTotals(c) && c.direction === "out" ? n(c.amountUgx) : !countsInTotals(c) && c.direction === "out" ? "(" + n(c.amountUgx) + ")" : ""]),
-    foot: [["", "", "", "", "", "", "", "Total", n(tin), n(tout)]],
+  const base = {
     styles: { font: "helvetica", fontSize: 8, cellPadding: 4, textColor: [16, 36, 63], lineColor: [211, 221, 231], lineWidth: 0.4 },
-    headStyles: { fillColor: [16, 36, 63], textColor: 255, fontStyle: "bold" },
     footStyles: { fillColor: [234, 241, 247], textColor: [16, 36, 63], fontStyle: "bold" },
     alternateRowStyles: { fillColor: [247, 250, 252] },
-    columnStyles: { 0: { cellWidth: 62 }, 8: { halign: "right", cellWidth: 70 }, 9: { halign: "right", cellWidth: 70 } },
-    margin: { left: 36, right: 36 },
-    didParseCell: (d) => { if (d.column.index >= 8) d.cell.styles.halign = "right"; if (typeof d.cell.text === "object") d.cell.text = d.cell.text.map((x) => String(x).replace(/·/g, "-").replace(/›/g, ">")); },
+    margin: { left: 36, right: 36, bottom: 40 },
     didDrawPage: () => {
       const H = doc.internal.pageSize.getHeight();
       doc.setFontSize(8); doc.setTextColor(120, 135, 155);
       doc.text("Made " + new Date().toLocaleString("en-GB") + " by " + (DATA.me.name || ""), 36, H - 18);
       doc.text("Page " + doc.internal.getNumberOfPages(), W - 36, H - 18, { align: "right" });
     },
+  };
+  const clean = (d) => { if (typeof d.cell.text === "object") d.cell.text = d.cell.text.map((x) => String(x).replace(/·/g, "-").replace(/›/g, ">")); };
+  const who = (c) => [c.payeeName, c.payeePhone || ((c.bankName || "") + " " + (c.bankAccount || "")).trim()].filter(Boolean).join("\n");
+  const title = (y, t, sub) => {
+    doc.setTextColor(16, 36, 63); doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text(t, 36, y);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(74, 93, 117); doc.text(sub, W - 36, y, { align: "right" });
+  };
+  title(158, "Income & spending", main.length + " transaction" + (main.length === 1 ? "" : "s") + " - these make the totals");
+  doc.autoTable({ ...base,
+    startY: 166,
+    head: [["Date", "Business", "Type", "Category", "Paid to / from", "Method", "Reference", "Linked to", "In (UGX)", "Out (UGX)"]],
+    body: main.length ? main.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", String(c._type || "").replace(/^./, (x) => x.toUpperCase()) + (c.fromAdvance ? "\nfrom " + c.fromAdvance + "'s advance" : ""), catLabel(c.tag, c.category) || c.note || "", who(c), METHOD_LABEL[c.method] || c.method || "", c.reference || "", cashRef(c) || "", c.direction === "in" ? n(c.amountUgx) : "", c.direction === "out" ? n(c.amountUgx) : ""]) : [[{ content: "Nothing in this period", colSpan: 10, styles: { halign: "center", textColor: [120, 135, 155] } }]],
+    foot: [["", "", "", "", "", "", "", "Total", n(tin), n(tout)]],
+    headStyles: { fillColor: [16, 36, 63], textColor: 255, fontStyle: "bold" },
+    columnStyles: { 0: { cellWidth: 62 }, 8: { halign: "right", cellWidth: 70 }, 9: { halign: "right", cellWidth: 70 } },
+    didParseCell: (d) => { if (d.column.index >= 8) d.cell.styles.halign = "right"; clean(d); },
   });
+  if (adv.length) {
+    let y = doc.lastAutoTable.finalY + 34;
+    if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 50; }
+    title(y, "Advances", "money handed to the team - not in the totals above");
+    const foot = [["", "", "", "", "", "Sent", n(sent)]];
+    if (back) foot.push(["", "", "", "", "", "Returned", n(back)]);
+    doc.autoTable({ ...base,
+      startY: y + 8,
+      head: [["Date", "Business", "Given to", "For", "Method", "Kind", "Amount (UGX)"]],
+      body: adv.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", who(c), c.category === "moved" ? c.note || "" : catLabel(c.tag, c.category) || c.note || "", c.category === "moved" ? "" : METHOD_LABEL[c.method] || c.method || "", advKind(c), n(c.amountUgx)]),
+      foot,
+      headStyles: { fillColor: [160, 120, 0], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 0: { cellWidth: 62 }, 6: { halign: "right", cellWidth: 90 } },
+      didParseCell: (d) => { if (d.column.index === 6) d.cell.styles.halign = "right"; clean(d); },
+    });
+    y = doc.lastAutoTable.finalY + 22;
+    if (y > doc.internal.pageSize.getHeight() - 60) { doc.addPage(); y = 50; }
+    doc.setFontSize(9); doc.setTextColor(74, 93, 117);
+    doc.text(`Spent from advances in this period: UGX ${n(spentAdv)} (already in Money out).   Still with the team: UGX ${n(held)}.`, 36, y);
+  }
   doc.save(`conacrew-money-${from === "0000-00-00" ? "all" : from}-to-${to === "9999-99-99" ? todayYmd() : to}.pdf`);
 }
 
