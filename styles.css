@@ -841,3 +841,20 @@ details.views summary::-webkit-details-marker { display: none; }
 .link-card b { flex: 0 0 auto; }
 .link-card .muted { flex: 1; font-size: 12px; }
 .link-card .chev { font-size: 22px; color: rgba(244,247,251,.5); }
+/* Business pages: this month's money in one line */
+.biz-money{display:grid;grid-template-columns:1fr 1fr 1fr auto;align-items:center;gap:10px;margin:10px 0 0;padding:10px 14px;border-radius:14px;background:var(--card,#13213a);border:1px solid rgba(255,255,255,.08);color:inherit;text-decoration:none}
+.biz-money span{display:flex;flex-direction:column;line-height:1.2}
+.biz-money i{font-style:normal;font-size:11px;letter-spacing:.04em;text-transform:uppercase;opacity:.65}
+.biz-money b{font-size:14px}
+.biz-money .bm-l{font-size:12px;font-weight:700;opacity:.8}
+.biz-money .badge{flex-direction:row}
+.biz-money .chev{font-size:20px;opacity:.6}
+.biz-money .bm-req{grid-column:1/-1;justify-self:start}
+.biz-money b{white-space:nowrap}
+/* Money overview: what needs you */
+.needs-you{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 2px}
+.ny-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;font-weight:700;font-size:13px;text-decoration:none;color:#10243f;background:#f6c400;animation:ny 1.4s ease-in-out infinite}
+.ny-chip.blue{background:#8fc3ff}.ny-chip.purple{background:#c9b1ff}
+.ny-chip .chev{opacity:.6}
+@keyframes ny{50%{box-shadow:0 0 0 5px rgba(246,196,0,.25)}}
+@media (prefers-reduced-motion:reduce){.ny-chip{animation:none}}

@@ -179,7 +179,7 @@ const PAGES = {
   fleet: [["#trucks", "Trucks"], ["#trucks-jobs", "Loads"], ["#trucks-work", "Tasks"], ["#trucks-inspect", "Inspections"], ["#trucks-paid", "Paid loads"], ["#trucks-trash", "Trash"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New load"]],
   cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Advances"]],
   passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"]],
-  money: [["#money", "Flow"], ["#money-tx", "Transactions"], ["#money-adv", "Advances"], ["#money-spend", "Expenses"], ["#money-pay", "Pay"]],
+  money: [["#money", "Overview"], ["#money-tx", "Transactions"], ["#money-adv", "Advances"], ["#money-pay", "Pay"]],
 };
 function setupNav() {}
 const ALLOWED = {
@@ -266,6 +266,12 @@ function route() {
   let r = parseRoute();
   if (OLD_PAGES[r.name]) { location.replace("#" + OLD_PAGES[r.name]); return; }
   if (r.name === "team" && DATA.me.assistant) { location.hash = "home"; return; }
+  if (r.name !== "money-tx") sessionStorage.removeItem("openSpend");
+  if (DATA.me.role === "admin") {
+    const advOf = { "trucks-spend": "trucking", "cane-spend": "sugarcane", "passion-spend": "passion" }[r.name];
+    if (advOf) { sessionStorage.setItem("advBiz", advOf); location.replace("#money-adv"); return; }
+    if (r.name === "money-spend") { sessionStorage.setItem("openSpend", "1"); location.replace("#money-tx"); return; }
+  }
   if (DATA.me.role === "driver" && !String(r.name).startsWith("drive")) r = { name: "drive" };
   if (DATA.me.role === "cane_manager" && !String(r.name).startsWith("cane")) r = { name: "cane" };
   if (DATA.me.role === "passion_manager" && r.name !== "passion" && r.name !== "field" && !String(r.name).startsWith("passion")) r = { name: "passion" };
@@ -420,26 +426,37 @@ function bizBar() {
   const h = location.hash || "#home";
   const req = { trucking: openRequests("trucking").length, sugarcane: openRequests("sugarcane").length, passion: openRequests("passion").length };
   const dot = (n) => n ? ` <span class="attn-dot"></span>` : "";
+  const reqAll = req.trucking + req.sugarcane + req.passion;
   const work = (DATA.fleetTasks || []).filter((t) => t.status === "done").length, iss = issuesWaiting(), pay = payWaiting(), phones = DATA.me.assistant ? 0 : phonesWaiting();
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
     fleet: [["#trucks-book", "Bookings", bookingsWaiting().length, "Loads"], ["#trucks-jobs", "Loads", 0, "Loads"], ["#trucks-new", "New load", 0, "Loads"], ["#trucks-paid", "Paid loads", 0, "Loads"],
       ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-profit", "Profit", fuelAlerts().length, "Trucks"], ["#trucks-inspect", "Inspections", 0, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Issues", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
-      ["#trucks-spend", "Advances", req.trucking, "Money & papers"], ["#trucks-docs", "Docs", docsWaiting("trucking"), "Money & papers"], ["#trucks-trash", "Trash", 0, "Money & papers"]],
-    cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-profit", "Profit"], ["#cane-spend", "Advances", req.sugarcane], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
-    passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-profit", "Profit"], ["#passion-spend", "Advances", req.passion], ["#passion-docs", "Docs", docsWaiting("passion")]],
-    money: [["#money", "Flow"], ["#money-tx", "Transactions"], ["#money-adv", "Advances"], ["#money-spend", "Expenses"], ["#money-pay", "Pay", pay]],
+      ["#trucks-docs", "Docs", docsWaiting("trucking"), "Papers"], ["#trucks-trash", "Trash", 0, "Papers"]],
+    cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-profit", "Profit"], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
+    passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-profit", "Profit"], ["#passion-docs", "Docs", docsWaiting("passion")]],
+    money: [["#money", "Overview", reqAll], ["#money-tx", "Transactions"], ["#money-adv", "Advances", reqAll + advUnconfirmed()], ["#money-pay", "Pay", pay]],
   }[biz] || [];
   return `<nav class="admin-nav">
     <div class="biz">
       <a class="${biz === "home" ? "on" : ""}" href="#home">Home${dot(phones)}</a>
-      <a class="${biz === "fleet" ? "on" : ""}" href="#trucks">Fleet${dot(req.trucking + bookingsWaiting().length + work + iss + docsWaiting("trucking"))}</a>
-      <a class="${biz === "cane" ? "on" : ""}" href="#cane">Cane${dot(req.sugarcane + docsWaiting("sugarcane"))}</a>
-      <a class="${biz === "passion" ? "on" : ""}" href="#passion">Passion${dot(req.passion + docsWaiting("passion"))}</a>
-      <a class="${biz === "money" ? "on" : ""}" href="#money">Money${dot(pay)}</a>
+      <a class="${biz === "fleet" ? "on" : ""}" href="#trucks">Fleet${dot(bookingsWaiting().length + work + iss + docsWaiting("trucking"))}</a>
+      <a class="${biz === "cane" ? "on" : ""}" href="#cane">Cane${dot(docsWaiting("sugarcane"))}</a>
+      <a class="${biz === "passion" ? "on" : ""}" href="#passion">Passion${dot(docsWaiting("passion"))}</a>
+      <a class="${biz === "money" ? "on" : ""}" href="#money">Money${dot(pay + reqAll)}</a>
     </div>
-    ${subs.length ? `<div class="sub">${subs.map(([href, label, n, g], i) => `${i && g && g !== subs[i - 1][3] ? `<span class="sub-gap" aria-hidden="true"></span>` : ""}<a class="${h === href ? "on" : ""} ${n ? "attn" : ""}" href="${href}">${label}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>${pagePick(subs, h)}` : ""}
+    ${subs.length ? `${["#trucks", "#cane", "#passion", "#trucks-profit", "#cane-profit", "#passion-profit"].includes(h) ? bizMoneyStrip({ fleet: "trucking", cane: "sugarcane", passion: "passion" }[biz]) : ""}<div class="sub">${subs.map(([href, label, n, g], i) => `${i && g && g !== subs[i - 1][3] ? `<span class="sub-gap" aria-hidden="true"></span>` : ""}<a class="${h === href ? "on" : ""} ${n ? "attn" : ""}" href="${href}">${label}${n ? ` <span class="attn-n">${n}</span>` : ""}</a>`).join("")}</div>${pagePick(subs, h)}` : ""}
   </nav>`;
+}
+function advUnconfirmed() { return (DATA.disbursements || []).filter((f) => f.status === "sent").length; }
+// Business pages: one line of this month's money, opening Money for that business
+function bizMoneyStrip(tag) {
+  if (!tag) return "";
+  const r = flowRows(tag, "", "month", "").filter(countsInTotals);
+  const i = r.filter((c) => c.direction === "in").reduce((s, c) => s + (c.amountUgx || 0), 0), o = r.filter((c) => c.direction === "out").reduce((s, c) => s + (c.amountUgx || 0), 0);
+  const held = (DATA.disbursements || []).filter((f) => f.status !== "closed" && f.tag === tag).reduce((s, f) => s + advLeft(f).left, 0);
+  const n = openRequests(tag).length;
+  return `<a class="biz-money js-bizmoney" data-biz="${tag}" href="#money"><span><i>In this month</i><b class="pos">${ugx(i)}</b></span><span><i>Out this month</i><b class="neg">${ugx(o)}</b></span><span><i>With the team</i><b>${ugx(held)}</b></span><span class="chev">›</span>${n ? `<span class="badge gold bm-req">${n} money request${n > 1 ? "s" : ""}</span>` : ""}</a>`;
 }
 // Phones: the pages of a section in one drop-down instead of a row of buttons
 function pagePick(items, current) {
@@ -674,6 +691,7 @@ function viewDrivers() {
     const head = `<span class="lf-id">${esc(d.name)}</span><span class="lf-mat">${esc(t ? t.plate : "No truck")}</span>${d.licenceExpiry && d.licenceExpiry < today ? `<span class="badge red">Licence expired</span>` : ""}`;
     const body = `${facts([["Phone", d.phone ? `<a href="tel:${esc(d.phone)}">${esc(d.phone)}</a>` : "—"], ["Licence", esc(d.licenseId || "—") + (d.licenceExpiry ? " · expires " + fmtDay(d.licenceExpiry) : "")], ["Truck", esc(t ? t.plate : "None")]])}
       ${d.licensePhoto ? `<img src="${d.licensePhoto}" alt="Licence" class="lic-img" />` : ""}
+      ${(() => { const h = (DATA.disbursements || []).filter((f) => f.status !== "closed" && f.toDriverId === d.id).reduce((a, f) => a + advLeft(f).left, 0); return `<div class="row keep" style="margin-top:10px;align-items:center">${h ? `<span class="muted">Holding <b>${ugx(h)}</b></span>` : "<span></span>"}<a class="btn btn-primary btn-sm js-sendto" data-tag="trucking" data-to="${esc(d.id)}" href="#money-adv">＋ Send money</a></div>`; })()}
       <details class="settings" style="margin-top:10px"><summary>Edit driver</summary>
       <form data-form="save-driver" style="margin-top:10px">
         <input type="hidden" name="id" value="${esc(d.id)}" />
@@ -2142,7 +2160,8 @@ function viewMoney(tag, mode) {
   const typeChip = { income: ["green", "Income"], spending: ["red", "Spending"], advance: ["gold", "Advance"], payroll: ["purple", "Payroll"], return: ["blue", "Returned"] };
   const sideList = (title, arr, tone) => `<div class="card side-card"><div class="row" style="align-items:center"><b>${title}</b><b class="${tone}">${ugx(sum(arr))}</b></div>${arr.length ? arr.slice(0, 6).map((x) => `<div class="side-line"><span>${esc(x.who || x.what)}<span class="muted"> · ${esc(x.who ? x.what : BIZ_LABEL[x.tag] || "")}</span></span><b>${x.amt ? ugx(x.amt) : "—"}</b></div>`).join("") + (arr.length > 6 ? `<p class="muted">+${arr.length - 6} more</p>` : "") : `<p class="muted">Nothing</p>`}</div>`;
   return `
-    <h1>Money · ${tx ? "Transactions" : "Flow"}</h1>
+    <h1>Money · ${tx ? "Transactions" : "Overview"}</h1>
+    ${tx ? spendCard() : moneyNeedsYou()}
     <div class="flow-filters">
       <select class="field js-flow" data-k="flowPeriod" aria-label="Period">${[["week", "This week"], ["month", "This month"], ["lastmonth", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["all", "All time"], ["custom", "Custom dates"]].map(([k, l]) => `<option value="${k}" ${period === k ? "selected" : ""}>${l}</option>`).join("")}</select>
       ${period === "custom" ? `<input class="field js-flow" type="date" data-k="flowFrom" value="${from}" /><input class="field js-flow" type="date" data-k="flowTo" value="${to}" />` : ""}
@@ -2758,7 +2777,8 @@ function viewAllAdvances() {
   const peopleOpts = Object.entries(people).sort((x, y) => x[1].name.localeCompare(y[1].name));
   return `
     <h1>Money · Advances</h1>
-    <div class="flow-filters">
+    ${advRequestsBlock(biz)}
+    <div class="flow-filters" style="margin-top:18px">
       <select class="field js-advf" data-k="advPer" aria-label="Period">${[["week", "This week"], ["month", "This month"], ["lastmonth", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["all", "All time"]].map(([k, l]) => `<option value="${k}" ${per === k ? "selected" : ""}>${l}</option>`).join("")}</select>
       <select class="field js-advf" data-k="advWho" aria-label="Person"><option value="">Everyone</option>${peopleOpts.map(([k, e]) => `<option value="${k}" ${who === k ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select>
     </div>
@@ -2776,7 +2796,7 @@ function viewAllAdvances() {
     <div class="row keep" style="margin-top:16px;align-items:center"><h2 style="margin:0">${list.length} advance${list.length === 1 ? "" : "s"}</h2>
       <div class="seg seg-sm">${[["open", "Open"], ["closed", "Closed"], ["all", "All"]].map(([k, l]) => `<button type="button" class="seg-btn ${st === k ? "on" : ""}" data-advset="advSt" data-v="${k}">${l}</button>`).join("")}</div></div>
     <div class="list" style="margin-top:10px">${list.length ? list.map(card).join("") : `<div class="card item muted">${st === "open" ? "No open advances." : "None for " + esc(plabel.toLowerCase()) + "."}</div>`}</div>
-    <p style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="${biz === "sugarcane" ? "#cane-spend" : biz === "passion" ? "#passion-spend" : "#trucks-spend"}">＋ Send money</a></p>`;
+`;
 }
 // people a leftover can move to: drivers and the two managers (not the person holding it)
 function moveTargets(f) {
@@ -2864,6 +2884,44 @@ function reqStatusText(r) {
   return ["gold", "Waiting"];
 }
 // Admin: <Business> › Spend
+function requestCard(r, single) {
+  const tag = r.tag, p = requesterOf(r), link = linkText(r), [tone] = reqStatusText(r);
+  return `<details class="card req-card flash" ${single ? "open" : ""}>
+      <summary>
+        <div style="min-width:0"><b>${esc(p ? p.name : r.by)}</b> · <b>${ugx(reqAsked(r))}</b>
+          <div class="muted">${esc(BIZ_LABEL[tag] || "")} · ${esc(reqWhat(tag, r))}${link ? " · " + esc(link) : ""} · ${fmtDay(r.date)}${r.neededBy ? " · <b>needed by " + fmtDay(r.neededBy) + "</b>" : ""}</div>
+          ${r.note ? `<div class="muted">“${esc(r.note)}”</div>` : ""}
+          ${r.status === "partial" ? `<div class="req-progress"><span style="width:${Math.round(reqSent(r) / reqAsked(r) * 100)}%"></span></div><div class="muted">Sent ${ugx(reqSent(r))} · <b>${ugx(reqLeft(r))} still waiting</b></div>` : ""}
+        </div>
+        <div class="due-right"><span class="badge ${tone}">${r.status === "partial" ? "Part sent" : "Waiting"}</span><span class="btn btn-primary btn-sm">Pay</span></div>
+      </summary>
+      <div class="req-body">
+        ${sendForm(tag, r)}
+        <div class="req-alt">
+          ${r.status === "partial"
+            ? `<form data-form="finalize-request" data-id="${esc(r.id)}"><button class="btn btn-ghost btn-sm">Settle at ${ugx(reqSent(r))}, no more to send</button></form>`
+            : `<button type="button" class="btn btn-ghost btn-sm" data-act="decline_advance" data-id="${esc(r.id)}">Decline request</button>`}
+        </div>
+      </div>
+    </details>`;
+}
+function advRequestsBlock(biz) {
+  const tags = biz ? [biz] : ["trucking", "sugarcane", "passion"];
+  const reqs = tags.flatMap((t) => openRequests(t));
+  const done = (DATA.moneyRequests || []).filter((r) => tags.includes(r.tag) && !["open", "partial"].includes(r.status)).slice(0, 6);
+  const sendTag = sessionStorage.getItem("advSendTag") || biz || "trucking";
+  const sendOpen = !!sessionStorage.getItem("advSendTo") || sessionStorage.getItem("advSendOpen") === "1";
+  return `
+    ${reqs.length ? `<h2 style="margin:14px 0 0">Requests <span class="attn-n big">${reqs.length}</span></h2>${reqs.map((r) => requestCard(r, reqs.length === 1)).join("")}` : ""}
+    <details class="card team-row js-sendcard" style="margin-top:12px" ${sendOpen ? "open" : ""}>
+      <summary><div class="avatar">＋</div><div style="flex:1"><b>Send money</b></div></summary>
+      <div style="margin-top:12px">
+        <div class="seg seg-sm" style="margin-bottom:10px">${[["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([k, l]) => `<button type="button" class="seg-btn ${sendTag === k ? "on" : ""}" data-sendtag="${k}">${l}</button>`).join("")}</div>
+        ${sendForm(sendTag)}
+      </div>
+    </details>
+    ${done.length ? `<details class="settings" style="margin-top:10px"><summary>Recently settled requests</summary>${done.map((r) => { const p = requesterOf(r); const [tone, st] = reqStatusText(r); return `<div class="pay-line"><div><b>${esc(p ? p.name : r.by)} · ${ugx(reqAsked(r))}</b><div class="muted">${esc(BIZ_LABEL[r.tag] || "")} · ${esc(reqWhat(r.tag, r))} · ${fmtDay(r.date)}</div></div><span class="badge ${tone}">${esc(st)}</span></div>`; }).join("")}</details>` : ""}`;
+}
 function viewFundsAdmin(tag) {
   const title = { trucking: "Fleet", sugarcane: "Cane", passion: "Passion" }[tag];
   const floats = (DATA.disbursements || []).filter((f) => (f.tag || "trucking") === tag);
@@ -3039,24 +3097,12 @@ function fundSelect(tag, noPayee, need) {
 }
 
 // Money › Spend (admin): every shilling out across businesses, plus office-paid-directly
-function viewSpend() {
-  const biz = sessionStorage.getItem("spendBiz") || "";
+function spendCard() {
   const formBiz = sessionStorage.getItem("spendForm") || "trucking";
-  const all = (DATA.cash || []).filter((c) => c.direction === "out");
-  const rows = all.filter((c) => !biz || c.tag === biz);
-  const mKey = thisMonth(0);
-  const monthTotal = rows.filter((c) => String(c.date || "").startsWith(mKey)).reduce((s, c) => s + (c.amountUgx || 0), 0);
-  const floats = DATA.disbursements || [];
-  const pend = { trucking: openRequests("trucking").length, sugarcane: openRequests("sugarcane").length, passion: openRequests("passion").length };
-  const kind = (c) => (c.refId && floats.some((f) => f.id === c.refId)) ? "Advance · " : c.category === "employee_pay" ? "" : c.source === "cash_on_hand" ? "From cash on hand · " : "";
+  const open = sessionStorage.getItem("openSpend") === "1";
   return `
-    <h1>Money</h1>
-    ${moneyTabs("money-spend")}
-    <div class="grid g3" style="margin-top:14px">
-      ${[["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([t, n]) => `<a class="card kpi req-link ${pend[t] ? "attn-kpi" : ""}" href="${FUND_HOME[t]}"><span class="eyebrow">${n} requests</span><b>${pend[t] ? pend[t] + " waiting" : "None"}</b><span class="muted">Open ${n} › Advances</span></a>`).join("")}
-    </div>
-    <details class="card team-row" style="margin-top:12px">
-      <summary><div class="avatar">＋</div><div style="flex:1"><b>Office paid directly</b></div></summary>
+    <details class="card team-row js-spendcard" style="margin-top:12px" ${open ? "open" : ""}>
+      <summary><div class="avatar">＋</div><div style="flex:1"><b>Record spending</b></div></summary>
       <form data-form="spend" style="margin-top:12px">
         <input type="hidden" name="payee" value="1" />
         <div class="seg seg-sm" style="margin-bottom:10px">${["trucking", "sugarcane", "passion"].map((t) => `<button type="button" class="seg-btn ${formBiz === t ? "on" : ""}" data-spendform="${t}">${BIZ_LABEL[t]}</button>`).join("")}</div>
@@ -3076,6 +3122,30 @@ function viewSpend() {
         <button class="btn btn-primary wide" style="margin-top:12px">Save</button>
       </form>
     </details>
+`;
+}
+function moneyNeedsYou() {
+  const reqs = ["trucking", "sugarcane", "passion"].reduce((s, t) => s + openRequests(t).length, 0), unc = advUnconfirmed(), pay = payWaiting();
+  const items = [[reqs, "#money-adv", "gold", `${reqs} money request${reqs > 1 ? "s" : ""}`], [unc, "#money-adv", "blue", `${unc} advance${unc > 1 ? "s" : ""} not confirmed`], [pay, "#money-pay", "purple", `${pay} payment${pay > 1 ? "s" : ""} waiting`]].filter((x) => x[0]);
+  return items.length ? `<div class="needs-you">${items.map(([, h, tone, t]) => `<a class="ny-chip ${tone} js-nyadv" href="${h}">${t}<span class="chev">›</span></a>`).join("")}</div>` : "";
+}
+function viewSpend() {
+  const biz = sessionStorage.getItem("spendBiz") || "";
+  const formBiz = sessionStorage.getItem("spendForm") || "trucking";
+  const all = (DATA.cash || []).filter((c) => c.direction === "out");
+  const rows = all.filter((c) => !biz || c.tag === biz);
+  const mKey = thisMonth(0);
+  const monthTotal = rows.filter((c) => String(c.date || "").startsWith(mKey)).reduce((s, c) => s + (c.amountUgx || 0), 0);
+  const floats = DATA.disbursements || [];
+  const pend = { trucking: openRequests("trucking").length, sugarcane: openRequests("sugarcane").length, passion: openRequests("passion").length };
+  const kind = (c) => (c.refId && floats.some((f) => f.id === c.refId)) ? "Advance · " : c.category === "employee_pay" ? "" : c.source === "cash_on_hand" ? "From cash on hand · " : "";
+  return `
+    <h1>Money</h1>
+    ${moneyTabs("money-spend")}
+    <div class="grid g3" style="margin-top:14px">
+      ${[["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([t, n]) => `<a class="card kpi req-link ${pend[t] ? "attn-kpi" : ""}" href="${FUND_HOME[t]}"><span class="eyebrow">${n} requests</span><b>${pend[t] ? pend[t] + " waiting" : "None"}</b><span class="muted">Open ${n} › Advances</span></a>`).join("")}
+    </div>
+    ${spendCard()}
     <div class="row" style="margin-top:22px;align-items:center">
       <h2 style="margin:0">Office expenses</h2>
       <div class="seg seg-sm">${[["", "All"], ["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([k, t]) => `<button type="button" class="seg-btn ${biz === k ? "on" : ""}" data-spendfilter="${k}">${t}</button>`).join("")}</div>
@@ -3885,6 +3955,11 @@ function bind() {
   document.querySelectorAll(".js-fuelok").forEach((b) => { b.onclick = () => act("save_truck", { id: b.dataset.id, fuelCheckedAt: todayYmd() }); });
   document.querySelectorAll(".js-alladv").forEach((l) => { l.onclick = () => { sessionStorage.setItem("advBiz", l.dataset.biz); sessionStorage.setItem("advSt", "all"); }; });
   document.querySelectorAll(".js-advf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
+  document.querySelectorAll("[data-sendtag]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("advSendTag", b.dataset.sendtag); sessionStorage.setItem("advSendOpen", "1"); sessionStorage.removeItem("advSendTo"); route(); sessionStorage.removeItem("advSendOpen"); }; });
+  { const to = sessionStorage.getItem("advSendTo"); const card = document.querySelector(".js-sendcard");
+    if (to && card) { const sel = card.querySelector("select[name=driverId], select[name=toUserId]"); if (sel) { sel.value = to; sel.dispatchEvent(new Event("change")); } sessionStorage.removeItem("advSendTo"); setTimeout(() => card.scrollIntoView({ block: "start", behavior: "smooth" }), 50); } }
+  document.querySelectorAll(".js-sendto").forEach((l) => { l.onclick = () => { sessionStorage.setItem("advSendTag", l.dataset.tag); sessionStorage.setItem("advSendTo", l.dataset.to); }; });
+  document.querySelectorAll(".js-bizmoney").forEach((l) => { l.onclick = () => { sessionStorage.setItem("flowBiz", l.dataset.biz); }; });
   document.querySelectorAll("[data-advset]").forEach((b) => { b.onclick = () => { sessionStorage.setItem(b.dataset.advset, b.dataset.v); route(); }; });
   document.querySelectorAll("[data-bizper]").forEach((b) => { b.onclick = () => { sessionStorage.setItem(b.dataset.key, b.dataset.bizper); route(); }; });
   document.querySelectorAll("[data-profitper]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("profitPer", b.dataset.profitper); route(); }; });
