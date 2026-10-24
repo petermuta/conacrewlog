@@ -2224,15 +2224,13 @@ async function moneyPdf() {
   doc.setFontSize(10); doc.text(range, W - 36, 36, { align: "right" });
   doc.text([biz ? BIZ_LABEL[biz] || biz : "All businesses", type ? "Only: " + type : "", q ? 'Search: "' + q + '"' : ""].filter(Boolean).join("   |   "), W - 36, 54, { align: "right" });
   // totals
-  const main = rows.filter(countsInTotals), adv = rows.filter((c) => !countsInTotals(c));
-  const advKind = (c) => c._type === "return" ? "Returned" : c.category === "moved" ? "Moved" : "Sent";
-  const advSum = (k) => adv.filter((c) => advKind(c) === k).reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
-  const sent = advSum("Sent"), back = advSum("Returned");
-  const spentAdv = main.filter((c) => c.fromAdvance && c.direction === "out").reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
-  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]], ["Sent as advances", sent, [74, 93, 117]], ["With the team now", held, [160, 120, 0]]];
-  const bw = (W - 72 - 4 * 8) / 5;
+  const main = rows.filter(countsInTotals);
+  const inRange = (d) => d >= from && d <= to;
+  const advs = (DATA.disbursements || []).filter((f) => f.status !== "declined" && (!biz || f.tag === biz) && (inRange(f.date || "") || advLeft(f).left > 0)).slice().reverse().sort((x, y) => String(x.date).localeCompare(String(y.date)));
+  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]], ["With the team (advances)", held, [160, 120, 0]]];
+  const bw = (W - 72 - 3 * 10) / 4;
   boxes.forEach(([t, v, col], i) => {
-    const x = 36 + i * (bw + 8);
+    const x = 36 + i * (bw + 10);
     doc.setDrawColor(211, 221, 231); doc.roundedRect(x, 86, bw, 48, 6, 6, "S");
     doc.setTextColor(74, 93, 117); doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text(t, x + 12, 102);
     doc.setTextColor(...col); doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("UGX " + n(v), x + 12, 124); doc.setFont("helvetica", "normal");
@@ -2265,25 +2263,34 @@ async function moneyPdf() {
     columnStyles: { 0: { cellWidth: 62 }, 8: { halign: "right", cellWidth: 70 }, 9: { halign: "right", cellWidth: 70 } },
     didParseCell: (d) => { if (d.column.index >= 8) d.cell.styles.halign = "right"; clean(d); },
   });
-  if (adv.length) {
+  if (advs.length) {
     let y = doc.lastAutoTable.finalY + 34;
     if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 50; }
-    title(y, "Advances", "money handed to the team - not in the totals above");
-    const foot = [["", "", "", "", "", "Sent", n(sent)]];
-    if (back) foot.push(["", "", "", "", "", "Returned", n(back)]);
+    title(y, "Advances - where the money went", "what was spent is already inside Money out");
+    const nameOf = (f) => { const r = recipientOf(f); return r ? r.name : ""; };
+    const fromName = (f) => { const o = (DATA.disbursements || []).find((x) => x.id === f.movedFrom); return o ? nameOf(o) : "another advance"; };
+    let tSent = 0, tSpent = 0, tBack = 0, tHeld = 0;
+    const body = advs.map((f) => {
+      const L = advLeft(f), amt = Number(f.amountUgx) || 0;
+      if (!f.movedFrom) tSent += amt;
+      tSpent += L.used; tBack += L.back; tHeld += L.left;
+      const dash = (v) => v ? n(v) : "-";
+      return [day(f.date), BIZ_LABEL[f.tag] || f.tag || "", nameOf(f), (catLabel(f.tag, f.activity) || f.note || "") + (f.movedFrom ? "\n" + n(amt) + " passed on from " + fromName(f) : ""),
+        f.movedFrom ? "-" : n(amt), dash(L.used), dash(L.back), L.moved ? n(L.moved) + "\nto " + (() => { const t = (DATA.disbursements || []).find((x) => x.id === f.movedTo); return t ? nameOf(t) : "someone else"; })() : "-", dash(L.left)];
+    });
     doc.autoTable({ ...base,
       startY: y + 8,
-      head: [["Date", "Business", "Given to", "For", "Method", "Kind", "Amount (UGX)"]],
-      body: adv.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", who(c), c.category === "moved" ? c.note || "" : catLabel(c.tag, c.category) || c.note || "", c.category === "moved" ? "" : METHOD_LABEL[c.method] || c.method || "", advKind(c), n(c.amountUgx)]),
-      foot,
+      head: [["Date sent", "Business", "Given to", "For", "Sent", "Spent", "Returned", "Passed on", "Still held"]],
+      body,
+      foot: [["", "", "", "Total", n(tSent), n(tSpent), n(tBack), "", n(tHeld)]],
       headStyles: { fillColor: [160, 120, 0], textColor: 255, fontStyle: "bold" },
-      columnStyles: { 0: { cellWidth: 62 }, 6: { halign: "right", cellWidth: 90 } },
-      didParseCell: (d) => { if (d.column.index === 6) d.cell.styles.halign = "right"; clean(d); },
+      columnStyles: { 0: { cellWidth: 62 }, 4: { cellWidth: 92 }, 5: { cellWidth: 70 }, 6: { cellWidth: 62 }, 7: { cellWidth: 82 }, 8: { cellWidth: 70 } },
+      didParseCell: (d) => { if (d.column.index >= 4) d.cell.styles.halign = "right"; if (d.section === "body" && d.column.index === 8 && d.cell.raw !== "-") { d.cell.styles.textColor = [160, 120, 0]; d.cell.styles.fontStyle = "bold"; } clean(d); },
     });
     y = doc.lastAutoTable.finalY + 22;
     if (y > doc.internal.pageSize.getHeight() - 60) { doc.addPage(); y = 50; }
-    doc.setFontSize(9); doc.setTextColor(74, 93, 117);
-    doc.text(`Spent from advances in this period: UGX ${n(spentAdv)} (already in Money out).   Still with the team: UGX ${n(held)}.`, 36, y);
+    doc.setFontSize(9.5); doc.setTextColor(16, 36, 63);
+    doc.text(`UGX ${n(tSent)} sent  =  UGX ${n(tSpent)} spent  +  UGX ${n(tBack)} returned  +  UGX ${n(tHeld)} still with the team`, 36, y);
   }
   doc.save(`conacrew-money-${from === "0000-00-00" ? "all" : from}-to-${to === "9999-99-99" ? todayYmd() : to}.pdf`);
 }
