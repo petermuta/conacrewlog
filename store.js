@@ -400,7 +400,7 @@ function scopedDb(db, user) {
   if (user.role === "driver") {
     if (!user.driverId) throw new Error("No access");
     const myId = user.driverId;
-    const jobs = db.jobs.filter((j) => j.driverId === myId);
+    const jobs = db.jobs.filter((j) => j.driverId === myId).map(({ materialCostUgx, driverPayUgx, ...j }) => j);
     const myDriver = db.drivers.find((d) => d.id === myId);
     if (!myDriver || myDriver.userId !== user.id) throw new Error("No access");
     const rawTruck = db.trucks.find((t) => t.id === myDriver.assignedTruckId) || null;
@@ -485,7 +485,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -718,6 +718,17 @@ function applyAction(db, user, body) {
     }
   }
 
+  if (action === "save_load_costs") {
+    const job = db.jobs.find((j) => j.id === body.id);
+    if (!job) throw new Error("Load not found");
+    const amt = (v) => Math.max(0, Math.round(Number(String(v).replace(/[^\d.]/g, "")) || 0));
+    job.materialBy = body.materialBy === "us" ? "us" : "client";
+    job.materialCostUgx = job.materialBy === "us" ? amt(body.materialCostUgx) : 0;
+    if (body.fuelCostUgx !== undefined && String(body.fuelCostUgx).trim() !== "" && amt(body.fuelCostUgx) !== Number(job.fuelCostUgx || 0)) { job.fuelCostUgx = amt(body.fuelCostUgx); job.fuelEdited = true; }
+    if (body.driverPayUgx !== undefined) { if (String(body.driverPayUgx).trim() === "") delete job.driverPayUgx; else job.driverPayUgx = amt(body.driverPayUgx); }
+    if (body.rateUgx !== undefined && String(body.rateUgx).trim() !== "" && !job.bookingId) job.rateUgx = amt(body.rateUgx);
+    return;
+  }
   if (action === "add_contractor") {
     if (!db.contractors) db.contractors = [];
     const name = (body.name || body.contractorName || "").trim();
@@ -806,6 +817,8 @@ function applyAction(db, user, body) {
       dieselUgxPerLitre: Number(body.dieselUgxPerLitre) || db.dieselDefaultUgx || 0,
       kmToPickup: Number(body.kmToPickup) || 0,
       kmHaul: Number(body.kmHaul) || 0,
+      materialBy: user.role === "admin" && body.materialBy === "us" ? "us" : "client",
+      materialCostUgx: user.role === "admin" && body.materialBy === "us" ? Math.max(0, Number(body.materialCostUgx) || 0) : 0,
     });
     const job0 = db.jobs[0];
     if (body.bookingId && user.role === "admin") {

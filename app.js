@@ -183,7 +183,7 @@ const PAGES = {
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-loadprofit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -299,6 +299,7 @@ function route() {
     "trucks-book": viewBookings,
     "trucks-trash": viewJobTrash,
     "trucks-profit": viewTruckProfit,
+    "trucks-loadprofit": viewLoadProfit,
     "cane-profit": () => viewBizProfit("sugarcane"),
     "passion-profit": () => viewBizProfit("passion"),
     "trucks-drivers": viewDrivers,
@@ -351,6 +352,7 @@ function route() {
     "trucks-trash": "trucks",
     "trucks-issues": "trucks",
     "trucks-profit": "trucks",
+    "trucks-loadprofit": "trucks",
     "cane-profit": "cane",
     "passion-profit": "passion",
     "trucks-drivers": "trucks",
@@ -430,7 +432,7 @@ function bizBar() {
   const work = (DATA.fleetTasks || []).filter((t) => t.status === "done").length, iss = issuesWaiting(), pay = payWaiting(), phones = DATA.me.assistant ? 0 : phonesWaiting();
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
-    fleet: [["#trucks-book", "Bookings", bookingsWaiting().length, "Loads"], ["#trucks-jobs", "Loads", 0, "Loads"], ["#trucks-new", "New load", 0, "Loads"], ["#trucks-paid", "Paid loads", 0, "Loads"],
+    fleet: [["#trucks-book", "Bookings", bookingsWaiting().length, "Loads"], ["#trucks-jobs", "Loads", 0, "Loads"], ["#trucks-new", "New load", 0, "Loads"], ["#trucks-paid", "Paid loads", 0, "Loads"], ["#trucks-loadprofit", "Load profit", 0, "Loads"],
       ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-profit", "Profit", fuelAlerts().length, "Trucks"], ["#trucks-inspect", "Inspections", 0, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Issues", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
       ["#trucks-docs", "Docs", docsWaiting("trucking"), "Papers"], ["#trucks-trash", "Trash", 0, "Papers"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-profit", "Profit"], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
@@ -743,6 +745,7 @@ function jobCard(j, paidView) {
       ["Distance", (j.km || 0) + " km" + (j.fuelLitres ? ` · ${j.fuelLitres} L · ${ugx(j.fuelCostUgx || 0)}` : "")],
       j.tonnesDelivered ? ["Tonnes", j.tonnesDelivered + " t"] : null,
       ["Price", ugx(price)],
+      DATA.me.role === "admin" ? (() => { const lp = loadProfit(j); return ["Profit", `<b class="${lp.profit < 0 ? "neg" : "pos"}">${lp.profit < 0 ? "−" : ""}${ugx(Math.abs(lp.profit))}</b> <span class="badge ${profitTone(lp)}">${lp.missing ? "Needs cost" : lp.pct + "%"}</span> · <a href="#trucks-loadprofit" class="js-lpopen" data-id="${esc(j.id)}">Details ›</a>`]; })() : null,
       got ? ["Received", ugx(got) + (paidView && j.paidAt ? " · " + fmtDay(j.paidAt) : "") + (j.paidMethod ? " · " + esc(METHOD_LABEL[j.paidMethod] || j.paidMethod) : "")] : null,
       ...(bk ? clientSeenRows(bk) : []),
       !paidView && tripTime(j, j.status) ? ["Trip", esc(TRIP_NAME[j.status] || label(j.status)) + " · " + tripTime(j, j.status) + ((j.steps || {})[j.status] && j.steps[j.status].office ? " · office" : "")] : null,
@@ -752,6 +755,94 @@ function jobCard(j, paidView) {
     ${bk && !paidView ? `<div class="bk-actions"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay flash" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>` : ""}
     ${paidView ? "" : `<div class="lf-actions"><button type="button" class="btn btn-primary js-paid" data-id="${j.id}">Client paid</button><button type="button" class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></div>`}`;
   return foldCard(head, body, due ? "flash" : "");
+}
+// ───────────── Load profit (admin + Admin II) ─────────────
+function loadPrice(j) { return Number(j.incomeUgx || j.rateUgx || 0) || (j.payBasis === "tonne" ? Math.round((Number(j.payPerTonne) || 0) * (Number(j.tonnesDelivered) || 0)) : 0); }
+function loadDriverPay(j) {
+  if (j.driverPayUgx !== undefined && j.driverPayUgx !== null && j.driverPayUgx !== "") return { amt: Number(j.driverPayUgx) || 0, how: "Set on this load" };
+  const d = (DATA.drivers || []).find((x) => x.id === j.driverId);
+  if (d) {
+    const plan = driverPlan(d); let amt = 0; const how = [];
+    if (plan !== "month" && Number(d.tripAllowanceUgx)) { amt += Number(d.tripAllowanceUgx); how.push("per-load allowance"); }
+    if (plan !== "trip" && Number(d.monthRateUgx)) {
+      amt += Math.round(Number(d.monthRateUgx) / 26); how.push("one day of monthly pay (÷ 26)");
+    }
+    if (how.length) return { amt, how: "From " + d.name.split(" ")[0] + "'s pay · " + how.join(" + ") };
+  }
+  return { amt: pricing().driverPerTrip, how: "Estimate · price settings", est: true };
+}
+function loadFuel(j) {
+  if (Number(j.fuelCostUgx)) return { amt: Number(j.fuelCostUgx), how: (j.fuelLitres ? j.fuelLitres + " L · " : "") + (j.fuelEdited ? "set on this load" : "worked out from km and truck") };
+  const km = Number(j.kmHaul || j.km) || 0; if (!km) return { amt: 0, how: "No distance yet", est: true };
+  const t = (DATA.trucks || []).find((x) => x.id === j.truckId);
+  const e = estimateTripFuel((Number(j.kmToPickup) || 0) + km, km, t || 370, j.dieselUgxPerLitre || DATA.dieselDefaultUgx || 5200);
+  return { amt: e.fuelUgx, how: e.litres + " L · estimate", est: true };
+}
+function loadProfit(j) {
+  const price = loadPrice(j), ours = j.materialBy === "us", material = ours ? Number(j.materialCostUgx) || 0 : 0;
+  const fuel = loadFuel(j), driver = loadDriverPay(j);
+  const equipment = price - material; // what the truck earned for the haul
+  const profit = equipment - fuel.amt - driver.amt;
+  return { price, ours, material, equipment, fuel, driver, profit, pct: price ? Math.round((profit / price) * 100) : 0, matPct: ours && material ? Math.round((profit / material) * 100) : null, missing: !price || (ours && !material) };
+}
+function profitTone(lp) { return lp.missing ? "gold" : lp.profit < 0 ? "red" : lp.pct < 15 ? "gold" : "green"; }
+function profitBreakdown(lp) {
+  const line = (k, v, sub, cls) => `<div class="pb-line ${cls || ""}"><span>${k}${sub ? `<i>${esc(sub)}</i>` : ""}</span><b>${v}</b></div>`;
+  return `<div class="pb">
+    ${line("Price to client", ugx(lp.price), lp.price ? "" : "Not set yet")}
+    ${lp.ours ? line("Material cost", "−" + ugx(lp.material), lp.material ? "Conacrew bought it" : "Not set yet", "neg") : line("Material", "Client's", "Client paid for the material", "muted-line")}
+    ${line("Equipment earned", ugx(lp.equipment), "Price less material", "sub")}
+    ${line("Fuel", "−" + ugx(lp.fuel.amt), lp.fuel.how, "neg")}
+    ${line("Driver pay", "−" + ugx(lp.driver.amt), lp.driver.how, "neg")}
+    <div class="pb-total ${lp.profit < 0 ? "neg" : "pos"}"><span>Load profit</span><b>${lp.profit < 0 ? "−" : ""}${ugx(Math.abs(lp.profit))}</b></div>
+    <div class="pb-pct"><span>Margin on price <b>${lp.pct}%</b></span>${lp.matPct !== null ? `<span>Return on material <b>${lp.matPct}%</b></span>` : ""}</div>
+  </div>`;
+}
+function loadCostForm(j, lp) {
+  const ours = lp.ours;
+  return `<form data-form="load-costs" data-id="${esc(j.id)}" class="lc-form">
+    <div class="seg seg-sm js-matby" role="group" aria-label="Material paid by"><button type="button" class="seg-btn ${ours ? "" : "on"}" data-v="client">Client's material</button><button type="button" class="seg-btn ${ours ? "on" : ""}" data-v="us">Conacrew bought it</button></div>
+    <input type="hidden" name="materialBy" value="${ours ? "us" : "client"}" />
+    <div class="grid g2" style="margin-top:10px">
+      <label class="lbl js-matcost" ${ours ? "" : "hidden"}>Material cost (UGX)<input class="field" name="materialCostUgx" inputmode="numeric" value="${lp.material || ""}" placeholder="0" /></label>
+      ${j.bookingId ? "" : `<label class="lbl">Price to client (UGX)<input class="field" name="rateUgx" inputmode="numeric" value="${lp.price || ""}" /></label>`}
+      <label class="lbl">Fuel (UGX)<input class="field" name="fuelCostUgx" inputmode="numeric" value="${lp.fuel.amt || ""}" /></label>
+      <label class="lbl">Driver pay (UGX)<input class="field" name="driverPayUgx" inputmode="numeric" value="${j.driverPayUgx !== undefined ? j.driverPayUgx : ""}" placeholder="${lp.driver.amt}" /></label>
+    </div>
+    <button class="btn btn-primary wide" style="margin-top:10px">Save</button>
+  </form>`;
+}
+function viewLoadProfit() {
+  const per = sessionStorage.getItem("lpPer") || "month", tk = sessionStorage.getItem("lpTruck") || "", st = sessionStorage.getItem("lpSt") || "";
+  const [from, to, plabel] = periodRange(per);
+  const day = (j) => String(deliveredOn(j) || j.startDate || "").slice(0, 10);
+  const jobs = (DATA.jobs || []).filter((j) => !j.trashed && (per === "all" || (day(j) >= from && day(j) <= to)) && (!tk || j.truckId === tk));
+  const rows = jobs.map((j) => ({ j, lp: loadProfit(j) })).filter(({ lp }) => !st || (st === "loss" ? lp.profit < 0 : st === "missing" ? lp.missing : true))
+    .sort((a, b) => day(b.j).localeCompare(day(a.j)));
+  const sum = (k) => rows.reduce((s, r) => s + (typeof r.lp[k] === "object" ? r.lp[k].amt : r.lp[k]), 0);
+  const price = sum("price"), profit = sum("profit"), costs = price - profit;
+  const missing = jobs.filter((j) => loadProfit(j).missing).length;
+  const card = ({ j, lp }) => {
+    const c = (DATA.contractors || []).find((x) => x.id === j.contractorId), t = (DATA.trucks || []).find((x) => x.id === j.truckId);
+    const head = `<span class="lp-h" data-jid="${esc(j.id)}"><b>${esc(j.code || "Load")} · ${esc(j.cargo || "")}</b><span class="muted">${esc(c ? c.name : "")}${t ? " · " + esc(t.plate) : ""} · ${fmtDay(day(j))}</span><span class="lp-bar"><i class="${lp.profit < 0 ? "neg" : ""}" style="width:${Math.max(3, Math.min(100, Math.abs(lp.pct)))}%"></i></span></span><span class="adv-r"><b class="${lp.profit < 0 ? "neg" : "pos"}">${lp.profit < 0 ? "−" : ""}${ugx(Math.abs(lp.profit))}</b><span class="badge ${profitTone(lp)}">${lp.missing ? "Needs cost" : lp.pct + "%"}</span></span>`;
+    return foldCard(head, `${profitBreakdown(lp)}<details class="settings" style="margin-top:10px" ${lp.missing ? "open" : ""}><summary>Edit costs</summary>${loadCostForm(j, lp)}</details>`, "lp-fold" + (lp.missing ? " waiting" : ""));
+  };
+  return `
+    <h1>Fleet · Load profit</h1>
+    <div class="flow-filters">
+      <select class="field js-lpf" data-k="lpPer" aria-label="Period">${[["week", "This week"], ["month", "This month"], ["lastmonth", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["all", "All time"]].map(([k, l]) => `<option value="${k}" ${per === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select class="field js-lpf" data-k="lpTruck" aria-label="Truck"><option value="">All trucks</option>${(DATA.trucks || []).map((t) => `<option value="${esc(t.id)}" ${tk === t.id ? "selected" : ""}>${esc(t.plate)}</option>`).join("")}</select>
+    </div>
+    <div class="grid g4 kpi4" style="margin-top:12px">
+      <div class="card kpi"><span class="eyebrow">Loads</span><b>${rows.length}</b></div>
+      <div class="card kpi in-kpi"><span class="eyebrow">Charged</span><b>${ugx(price)}</b></div>
+      <div class="card kpi out-kpi"><span class="eyebrow">Costs</span><b>${ugx(costs)}</b></div>
+      <div class="card kpi gold"><span class="eyebrow">Profit · ${price ? Math.round((profit / price) * 100) : 0}%</span><b class="${profit < 0 ? "neg" : "pos"}">${profit < 0 ? "−" : ""}${ugx(Math.abs(profit))}</b></div>
+    </div>
+    ${rows.length ? `<div class="card item lp-split">${[["Material", sum("material")], ["Fuel", sum("fuel")], ["Driver pay", sum("driver")], ["Profit", Math.max(0, profit)]].map(([k, v]) => `<div class="bar-line"><span>${k}</span><span class="bar"><i class="${k === "Profit" ? "pos-bar" : ""}" style="width:${price ? Math.round((v / price) * 100) : 0}%"></i></span><b>${price ? Math.round((v / price) * 100) : 0}%</b></div>`).join("")}<p class="muted" style="margin:6px 0 0">Share of every shilling charged</p></div>` : ""}
+    <div class="row keep" style="margin-top:16px;align-items:center"><h2 style="margin:0">Loads</h2>
+      <div class="seg seg-sm">${[["", "All"], ["loss", "Losing"], ["missing", "Needs cost" + (missing ? " " + missing : "")]].map(([k, l]) => `<button type="button" class="seg-btn ${st === k ? "on" : ""}" data-lpset="${k}">${l}</button>`).join("")}</div></div>
+    <div class="list" style="margin-top:10px">${rows.length ? rows.map(card).join("") : `<div class="card item muted">No loads for ${esc(plabel.toLowerCase())}.</div>`}</div>`;
 }
 function tripTone(j) { return { booked: "gold", to_pickup: "blue", loading: "blue", en_route: "blue", delivered: "green", invoiced: "green" }[j.status] || "blue"; }
 function viewTruckJobs() {
@@ -1243,13 +1334,18 @@ function viewNewJob() {
       <p class="form-step">Price and fuel</p>
       <div class="grid g2">
         <label class="lbl">Distance (km)<input class="field js-km" name="km" inputmode="decimal" placeholder="One way" /></label>
-        <label class="lbl">Price to client (UGX)<input class="field" name="rateUgx" required inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Price to client (UGX)<input class="field js-nl-price" name="rateUgx" required inputmode="numeric" placeholder="0" /></label>
       </div>
+      <p class="form-step">Material</p>
+      <div class="seg seg-sm js-matby" role="group" aria-label="Material paid by"><button type="button" class="seg-btn on" data-v="client">Client's material</button><button type="button" class="seg-btn" data-v="us">Conacrew buys it</button></div>
+      <input type="hidden" name="materialBy" value="client" />
+      <label class="lbl js-matcost" hidden style="margin-top:10px">Material cost (UGX)<input class="field js-nl-mat" name="materialCostUgx" inputmode="numeric" placeholder="What we pay at the quarry" /></label>
       <div class="grid g3" style="margin-top:10px">
         <label class="lbl">Diesel UGX / litre<input class="field js-diesel" name="dieselUgxPerLitre" inputmode="numeric" value="${DATA.dieselDefaultUgx || 5200}" /></label>
         <label class="lbl">Litres needed<input class="field js-litres" name="fuelLitres" readonly placeholder="Worked out" /></label>
         <label class="lbl">Fuel cost (UGX)<input class="field js-fuel" name="fuelCostUgx" readonly placeholder="Worked out" /></label>
       </div>
+      <div class="pb-preview js-nl-profit"></div>
       <button class="btn btn-primary wide" style="margin-top:16px">Save load</button>
     </form>`;
 }
@@ -3959,6 +4055,26 @@ function bind() {
   document.querySelectorAll(".js-fuelok").forEach((b) => { b.onclick = () => act("save_truck", { id: b.dataset.id, fuelCheckedAt: todayYmd() }); });
   document.querySelectorAll(".js-alladv").forEach((l) => { l.onclick = () => { sessionStorage.setItem("advBiz", l.dataset.biz); sessionStorage.setItem("advSt", "all"); }; });
   document.querySelectorAll(".js-advf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
+  document.querySelectorAll(".js-lpf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
+  document.querySelectorAll("[data-lpset]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("lpSt", b.dataset.lpset); route(); }; });
+  document.querySelectorAll(".js-lpopen").forEach((a) => { a.onclick = () => { sessionStorage.setItem("lpOpen", a.dataset.id); sessionStorage.setItem("lpPer", "all"); sessionStorage.setItem("lpTruck", ""); sessionStorage.setItem("lpSt", ""); }; });
+  { const id = sessionStorage.getItem("lpOpen"); const h = id && document.querySelector(`.lp-h[data-jid="${CSS.escape(id)}"]`);
+    if (h) { sessionStorage.removeItem("lpOpen"); const btn = h.closest(".js-fold-btn"); if (btn && btn.getAttribute("aria-expanded") !== "true") btn.click(); setTimeout(() => btn && btn.scrollIntoView({ block: "start", behavior: "smooth" }), 60); } }
+  document.querySelectorAll(".js-matby").forEach((g) => {
+    const f = g.closest("form"); if (!f) return;
+    g.querySelectorAll("[data-v]").forEach((b) => { b.onclick = () => {
+      g.querySelectorAll("[data-v]").forEach((x) => x.classList.toggle("on", x === b));
+      f.materialBy.value = b.dataset.v; const box = f.querySelector(".js-matcost"); if (box) { box.hidden = b.dataset.v !== "us"; if (!box.hidden) box.querySelector("input").focus(); }
+      f.dispatchEvent(new Event("input"));
+    }; });
+  });
+  { const f = document.querySelector("form[data-form=job]"), out = f && f.querySelector(".js-nl-profit");
+    if (out) { const calc = () => {
+      const fake = { rateUgx: Number(String(f.rateUgx.value).replace(/\D/g, "")) || 0, materialBy: f.materialBy.value, materialCostUgx: Number(String(f.materialCostUgx.value).replace(/\D/g, "")) || 0, fuelCostUgx: Number(String((f.querySelector(".js-fuel") || {}).value || "").replace(/\D/g, "")) || 0, km: Number(f.km.value) || 0, driverId: f.driverId ? f.driverId.value : "", truckId: f.truckId ? f.truckId.value : "", startDate: todayYmd() };
+      if (!fake.rateUgx) { out.innerHTML = ""; return; }
+      const lp = loadProfit(fake);
+      out.innerHTML = `<p class="form-step">Expected profit</p>${profitBreakdown(lp)}`;
+    }; f.addEventListener("input", () => setTimeout(calc, 0)); f.addEventListener("change", () => setTimeout(calc, 0)); calc(); } }
   document.querySelectorAll("[data-sendtag]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("advSendTag", b.dataset.sendtag); sessionStorage.setItem("advSendOpen", "1"); sessionStorage.removeItem("advSendTo"); route(); sessionStorage.removeItem("advSendOpen"); }; });
   { const to = sessionStorage.getItem("advSendTo"); const card = document.querySelector(".js-sendcard");
     if (to && card) { const sel = card.querySelector("select[name=driverId], select[name=toUserId]"); if (sel) { sel.value = to; sel.dispatchEvent(new Event("change")); } sessionStorage.removeItem("advSendTo"); setTimeout(() => card.scrollIntoView({ block: "start", behavior: "smooth" }), 50); } }
@@ -4184,6 +4300,9 @@ function bind() {
         try { await act("save_doc", { ...fd, tag: form.dataset.tag, file, fileName: inp.dataset.name || "", mime: inp.dataset.mime || "" }); } catch (err) { return; }
       } else if (kind === "finalize-request") {
         try { await act("finalize_request", { id: form.dataset.id }); } catch (err) { return; }
+      } else if (kind === "load-costs") {
+        try { await act("save_load_costs", { ...fd, id: form.dataset.id }); } catch (err) { return; }
+        sessionStorage.setItem("lpOpen", form.dataset.id);
       } else if (kind === "advance") {
         try { await act("send_float", { ...fd, toDriverId: fd.driverId }); } catch (err) { return; }
       } else if (kind === "close-advance") {
