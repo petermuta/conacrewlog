@@ -858,3 +858,9 @@ details.views summary::-webkit-details-marker { display: none; }
 .ny-chip .chev{opacity:.6}
 @keyframes ny{50%{box-shadow:0 0 0 5px rgba(246,196,0,.25)}}
 @media (prefers-reduced-motion:reduce){.ny-chip{animation:none}}
+/* New client fields sit right under the Client picker */
+.new-client{margin-top:10px;padding:12px;border-radius:12px;background:rgba(246,196,0,.07);border:1px solid rgba(246,196,0,.25)}
+/* iPhone: date/time boxes must not run past the card */
+input[type="datetime-local"].field,input[type="date"].field,input[type="time"].field{width:100%;max-width:100%;min-width:0;box-sizing:border-box;-webkit-appearance:none;appearance:none;min-height:48px;display:block}
+input[type="datetime-local"]::-webkit-date-and-time-value,input[type="date"]::-webkit-date-and-time-value{text-align:left}
+.lbl{min-width:0}

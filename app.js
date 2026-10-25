@@ -1210,11 +1210,13 @@ function viewNewJob() {
       <p class="form-step">Client and material</p>
       <div class="grid g2">
         <label class="lbl">Client<select class="field js-contractor" name="contractorId">${DATA.contractors.map((c) => `<option value="${c.id}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}<option value="new">＋ New client</option></select></label>
-        <label class="lbl">Material${cargoSelect("")}</label>
       </div>
-      <div class="grid g2 js-new-contractor" style="margin-top:10px;display:none">
-        <label class="lbl">New client name<input class="field" name="contractorName" placeholder="Company or person" /></label>
+      <div class="grid g2 js-new-contractor new-client" style="display:none">
+        <label class="lbl">Client name<input class="field" name="contractorName" placeholder="Company or person" autocomplete="off" /></label>
         <label class="lbl">Client phone<input class="field" name="contractorPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
+      </div>
+      <div class="grid g2" style="margin-top:10px">
+        <label class="lbl">Material${cargoSelect("")}</label>
       </div>
       <p class="form-step">Route and time</p>
       <div class="grid g2">
@@ -1569,11 +1571,13 @@ function viewDrive(page, taskId) {
     <form data-form="driver-load" class="form-card" style="margin-top:12px">
       <div class="grid g2">
         <label class="lbl">Client<select class="field js-contractor" name="contractorId">${(DATA.contractors || []).map((c) => `<option value="${c.id}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}<option value="new">＋ New client</option></select></label>
-        <label class="lbl">Material${cargoSelect("")}</label>
       </div>
-      <div class="grid g2 js-new-contractor" style="margin-top:10px;display:none">
-        <label class="lbl">New client name<input class="field" name="contractorName" /></label>
+      <div class="grid g2 js-new-contractor new-client" style="display:none">
+        <label class="lbl">Client name<input class="field" name="contractorName" placeholder="Company or person" autocomplete="off" /></label>
         <label class="lbl">Client phone<input class="field" name="contractorPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
+      </div>
+      <div class="grid g2" style="margin-top:10px">
+        <label class="lbl">Material${cargoSelect("")}</label>
       </div>
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Pickup place<input class="field js-pv" required placeholder="e.g. Kigo quarry" /></label>
@@ -4292,7 +4296,7 @@ function bind() {
   document.querySelectorAll(".js-contractor").forEach((sel) => {
     const box = (sel.form || document).querySelector(".js-new-contractor");
     const sync = () => { if (box) { box.style.display = sel.value === "new" ? "grid" : "none"; const n = box.querySelector("[name=contractorName]"); if (n) n.required = sel.value === "new"; } };
-    sel.onchange = sync;
+    sel.onchange = () => { sync(); const n = box && box.querySelector("[name=contractorName]"); if (sel.value === "new" && n) n.focus(); };
     sync();
   });
   document.querySelectorAll(".nav-jump:not(#category)").forEach((sel) => {
