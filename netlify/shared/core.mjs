@@ -640,10 +640,43 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
 }
 
 // ---------- live GPS: last position for each truck, plus a short trail ----------
-export async function handleLive(kv, { method, token, body }) {
+// People (not trucks): the main admin's team map. Kept apart from the truck pings, so Admin II only ever gets trucks.
+const HOURS_START = { from: 0, to: 0 }; // Uganda time; from = to means all day, every day
+async function trackHours(kv) { try { const g = await kv.get("live/hours"); return g ? { ...HOURS_START, ...JSON.parse(g.text) } : { ...HOURS_START }; } catch (e) { return { ...HOURS_START }; } }
+function inHours(h, at) { if (h.from === h.to) return true; const hr = new Date((at || Date.now()) + 3 * 3600000).getUTCHours(); return h.from <= h.to ? hr >= h.from && hr < h.to : hr >= h.from || hr < h.to; }
+async function savePerson(kv, user, b) {
+  const h = await trackHours(kv);
+  if (!inHours(h)) return { off: true };
+  const got = await kv.get("live/people");
+  const all = got ? JSON.parse(got.text) : {};
+  const prev = all[user.id] || {};
+  const at = now();
+  const p = { userId: user.id, name: user.name || "", role: user.role, assistant: !!user.assistant, lat: Number(b.lat), lng: Number(b.lng), accuracy: Number(b.accuracy) || 0, speed: Number(b.speed) || 0, at, app: b.app === "android" ? "android" : "web" };
+  all[user.id] = { ...p, trail: (prev.trail || []).concat([{ lat: p.lat, lng: p.lng, at }]).slice(-40) };
+  await kv.set("live/people", JSON.stringify(all), {});
+  return { ok: true };
+}
+export async function handleLive(kv, { method, token, body, query }) {
   const { book } = await loadBook(kv);
   const who = await readToken(kv, book, token);
   if (!who) return { status: 401, body: { error: "signin" } };
+  if (method === "GET" && query && query.people) {
+    if (!isMainAdmin(who.user)) return { status: 403, body: { error: "main admin only" } };
+    const g = await kv.get("live/people");
+    return { status: 200, body: { people: g ? JSON.parse(g.text) : {}, hours: await trackHours(kv) } };
+  }
+  if (method === "POST" && body && body.kind === "hours") {
+    if (!isMainAdmin(who.user)) return { status: 403, body: { error: "main admin only" } };
+    const n = (v) => Math.max(0, Math.min(24, Math.round(Number(v)))) % 24;
+    const h = { from: n(body.from), to: n(body.to) };
+    await kv.set("live/hours", JSON.stringify(h), {});
+    return { status: 200, body: { ok: true, hours: h } };
+  }
+  if (method === "POST" && body && body.kind === "person") {
+    if (isMainAdmin(who.user)) return { status: 200, body: { ok: true, skip: true } };
+    if (body.lat == null || body.lng == null) return { status: 400, body: { error: "missing" } };
+    return { status: 200, body: await savePerson(kv, who.user, body) };
+  }
   const got = await kv.get("live");
   const all = got ? JSON.parse(got.text) : {};
   if (method === "GET") {
@@ -666,6 +699,7 @@ export async function handleLive(kv, { method, token, body }) {
   const trail = (prev.trail || []).concat([{ lat: ping.lat, lng: ping.lng, at: ping.at }]).slice(-60);
   all[body.truckId] = { ...ping, trail };
   await kv.set("live", JSON.stringify(all), {});
+  if (who.user.role === "driver") { try { await savePerson(kv, who.user, body); } catch (e) {} }
   return { status: 200, body: { ok: true, at: ping.at } };
 }
 

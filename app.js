@@ -183,7 +183,7 @@ const PAGES = {
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-loadprofit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-loadprofit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs", "team-live"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -221,6 +221,7 @@ async function boot() {
   if (DATA.me.role !== "admin" && !hash().startsWith(defaultHash())) location.hash = defaultHash();
   route();
   if (DATA.me.role === "driver" && !DATA.viewingAs) startLiveWatch(); // never send the admin's location as a truck's
+  if (!DATA.viewingAs && (["cane_manager", "passion_manager"].includes(DATA.me.role) || (DATA.me.role === "admin" && DATA.me.assistant))) startPersonWatch();
 }
 document.addEventListener("click", (e) => {
   const a = e.target.closest && e.target.closest("a[href^='#']");
@@ -265,7 +266,7 @@ const OLD_PAGES = { reports: "trucks-issues", requests: "money-spend", "cane-ask
 function route() {
   let r = parseRoute();
   if (OLD_PAGES[r.name]) { location.replace("#" + OLD_PAGES[r.name]); return; }
-  if (r.name === "team" && DATA.me.assistant) { location.hash = "home"; return; }
+  if ((r.name === "team" || r.name === "team-live") && DATA.me.assistant) { location.hash = "home"; return; }
   if (r.name !== "money-tx") sessionStorage.removeItem("openSpend");
   if (DATA.me.role === "admin") {
     const advOf = { "trucks-spend": "trucking", "cane-spend": "sugarcane", "passion-spend": "passion" }[r.name];
@@ -339,6 +340,7 @@ function route() {
     "passion-docs": () => viewDocs("passion"),
     "passion-spend": viewPassionSpend,
     team: viewTeam,
+    "team-live": viewTeamLive,
   }[r.name];
   const theme = {
     home: "home",
@@ -396,6 +398,7 @@ function route() {
     "money-adv": "money",
     "money-pay": "money",
     team: "home",
+    "team-live": "home",
   }[r.name] || "home";
   document.body.dataset.page = theme;
   const app = $("#app");
@@ -438,6 +441,7 @@ function bizBar() {
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-profit", "Profit"], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-profit", "Profit"], ["#passion-docs", "Docs", docsWaiting("passion")]],
     money: [["#money", "Overview", reqAll], ["#money-tx", "Transactions"], ["#money-adv", "Advances", reqAll + advUnconfirmed()], ["#money-pay", "Pay", pay]],
+    home: phones !== undefined && !DATA.me.assistant ? [["#home", "Today"], ["#team", "Team & logins", phones], ["#team-live", "Team live"]] : [],
   }[biz] || [];
   return `<nav class="admin-nav">
     <div class="biz">
@@ -4593,6 +4597,26 @@ function startNativeWatch(ask) {
   }).then((id) => { BG_WATCH = id; try { localStorage.setItem("conacrew-live-on", "1"); } catch (e) {} }).catch(() => { LIVE.status = "nosignal"; updateLiveStatus(); });
   return true;
 }
+// Managers and Admin II: their phone's location for the main admin's team map (24/7 unless the main admin sets hours)
+const PERSON = { last: null, sentAt: 0, watch: null };
+function sendPersonPing(c) {
+  const here = { lat: c.latitude, lng: c.longitude }, t = Date.now();
+  if (PERSON.last && t - PERSON.sentAt < 120000 && metresBetween(PERSON.last, here) < 150) return;
+  PERSON.last = here; PERSON.sentAt = t;
+  fetch("/.netlify/functions/live", { method: "POST", keepalive: true, headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ kind: "person", lat: here.lat, lng: here.lng, accuracy: Math.round(c.accuracy || 0), speed: c.speed > 0 ? c.speed : 0, app: native() ? "android" : "web" }) }).catch(() => {});
+}
+function startPersonWatch() {
+  const BG = plugin("BackgroundGeolocation");
+  if (BG) {
+    if (PERSON.watch) return;
+    BG.addWatcher({ backgroundTitle: "Conacrew", backgroundMessage: "Sharing your location with the office", requestPermissions: true, stale: false, distanceFilter: 50 }, (loc, err) => { if (!err && loc) sendPersonPing(loc); }).then((id) => { PERSON.watch = id; }).catch(() => {});
+    return;
+  }
+  if (!navigator.geolocation || PERSON.watch !== null) return;
+  const go = () => { if (PERSON.watch === null) PERSON.watch = navigator.geolocation.watchPosition((pos) => sendPersonPing(pos.coords), () => {}, { enableHighAccuracy: false, maximumAge: 60000, timeout: 60000 }); };
+  if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: "geolocation" }).then((p) => { if (p.state === "granted") go(); p.onchange = () => { if (p.state === "granted") go(); }; }).catch(go);
+  else go();
+}
 function startLiveWatch(ask) {
   if (DATA && DATA.me.role === "driver" && DATA.truck && native() && plugin("BackgroundGeolocation")) {
     let on = false; try { on = localStorage.getItem("conacrew-live-on") === "1"; } catch (e) {}
@@ -4691,12 +4715,59 @@ function startLiveMap() {
     }, 30000);
     return;
   }
+  if (document.getElementById("teamMap")) {
+    drawTeamMap();
+    const hf = document.getElementById("hoursForm");
+    if (hf) hf.onsubmit = async (e) => { e.preventDefault(); try { const r = await fetch("/.netlify/functions/live", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ kind: "hours", from: hf.from.value, to: hf.to.value }) }); toast(r.ok ? "Tracking hours saved" : "Couldn't save"); if (r.ok) drawTeamMap(); } catch (err) { toast("Couldn't reach the office"); } };
+    LIVE_MAP_TIMER = setInterval(() => { if (!document.getElementById("teamMap")) { clearInterval(LIVE_MAP_TIMER); LIVE_MAP_TIMER = null; return; } if (!document.hidden) drawTeamMap(); }, 30000);
+    return;
+  }
   if (!document.getElementById("liveMap")) return;
   drawLiveMap();
   LIVE_MAP_TIMER = setInterval(() => {
     if (!document.getElementById("liveMap")) { clearInterval(LIVE_MAP_TIMER); LIVE_MAP_TIMER = null; return; }
     if (!document.hidden) drawLiveMap();
   }, 30000);
+}
+const ROLE_SHORT = { driver: "Driver", cane_manager: "Cane", passion_manager: "Passion", admin: "Admin II" };
+function viewTeamLive() {
+  const people = (DATA.users || []).filter((u) => u.active !== false && !(u.role === "admin" && !u.assistant));
+  return `
+    <h1>Home · Team live</h1>
+    <div class="card item tl-map-card"><div id="teamMap" class="tl-map"></div><p class="muted tl-note" id="teamNote">Loading…</p></div>
+    <div class="list" id="teamList" style="margin-top:10px">${people.map((u) => `<div class="card item tl-row"><span class="avatar sm">${esc((u.name || "?").charAt(0))}</span><span class="tl-who"><b>${esc(u.name)}</b><span class="muted">${ROLE_SHORT[u.role] || u.role} · …</span></span></div>`).join("") || `<div class="card item muted">No team logins yet.</div>`}</div>
+    <details class="settings" style="margin-top:14px"><summary>Tracking hours</summary>
+      <form id="hoursForm" class="grid g2" style="margin-top:10px">
+        <label class="lbl">From<select class="field" name="from">${Array.from({ length: 24 }, (_, h) => `<option value="${h}">${String(h).padStart(2, "0")}:00</option>`).join("")}</select></label>
+        <label class="lbl">To<select class="field" name="to">${Array.from({ length: 24 }, (_, h) => `<option value="${h}">${String(h).padStart(2, "0")}:00</option>`).join("")}</select></label>
+        <button class="btn btn-primary wide" style="grid-column:1/-1">Save hours</button>
+      </form>
+      <p class="muted" style="margin:8px 0 0">Uganda time. Same From and To = 24/7.</p>
+    </details>`;
+}
+async function drawTeamMap() {
+  const box = document.getElementById("teamMap"), list = document.getElementById("teamList"), note = document.getElementById("teamNote");
+  if (!box) return;
+  let data = null;
+  try { const res = await fetchSoon("/.netlify/functions/live?people=1", 8000, { cache: "no-store", headers: { authorization: "Bearer " + Conacrew.token() } }); if (res.ok) data = await res.json(); } catch (e) {}
+  if (!document.body.contains(box)) return;
+  if (!data) { note.textContent = "Can't reach the office right now"; return; }
+  const hrs = data.hours || { from: 0, to: 0 }, f = document.getElementById("hoursForm");
+  if (f && !f.dataset.set) { f.from.value = hrs.from; f.to.value = hrs.to; f.dataset.set = "1"; }
+  const pings = data.people || {}, now = Date.now();
+  const people = (DATA.users || []).filter((u) => u.active !== false && !(u.role === "admin" && !u.assistant));
+  const rows = people.map((u) => { const p = pings[u.id]; const age = p ? now - p.at : Infinity; return { u, p, tone: age < 15 * 60000 ? "green" : age < 12 * 3600000 ? "gold" : "red" }; })
+    .sort((a, b) => (b.p ? b.p.at : 0) - (a.p ? a.p.at : 0));
+  const hh = (h) => String(h).padStart(2, "0") + ":00";
+  note.textContent = `${hrs.from === hrs.to ? "Tracking 24/7" : "Tracking " + hh(hrs.from) + "–" + hh(hrs.to)} · updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  list.innerHTML = rows.map(({ u, p, tone }) => `<div class="card item tl-row"><span class="avatar sm">${esc((u.name || "?").charAt(0))}</span><span class="tl-who"><b>${esc(u.name)}</b><span class="muted">${ROLE_SHORT[u.role] || u.role} · ${p ? "seen " + agoText(p.at) + (p.app === "android" ? " · Android app" : "") : "no location yet"}</span></span>${p ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.lat},${p.lng}">Map</a><span class="badge ${tone}">${tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old"}</span>` : ""}</div>`).join("") || `<div class="card item muted">No team logins yet.</div>`;
+  if (!window.L || !L.map) { box.style.display = "none"; return; }
+  if (!box._map) { box._map = L.map(box).setView([0.3476, 32.5825], 7); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(box._map); box._layer = L.layerGroup().addTo(box._map); }
+  box._layer.clearLayers();
+  const col = { green: "#3dff7a", gold: "#f5c400", red: "#ff8b7a" }, pts = [];
+  rows.forEach(({ u, p, tone }) => { if (!p) return; L.circleMarker([p.lat, p.lng], { radius: 9, weight: 2, color: "#0d1b2a", fillColor: col[tone], fillOpacity: 0.95 }).addTo(box._layer).bindTooltip(String(u.name || "").split(" ")[0], { permanent: true, direction: "top", offset: [0, -8] }).bindPopup(`<b>${esc(u.name)}</b><br>${ROLE_SHORT[u.role] || ""} · ${agoText(p.at)}`); pts.push([p.lat, p.lng]); });
+  if (pts.length && !box._fitted) { box._map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 }); box._fitted = true; }
+  setTimeout(() => box._map && box._map.invalidateSize(), 200);
 }
 async function drawLiveMap() {
   const box = document.getElementById("liveMap");
