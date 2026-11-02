@@ -3241,7 +3241,7 @@ function spendCard() {
 }
 // ───────────── Money › Tax (EFRIS-ready records) ─────────────
 const NO_EFRIS_CATS = ["unaccounted", "moved", "employee_pay"];
-function taxInfo() { return { company: "Conacrew Logistics Ltd", tin: "", vat: true, vatRate: 18, inclusive: true, tags: ["trucking"], ...(DATA.taxInfo || {}) }; }
+function taxInfo() { return { company: "Conacrew Logistics Ltd", tin: "1049236818", vat: true, vatRate: 18, inclusive: true, tags: ["trucking"], ...(DATA.taxInfo || {}) }; }
 function taxWaiting() { return DATA && DATA.me.role === "admin" && !DATA.me.assistant && !taxInfo().tin ? 1 : 0; }
 function taxMonthRows(ym) {
   const ti = taxInfo();
