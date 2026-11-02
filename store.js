@@ -194,6 +194,16 @@ function publicUser(user) {
 }
 // Who was paid and how. Mobile money needs a number, bank needs an account.
 const METHOD_NAMES = { cash: "Cash", mtn_momo: "MTN MoMo", airtel_money: "Airtel Money", bank: "Bank transfer", mobile_money: "Mobile money" };
+// EFRIS e-receipt from the supplier: its fiscal document number (FDN) and the supplier's TIN
+function efrisFrom(body) {
+  const out = {};
+  const no = String(body.efrisNo || "").replace(/[^0-9A-Za-z-]/g, "").slice(0, 30);
+  const tin = String(body.supplierTin || "").replace(/\D/g, "").slice(0, 12);
+  if (no) out.efrisNo = no;
+  if (tin) out.supplierTin = tin;
+  return out;
+}
+const TAX_START = { company: "Conacrew Logistics Ltd", tin: "", vat: true, vatRate: 18, inclusive: true, tags: ["trucking"] };
 function payeeFrom(body, required) {
   const p = {
     payeeName: String(body.payeeName || "").trim(),
@@ -210,6 +220,7 @@ function payeeFrom(body, required) {
   }
   if (p.method !== "bank") { p.bankName = ""; p.bankAccount = ""; }
   if (p.method === "bank" || p.method === "cash") p.payeePhone = p.method === "cash" ? p.payeePhone : "";
+  Object.assign(p, efrisFrom(body));
   return p;
 }
 function weekStartOf(d) {
@@ -362,6 +373,7 @@ function scopedDb(db, user) {
       bookings: db.bookings || [],
       payInfo: db.payInfo || null,
       pricing: db.pricing || null,
+      taxInfo: { ...TAX_START, ...(db.taxInfo || {}) },
       dieselDefaultUgx: db.dieselDefaultUgx,
       trucks: db.trucks,
       drivers: db.drivers,
@@ -485,7 +497,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -718,6 +730,30 @@ function applyAction(db, user, body) {
     }
   }
 
+  if (action === "save_taxinfo") {
+    if (!isMainAdmin(user)) throw new Error("Only the main admin can change the company tax details");
+    const rate = Math.min(50, Math.max(0, Number(body.vatRate) || 0));
+    const tags = ["trucking", "sugarcane", "passion"].filter((t) => String(body.tags || "").split(",").includes(t));
+    db.taxInfo = { company: String(body.company || "").trim().slice(0, 120), tin: String(body.tin || "").replace(/\D/g, "").slice(0, 12), vat: body.vat === "1" || body.vat === true, vatRate: rate || 18, inclusive: body.inclusive !== "0" && body.inclusive !== false, tags: tags.length ? tags : ["trucking"], updatedAt: new Date().toISOString(), by: user.name };
+    return;
+  }
+  if (action === "save_client_tax") {
+    const c = (db.contractors || []).find((x) => x.id === body.id);
+    if (!c) throw new Error("Client not found");
+    c.taxId = String(body.taxId || "").replace(/[^0-9A-Za-z]/g, "").slice(0, 20).toUpperCase();
+    return;
+  }
+  if (action === "set_efris") {
+    const e = efrisFrom(body);
+    if (!e.efrisNo) throw new Error("Enter the EFRIS receipt number (FDN)");
+    let rec = null;
+    if (body.ref === "use") { const fl = (db.disbursements || []).find((x) => x.id === body.floatId); rec = fl && (fl.usages || []).find((u) => u.id === body.id); }
+    else rec = (db.cash || []).find((x) => x.id === body.id);
+    if (!rec) throw new Error("Payment not found");
+    Object.assign(rec, e);
+    if (rec.refId) { const fuel = (db.fuelLogs || []).find((f) => f.id === rec.refId); if (fuel) Object.assign(fuel, e); }
+    return;
+  }
   if (action === "save_load_costs") {
     const job = db.jobs.find((j) => j.id === body.id);
     if (!job) throw new Error("Load not found");
@@ -769,7 +805,7 @@ function applyAction(db, user, body) {
     if (newName) {
       let c = db.contractors.find((x) => x.name.toLowerCase() === newName.toLowerCase());
       if (!c) {
-        c = { id: uid("co"), name: newName, phone: body.contractorPhone || "", note: "" };
+        c = { id: uid("co"), name: newName, phone: body.contractorPhone || "", note: "", taxId: String(body.contractorTaxId || "").replace(/[^0-9A-Za-z]/g, "").slice(0, 20).toUpperCase() };
         db.contractors.unshift(c);
       } else if (body.contractorPhone) c.phone = body.contractorPhone;
       contractorId = c.id;
@@ -1124,6 +1160,7 @@ function applyAction(db, user, body) {
       station: body.station || "",
       date: dayOf(body),
       photo: body.photo || "",
+      ...efrisFrom(body),
     };
     db.fuelLogs.unshift(log);
     const truck = db.trucks.find((t) => t.id === log.truckId);
@@ -1131,7 +1168,7 @@ function applyAction(db, user, body) {
     if (user.role === "driver") {
       log.notFromAdvance = true; // driver used money that didn't come through an advance: flag it, don't count it twice
     } else {
-      db.cash.unshift({ id: uid("k"), date: log.date, direction: "out", amountUgx: log.amountUgx, tag: "trucking", method: body.method || "cash", category: "diesel", note: "Fuel " + (truck?.plate || log.truckId), refId: log.id, truckId: log.truckId, payeeName: log.station });
+      db.cash.unshift({ id: uid("k"), date: log.date, direction: "out", amountUgx: log.amountUgx, tag: "trucking", method: body.method || "cash", category: "diesel", note: "Fuel " + (truck?.plate || log.truckId), refId: log.id, truckId: log.truckId, payeeName: log.station, ...efrisFrom(body) });
     }
   }
 

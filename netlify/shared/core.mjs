@@ -13,7 +13,7 @@ const MEDIA_MIN = 1500; // data URLs longer than this go to media storage
 const TOMBSTONE_DAYS = 180;
 const LOCAL_ONLY = new Set(["updatedAt", "mediaTrimmedAt", "_meta"]);
 const SERVER_ONLY = new Set(["loginLog"]); // phones can't write these
-const MAIN_ADMIN_ONLY = new Set(["users", "trustedDevices", "payInfo"]); // only the main admin can change logins
+const MAIN_ADMIN_ONLY = new Set(["users", "trustedDevices", "payInfo", "taxInfo"]); // only the main admin can change logins
 const ADMIN_ONLY = new Set(["bookings"]); // client booking requests: admin and Admin II only
 
 export const isMainAdmin = (u) => !!u && u.role === "admin" && !u.assistant;

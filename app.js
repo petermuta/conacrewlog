@@ -179,11 +179,11 @@ const PAGES = {
   fleet: [["#trucks", "Trucks"], ["#trucks-jobs", "Loads"], ["#trucks-work", "Tasks"], ["#trucks-inspect", "Inspections"], ["#trucks-paid", "Paid loads"], ["#trucks-trash", "Trash"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New load"]],
   cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Advances"]],
   passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"]],
-  money: [["#money", "Overview"], ["#money-tx", "Transactions"], ["#money-adv", "Advances"], ["#money-pay", "Pay"]],
+  money: [["#money", "Overview"], ["#money-tx", "Transactions"], ["#money-adv", "Advances"], ["#money-pay", "Pay"], ["#money-tax", "Tax"]],
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-loadprofit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs", "team-live"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-loadprofit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "money-tax", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs", "team-live"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -329,6 +329,7 @@ function route() {
     money: () => viewMoney(""),
     "money-tx": () => viewMoney("", "tx"),
     "money-adv": viewAllAdvances,
+    "money-tax": viewTax,
     "money-fleet": () => viewMoney("trucking"),
     "money-cane": () => viewMoney("sugarcane"),
     "money-passion": () => viewMoney("passion"),
@@ -396,6 +397,7 @@ function route() {
     "money-pl-q": "money",
     "money-tx": "money",
     "money-adv": "money",
+    "money-tax": "money",
     "money-pay": "money",
     team: "home",
     "team-live": "home",
@@ -440,7 +442,7 @@ function bizBar() {
       ["#trucks-docs", "Docs", docsWaiting("trucking"), "Papers"], ["#trucks-trash", "Trash", 0, "Papers"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-profit", "Profit"], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-profit", "Profit"], ["#passion-docs", "Docs", docsWaiting("passion")]],
-    money: [["#money", "Overview", reqAll], ["#money-tx", "Transactions"], ["#money-adv", "Advances", reqAll + advUnconfirmed()], ["#money-pay", "Pay", pay]],
+    money: [["#money", "Overview", reqAll], ["#money-tx", "Transactions"], ["#money-adv", "Advances", reqAll + advUnconfirmed()], ["#money-pay", "Pay", pay], ["#money-tax", "Tax", taxWaiting()]],
     home: phones !== undefined && !DATA.me.assistant ? [["#home", "Today"], ["#team", "Team & logins", phones], ["#team-live", "Team live"]] : [],
   }[biz] || [];
   return `<nav class="admin-nav">
@@ -1309,6 +1311,7 @@ function viewNewJob() {
       <div class="grid g2 js-new-contractor new-client" style="display:none">
         <label class="lbl">Client name<input class="field" name="contractorName" placeholder="Company or person" autocomplete="off" /></label>
         <label class="lbl">Client phone<input class="field" name="contractorPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
+        <label class="lbl">Client TIN / NIN<input class="field" name="contractorTaxId" placeholder="For the tax invoice" autocomplete="off" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Material${cargoSelect("")}</label>
@@ -1675,6 +1678,7 @@ function viewDrive(page, taskId) {
       <div class="grid g2 js-new-contractor new-client" style="display:none">
         <label class="lbl">Client name<input class="field" name="contractorName" placeholder="Company or person" autocomplete="off" /></label>
         <label class="lbl">Client phone<input class="field" name="contractorPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
+        <label class="lbl">Client TIN / NIN<input class="field" name="contractorTaxId" placeholder="For the tax invoice" autocomplete="off" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Material${cargoSelect("")}</label>
@@ -2211,7 +2215,7 @@ function advanceSpendRows() {
   const out = [];
   (DATA.disbursements || []).forEach((f) => {
     const p = recipientOf(f), who = p ? p.name : "";
-    (f.usages || []).forEach((u) => out.push({ id: "use-" + u.id, date: u.date || f.date, direction: "out", amountUgx: Number(u.amountUgx) || 0, tag: f.tag || "trucking", category: u.category, note: u.note || "", payeeName: u.payeeName || "", payeePhone: u.payeePhone || "", bankName: u.bankName || "", bankAccount: u.bankAccount || "", reference: u.reference || "", method: u.method || "cash", truckId: f.truckId || "", driverId: f.toDriverId || "", userId: f.toUserId || "", fromAdvance: who, floatId: f.id, _type: "spending" }));
+    (f.usages || []).forEach((u) => out.push({ id: "use-" + u.id, date: u.date || f.date, direction: "out", amountUgx: Number(u.amountUgx) || 0, tag: f.tag || "trucking", category: u.category, note: u.note || "", payeeName: u.payeeName || "", payeePhone: u.payeePhone || "", bankName: u.bankName || "", bankAccount: u.bankAccount || "", reference: u.reference || "", method: u.method || "cash", truckId: f.truckId || "", driverId: f.toDriverId || "", userId: f.toUserId || "", fromAdvance: who, floatId: f.id, useId: u.id, efrisNo: u.efrisNo || "", supplierTin: u.supplierTin || "", _type: "spending" }));
     if (f.movedFrom) { const src = (DATA.disbursements || []).find((x) => x.id === f.movedFrom); const sp = src ? recipientOf(src) : null; out.push({ id: "mv-" + f.id, date: f.date, direction: "out", amountUgx: Number(f.amountUgx) || 0, tag: f.tag || "trucking", category: "moved", note: "Leftover moved" + (sp ? " from " + sp.name : "") + (who ? " to " + who : ""), payeeName: who, method: "moved", floatId: f.id, _type: "advance" }); }
   });
   return out;
@@ -2700,6 +2704,12 @@ function owedTo(kind, person, stubs, src) {
 }
 
 // ---- shared form parts ----
+function efrisFields() {
+  return `<div class="grid g2 efris-row" style="margin-top:10px">
+    <label class="lbl">EFRIS receipt no. (FDN)<input class="field" name="efrisNo" inputmode="numeric" placeholder="On the e-receipt" autocomplete="off" /></label>
+    <label class="lbl">Supplier TIN<input class="field" name="supplierTin" inputmode="numeric" placeholder="Optional" autocomplete="off" /></label>
+  </div>`;
+}
 function payeeFields(prefix, v, opts) {
   v = v || {};
   const m = v.method || "mtn_momo";
@@ -2725,6 +2735,7 @@ function payeeFields(prefix, v, opts) {
         <label class="lbl">Phone (optional)<input class="field" name="payeePhone" inputmode="tel" placeholder="Contact number" value="${esc(v.phone || "")}" /></label>
         <label class="lbl">Receipt no. (optional)<input class="field" name="reference" placeholder="Receipt number" value="" /></label>
       </div>
+      ${opts && opts.efris ? efrisFields() : ""}
     </div>`;
 }
 // Shows only the inputs for the chosen method and disables the rest so they aren't submitted.
@@ -3151,7 +3162,7 @@ function workerFundsView(tag) {
               <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
               <label class="lbl js-use-litres">Litres<input class="field" name="litres" inputmode="decimal" placeholder="e.g. 120" /></label>
             </div>
-            <div style="margin-top:10px">${payeeFields("use", { method: "cash" })}</div>
+            <div style="margin-top:10px">${payeeFields("use", { method: "cash" }, { efris: true })}</div>
             <div class="grid g3" style="margin-top:10px">
               ${dateField("date", "Date spent")}
               <label class="lbl">Receipt photo<input class="field use-photo" type="file" accept="image/*" capture="environment" /></label>
@@ -3171,7 +3182,7 @@ function workerFundsView(tag) {
           <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
         </div>
         <div style="margin-top:10px">${linkSelect(tag)}</div>
-        <div style="margin-top:10px">${payeeFields("direct", { method: "cash" })}</div>
+        <div style="margin-top:10px">${payeeFields("direct", { method: "cash" }, { efris: true })}</div>
         <div class="grid g2" style="margin-top:10px">${dateField("date", "Date spent")}<label class="lbl">Note<input class="field" name="note" placeholder="Optional" /></label></div>
         <button class="btn btn-steel wide" style="margin-top:12px">Save</button>
       </form>
@@ -3221,12 +3232,90 @@ function spendCard() {
         </div>
         <div class="grid g2" style="margin-top:10px">${dateField()}</div>
         <p class="form-step">Who was paid?</p>
-        ${payeeFields("spend", {})}
+        ${payeeFields("spend", {}, { efris: true })}
         <label class="lbl" style="margin-top:10px">Note (optional)<input class="field" name="note" /></label>
         <button class="btn btn-primary wide" style="margin-top:12px">Save</button>
       </form>
     </details>
 `;
+}
+// ───────────── Money › Tax (EFRIS-ready records) ─────────────
+const NO_EFRIS_CATS = ["unaccounted", "moved", "employee_pay"];
+function taxInfo() { return { company: "Conacrew Logistics Ltd", tin: "", vat: true, vatRate: 18, inclusive: true, tags: ["trucking"], ...(DATA.taxInfo || {}) }; }
+function taxWaiting() { return DATA && DATA.me.role === "admin" && !DATA.me.assistant && !taxInfo().tin ? 1 : 0; }
+function taxMonthRows(ym) {
+  const ti = taxInfo();
+  const all = flowRows("", "", "all", "").filter((c) => String(c.date || "").startsWith(ym) && ti.tags.includes(c.tag || ""));
+  const sales = all.filter((c) => c._type === "income");
+  const costs = all.filter((c) => c._type === "spending" && !NO_EFRIS_CATS.includes(c.category));
+  return { ti, sales, costs };
+}
+function vatOf(amt, ti) { const r = Number(ti.vatRate) || 0; return ti.vat ? Math.round(ti.inclusive ? (amt * r) / (100 + r) : (amt * r) / 100) : 0; }
+function clientOfRow(c) {
+  const j = c.jobId ? (DATA.jobs || []).find((x) => x.id === c.jobId) : null;
+  return (DATA.contractors || []).find((x) => x.id === (c.contractorId || (j && j.contractorId))) || null;
+}
+function viewTax() {
+  const now = new Date(), months = [];
+  for (let i = 0; i < 12; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }
+  const ym = sessionStorage.getItem("taxMonth") || months[0];
+  const { ti, sales, costs } = taxMonthRows(ym);
+  const sum = (a) => a.reduce((s, c) => s + (Number(c.amountUgx) || 0), 0);
+  const withR = costs.filter((c) => c.efrisNo), noR = costs.filter((c) => !c.efrisNo);
+  const outVat = vatOf(sum(sales), ti), inVat = vatOf(sum(withR), ti), due = outVat - inVat;
+  const mName = (m) => new Date(m + "-15").toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const dueBy = (() => { const [y, m] = ym.split("-").map(Number); return new Date(y, m, 15).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })();
+  const needTin = []; sales.forEach((c) => { const cl = clientOfRow(c); if (cl && !cl.taxId && !needTin.includes(cl)) needTin.push(cl); });
+  const main = !DATA.me.assistant;
+  const bizNames = ti.tags.map((t) => BIZ_LABEL[t] || t).join(", ");
+  const costLine = (c) => `<div class="tax-line"><div class="tax-l"><b>${esc(catLabel(c.tag, c.category) || "Spending")}${c.payeeName ? " · " + esc(c.payeeName) : ""}</b><span class="muted">${fmtDay(c.date)} · ${esc(BIZ_LABEL[c.tag] || "")}${c.fromAdvance ? " · " + esc(c.fromAdvance) : ""}</span></div><b>${ugx(c.amountUgx)}</b>
+    <form data-form="set-efris" class="tax-fix" data-ref="${c.useId ? "use" : "cash"}" data-id="${esc(c.useId || c.id)}" data-float="${esc(c.floatId || "")}"><input class="field" name="efrisNo" inputmode="numeric" placeholder="EFRIS FDN" required autocomplete="off" /><input class="field" name="supplierTin" inputmode="numeric" placeholder="Supplier TIN" autocomplete="off" /><button class="btn btn-primary btn-sm">Add</button></form></div>`;
+  return `
+    <h1>Money · Tax</h1>
+    ${!ti.tin ? `<div class="card item tax-setup flash"><b>Add the company TIN</b><span class="muted">Needed on every EFRIS invoice</span><a class="btn btn-primary btn-sm" href="#taxSettings" onclick="document.getElementById('taxSettings').open=true">Add TIN</a></div>` : ""}
+    <div class="flow-filters"><select class="field js-taxm" aria-label="Month">${months.map((m) => `<option value="${m}" ${m === ym ? "selected" : ""}>${mName(m)}</option>`).join("")}</select>
+      <button type="button" class="btn btn-ghost js-taxcsv">⬇ CSV for accountant</button></div>
+    <p class="muted tax-sub">${esc(ti.company)}${ti.tin ? " · TIN " + esc(ti.tin) : ""} · ${esc(bizNames)}${ti.vat ? ` · VAT ${ti.vatRate}% ${ti.inclusive ? "inside prices" : "on top of prices"}` : " · not VAT registered"}</p>
+    <div class="grid g4 kpi4" style="margin-top:8px">
+      <div class="card kpi in-kpi"><span class="eyebrow">Sales</span><b>${ugx(sum(sales))}</b></div>
+      <div class="card kpi"><span class="eyebrow">VAT on sales</span><b>${ugx(outVat)}</b></div>
+      <div class="card kpi steel"><span class="eyebrow">VAT on costs (claimable)</span><b>${ugx(inVat)}</b></div>
+      <div class="card kpi gold"><span class="eyebrow">VAT to pay · by ${dueBy}</span><b class="${due < 0 ? "pos" : ""}">${due < 0 ? "Credit " : ""}${ugx(Math.abs(due))}</b></div>
+    </div>
+    <div class="card item tax-receipts">
+      <div class="row keep" style="align-items:center"><b>Costs with an EFRIS e-receipt</b><b>${costs.length ? Math.round((withR.length / costs.length) * 100) : 100}%</b></div>
+      <span class="bar" style="margin-top:8px"><i class="pos-bar" style="width:${costs.length ? Math.round((withR.length / costs.length) * 100) : 100}%"></i></span>
+      <div class="tax-split"><span><b>${ugx(sum(withR))}</b> with e-receipt · ${withR.length}</span><span class="neg"><b>${ugx(sum(noR))}</b> missing · ${noR.length}</span></div>
+      ${noR.length ? `<p class="muted" style="margin:6px 0 0">Costs without an e-receipt can't be deducted for income tax, and their VAT can't be claimed.</p>` : ""}
+    </div>
+    ${noR.length ? `<h2 style="margin:18px 0 0">Missing e-receipts <span class="attn-n big">${noR.length}</span></h2><div class="card item tax-list">${noR.slice(0, 40).map(costLine).join("")}${noR.length > 40 ? `<p class="muted">+${noR.length - 40} more</p>` : ""}</div>` : ""}
+    ${needTin.length ? `<h2 style="margin:18px 0 0">Clients without a TIN</h2><div class="card item tax-list">${needTin.map((cl) => `<div class="tax-line"><div class="tax-l"><b>${esc(cl.name)}</b><span class="muted">${esc(cl.phone || "")}</span></div><form data-form="client-tax" class="tax-fix tax-fix2" data-id="${esc(cl.id)}"><input class="field" name="taxId" placeholder="TIN or NIN" required autocomplete="off" /><button class="btn btn-primary btn-sm">Save</button></form></div>`).join("")}</div>` : ""}
+    <details class="card team-row" id="taxSettings" style="margin-top:16px">
+      <summary><div class="avatar">⚙</div><div style="flex:1"><b>Company tax details</b></div></summary>
+      ${main ? `<form data-form="taxinfo" style="margin-top:12px">
+        <div class="grid g2">
+          <label class="lbl">Company name<input class="field" name="company" value="${esc(ti.company)}" required /></label>
+          <label class="lbl">Company TIN<input class="field" name="tin" inputmode="numeric" value="${esc(ti.tin)}" placeholder="10 digits" /></label>
+          <label class="lbl">VAT registered<select class="field" name="vat"><option value="1" ${ti.vat ? "selected" : ""}>Yes</option><option value="0" ${ti.vat ? "" : "selected"}>No</option></select></label>
+          <label class="lbl">VAT rate (%)<input class="field" name="vatRate" inputmode="decimal" value="${ti.vatRate}" /></label>
+          <label class="lbl">Prices to clients<select class="field" name="inclusive"><option value="1" ${ti.inclusive ? "selected" : ""}>Include VAT</option><option value="0" ${ti.inclusive ? "" : "selected"}>Plus VAT</option></select></label>
+        </div>
+        <p class="form-step">Businesses under this TIN</p>
+        <div class="check-row">${[["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([k, l]) => `<label class="check"><input type="checkbox" name="tag" value="${k}" ${ti.tags.includes(k) ? "checked" : ""} /> ${l}</label>`).join("")}</div>
+        <button class="btn btn-primary wide" style="margin-top:12px">Save</button>
+      </form>` : `<p class="muted" style="margin-top:10px">Only the main admin can change these.</p>`}
+    </details>
+    <p class="muted" style="margin-top:12px">Estimates for your records and your accountant. URA's figures on the filed return are final.</p>`;
+}
+function taxCsv() {
+  const ym = sessionStorage.getItem("taxMonth") || new Date().toISOString().slice(0, 7);
+  const { ti, sales, costs } = taxMonthRows(ym);
+  const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const lines = [["Date", "Business", "Type", "Description", "Client / supplier", "Client TIN / Supplier TIN", "EFRIS receipt no.", "Amount (UGX)", "VAT (UGX)"]];
+  sales.forEach((c) => { const cl = clientOfRow(c); lines.push([c.date, BIZ_LABEL[c.tag] || c.tag, "Sale", c.note || "Income", cl ? cl.name : c.payeeName || "", cl ? cl.taxId || "" : "", "", c.amountUgx, vatOf(c.amountUgx, ti)]); });
+  costs.forEach((c) => lines.push([c.date, BIZ_LABEL[c.tag] || c.tag, "Cost", catLabel(c.tag, c.category) || c.note || "", c.payeeName || "", c.supplierTin || "", c.efrisNo || "", c.amountUgx, c.efrisNo ? vatOf(c.amountUgx, ti) : 0]));
+  const blob = new Blob([lines.map((r) => r.map(q).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `conacrew-tax-${ym}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 function moneyNeedsYou() {
   const reqs = ["trucking", "sugarcane", "passion"].reduce((s, t) => s + openRequests(t).length, 0), unc = advUnconfirmed(), pay = payWaiting();
@@ -3684,6 +3773,7 @@ function driverFuelView() {
         <label class="lbl">Station<input class="field" name="station" placeholder="e.g. Shell Mukono" /></label>
         <label class="lbl">Receipt photo<input class="field use-photo" type="file" accept="image/*" capture="environment" /></label>
       </div>
+      ${efrisFields()}
       <div class="thumbs use-preview"></div>
       <label class="lbl" style="margin-top:10px">Paid from<select class="field" name="floatId">
         ${open.map((f, i) => `<option value="${esc(f.id)}" ${i === 0 ? "selected" : ""}>Advance ${fmtDay(f.date)} · ${ugx(advLeft(f).left)} left</option>`).join("")}
@@ -4059,6 +4149,8 @@ function bind() {
   document.querySelectorAll(".js-fuelok").forEach((b) => { b.onclick = () => act("save_truck", { id: b.dataset.id, fuelCheckedAt: todayYmd() }); });
   document.querySelectorAll(".js-alladv").forEach((l) => { l.onclick = () => { sessionStorage.setItem("advBiz", l.dataset.biz); sessionStorage.setItem("advSt", "all"); }; });
   document.querySelectorAll(".js-advf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
+  document.querySelectorAll(".js-taxm").forEach((el) => { el.onchange = () => { sessionStorage.setItem("taxMonth", el.value); route(); }; });
+  document.querySelectorAll(".js-taxcsv").forEach((b) => { b.onclick = taxCsv; });
   document.querySelectorAll(".js-lpf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
   document.querySelectorAll("[data-lpset]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("lpSt", b.dataset.lpset); route(); }; });
   document.querySelectorAll(".js-lpopen").forEach((a) => { a.onclick = () => { sessionStorage.setItem("lpOpen", a.dataset.id); sessionStorage.setItem("lpPer", "all"); sessionStorage.setItem("lpTruck", ""); sessionStorage.setItem("lpSt", ""); }; });
@@ -4304,6 +4396,14 @@ function bind() {
         try { await act("save_doc", { ...fd, tag: form.dataset.tag, file, fileName: inp.dataset.name || "", mime: inp.dataset.mime || "" }); } catch (err) { return; }
       } else if (kind === "finalize-request") {
         try { await act("finalize_request", { id: form.dataset.id }); } catch (err) { return; }
+      } else if (kind === "taxinfo") {
+        try { await act("save_taxinfo", { ...fd, tags: [...form.querySelectorAll("[name=tag]:checked")].map((x) => x.value).join(",") }); } catch (err) { return; }
+        toast("Tax details saved");
+      } else if (kind === "client-tax") {
+        try { await act("save_client_tax", { ...fd, id: form.dataset.id }); } catch (err) { return; }
+      } else if (kind === "set-efris") {
+        try { await act("set_efris", { ...fd, ref: form.dataset.ref, id: form.dataset.id, floatId: form.dataset.float }); } catch (err) { return; }
+        toast("E-receipt added");
       } else if (kind === "load-costs") {
         try { await act("save_load_costs", { ...fd, id: form.dataset.id }); } catch (err) { return; }
         sessionStorage.setItem("lpOpen", form.dataset.id);
