@@ -526,6 +526,35 @@ function spendFromAdvanceOrCash(db, user, body, tag, refs) {
   return { cash: row };
 }
 
+// Where a work cost is paid from. Three choices, and each shilling is counted once:
+//   "adv:<floatId>"            advance still on hand  -> becomes advance spending (no new money out)
+//   "use:<floatId>:<usageId>"  spending already recorded from an advance but not yet given to a block/buy/load -> assigned only
+//   ""                         cash on hand / office  -> new money out
+function unassignedOf(u) { return u.blockId || u.caneBuyId || u.jobId ? 0 : Math.max(0, (Number(u.amountUgx) || 0) - (Number(u.assignedUgx) || 0)); }
+function payFromSource(db, user, body, tag, amount, link, spend) {
+  const src = String(body.source || (body.floatId ? "adv:" + body.floatId : ""));
+  if (src.startsWith("use:")) {
+    const [, fid, uidv] = src.split(":");
+    const fl = (db.disbursements || []).find((x) => x.id === fid);
+    if (!fl || !ownsFloat(fl, user) || (fl.tag || "trucking") !== tag) throw new Error("Advance not found");
+    const u = (fl.usages || []).find((x) => x.id === uidv);
+    if (!u) throw new Error("Spending not found");
+    const free = unassignedOf(u);
+    if (amount > free + 0.5) throw new Error("Only UGX " + free.toLocaleString("en-UG") + " of that spending is still unassigned");
+    u.assignedUgx = (Number(u.assignedUgx) || 0) + amount;
+    (u.assigned = u.assigned || []).push({ ...link, amountUgx: amount, at: todayStr() });
+    return { floatId: fl.id, usageId: u.id, assigned: true };
+  }
+  if (src.startsWith("adv:")) {
+    const fl = (db.disbursements || []).find((x) => x.id === src.slice(4));
+    if (!fl || !ownsFloat(fl, user) || (fl.tag || "trucking") !== tag) throw new Error("Advance not found");
+    if (fl.status === "sent" && user.role !== "admin") { fl.status = "received"; fl.receivedAt = todayStr(); }
+    const use = addFloatUse(db, fl, { ...spend, amountUgx: amount, ...link }, user);
+    return { floatId: fl.id, usageId: use && use.id };
+  }
+  const done = spendFromAdvanceOrCash(db, user, { ...spend, floatId: "", amountUgx: amount }, tag, link);
+  return { cashId: done.cash && done.cash.id };
+}
 // Spending recorded against an advance. It explains where the advance went; the money
 // already left the business when the advance was sent, so no new cash line is added.
 function addFloatUse(db, fl, body, user) {
@@ -541,6 +570,7 @@ function addFloatUse(db, fl, body, user) {
     id: uid("fu"), amountUgx: amount, category: body.category || "other",
     note: String(body.note || "").trim(), date: dayOf(body),
     photo: body.photo || "", litres: Number(body.litres) || 0, ...payee,
+    ...(body.blockId ? { blockId: body.blockId } : {}), ...(body.caneBuyId ? { caneBuyId: body.caneBuyId } : {}), ...(body.jobId ? { jobId: body.jobId } : {}),
   };
   fl.usages = fl.usages || [];
   fl.usages.unshift(use);
@@ -1259,10 +1289,11 @@ function applyAction(db, user, body) {
     if (buy.sellerPaid) throw new Error("Seller already paid");
     const seller = (db.sellers || []).find((x) => x.id === buy.sellerId);
     const sp = { amountUgx: buy.buyPriceUgx, category: "buy", payeeName: (seller && seller.name) || "Seller", method: body.method || (seller && seller.phone ? "mtn_momo" : "cash"), reference: String(body.reference || "").slice(0, 60), date: body.date || "", payeePhone: (seller && seller.phone) || "", note: "Paid seller · " + (buy.location || buy.id), floatId: body.floatId || "" };
-    const done = spendFromAdvanceOrCash(db, user, sp, "sugarcane", { caneBuyId: buy.id, refId: buy.id });
+    const how = payFromSource(db, user, body, "sugarcane", sp.amountUgx, { caneBuyId: buy.id }, { ...sp, refId: buy.id });
+    const done = { cash: how.cashId ? (db.cash || []).find((c) => c.id === how.cashId) : null };
     buy.sellerPaid = true;
     buy.payMethod = sp.method;
-    buy.paidFromFloat = body.floatId || "";
+    buy.paidFromFloat = how.floatId || "";
     buy.status = buy.millPaid ? "settled" : "seller_paid";
     if (done.cash) done.cash.note = "Paid seller · " + (seller ? seller.name : buy.id);
   }
@@ -1513,30 +1544,12 @@ function applyAction(db, user, body) {
       note: body.note || "",
       by: user.name,
     };
-    if (rec.costUgx > 0 && body.floatId) {
-      // Labour/inputs paid from the manager's advance: part of that advance, not new money out.
-      const fl = (db.disbursements || []).find((x) => x.id === body.floatId);
-      if (!fl || !ownsFloat(fl, user)) throw new Error("Advance not found");
-      addFloatUse(db, fl, { amountUgx: rec.costUgx, category: kind, payeeName: body.payeeName || "Farm workers", method: body.method || "cash", payeePhone: body.payeePhone || "", note: (rec.note || kind) + " · Block " + (rec.blockId || ""), photo: body.photo || "" }, user);
-      rec.floatId = fl.id;
+    if (rec.costUgx > 0) {
+      const how = payFromSource(db, user, body, "passion", rec.costUgx, { blockId: rec.blockId },
+        { category: kind, payeeName: body.payeeName || "Farm workers", method: body.method || "cash", payeePhone: body.payeePhone || "", note: (rec.note || kind) + " · Block " + (rec.blockId || ""), photo: body.photo || "", date: rec.date });
+      Object.assign(rec, { floatId: how.floatId || "", usageId: how.usageId || "", cashId: how.cashId || "", paidFrom: how.assigned ? "spent_advance" : how.floatId ? "advance" : "cash" });
     }
     db.farmWorks.unshift(rec);
-    if (rec.costUgx > 0 && !body.floatId) {
-      db.cash.unshift({
-        id: uid("k"),
-        date: rec.date,
-        direction: "out",
-        amountUgx: rec.costUgx,
-        tag: "passion",
-        method: body.method || "cash",
-        category: kind,
-        note: rec.kind + " " + rec.blockId,
-        refId: rec.id,
-        blockId: rec.blockId,
-        source: user.role === "admin" ? "office" : "cash_on_hand",
-        payeeName: body.payeeName || "",
-      });
-    }
   }
 
   if (action === "create_fruit_sale") {

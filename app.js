@@ -1917,7 +1917,7 @@ function viewCaneId(id) {
       ${steps.map((st) => `<button class="chip ${b.status === st ? "on" : ""}" data-act="update_cane_buy" data-id="${b.id}" data-status="${st}">${label(st)}</button>`).join("")}
     </div>
     ${!b.millTonnes ? `<form class="card item" data-form="mill" data-id="${b.id}" style="margin-top:14px"><div class="grid g2"><input class="field" name="millTonnes" required placeholder="Tonnes" /><input class="field" name="millPriceUgx" placeholder="${m?.priceUgxPerTonne || "UGX/t"}" /></div><button class="btn btn-primary wide" style="margin-top:10px">Save weight</button></form>` : ""}
-    ${!b.sellerPaid ? (DATA.me.role === "admin" ? `<p class="muted" style="margin-top:10px"><span class="badge red">Seller not paid</span> · pay on <a href="#money-owed" class="js-owedpay">Money › Owed</a></p>` : `<form class="card item" data-form="pay-seller" data-id="${b.id}" style="margin-top:10px"><b>Pay seller ${ugx(b.buyPriceUgx)}</b>${fundSelect("sugarcane", true, b.buyPriceUgx)}<button class="btn btn-primary wide" style="margin-top:10px">Pay seller</button></form>`) : ""}`;
+    ${!b.sellerPaid ? (DATA.me.role === "admin" ? `<p class="muted" style="margin-top:10px"><span class="badge red">Seller not paid</span> · pay on <a href="#money-owed" class="js-owedpay">Money › Owed</a></p>` : `<form class="card item" data-form="pay-seller" data-id="${b.id}" style="margin-top:10px"><b>Pay seller ${ugx(b.buyPriceUgx)}</b>${paySource("sugarcane", { noPayee: true, need: b.buyPriceUgx, cat: "buy" })}<button class="btn btn-primary wide" style="margin-top:10px">Pay seller</button></form>`) : ""}`;
 }
 
 
@@ -2050,6 +2050,8 @@ function viewField() {
       <div class="card kpi gold"><span class="eyebrow">${meta[1]} cost</span><b>${ugx(cost)}</b></div>
       ${kind === "harvest" ? `<div class="card kpi passion"><span class="eyebrow">Picked</span><b>${kg} kg</b></div>` : ""}
     </div>
+    ${(() => { const free = (DATA.disbursements || []).filter((f) => f.tag === "passion").reduce((a, f) => a + (f.usages || []).reduce((b, u) => b + unassignedOf(u), 0), 0), onHand = (DATA.disbursements || []).filter((f) => f.tag === "passion" && f.status !== "closed" && f.status !== "sent").reduce((a, f) => a + advLeft(f).left, 0);
+      return free || onHand ? `<div class="card item adv-hint"><b>Advance money for the blocks</b><div class="muted">${free ? ugx(free) + " already spent, not yet given to blocks" : ""}${free && onHand ? " · " : ""}${onHand ? ugx(onHand) + " still on hand" : ""}. Pick it under “Paid from” — no new money is added.</div></div>` : ""; })()}
     <form class="card item" data-form="farm-work" style="margin-top:14px">
       <p class="eyebrow">${meta[1]}</p>
       <input type="hidden" name="kind" value="${kind}" />
@@ -2061,7 +2063,7 @@ function viewField() {
         <label class="lbl">Date<input class="field" name="date" type="date" value="${todayYmd()}" max="${todayYmd()}" /></label>
         <label class="lbl">Cost (UGX)<input class="field" name="costUgx" inputmode="numeric" placeholder="0" /></label>
       </div>
-      ${fundSelect("passion")}
+      ${paySource("passion", { cat: kind })}
       <div style="margin-top:10px">${extra}</div>
       <button class="btn btn-passion wide" style="margin-top:10px">Save ${meta[1].toLowerCase()}</button>
     </form>
@@ -2069,7 +2071,7 @@ function viewField() {
       <table>
         <thead><tr><th>Date</th><th>Block</th><th>${kind === "harvest" ? "Kg" : meta[2]}</th><th>Cost</th></tr></thead>
         <tbody>
-          ${rows.map((w) => `<tr><td>${w.date}</td><td>${w.blockId}</td><td>${kind === "harvest" ? (w.kg || 0) + " kg" : (w.note || "—")}</td><td>${ugx(w.costUgx)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No ${meta[1].toLowerCase()} yet</td></tr>`}
+          ${rows.map((w) => `<tr><td>${w.date}</td><td>${w.blockId}</td><td>${kind === "harvest" ? (w.kg || 0) + " kg" : (w.note || "—")}</td><td>${ugx(w.costUgx)}${w.costUgx ? `<div class="muted">${w.paidFrom === "spent_advance" || w.paidFrom === "advance" || w.floatId ? "from advance" : "new money"}</div>` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No ${meta[1].toLowerCase()} yet</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -2665,9 +2667,9 @@ function openSellerPaid(id) {
   const s = (DATA.sellers || []).find((x) => x.id === b.sellerId);
   openSheet({
     title: "Pay cane seller", sub: esc((s ? s.name + " · " : "") + (b.location || "")),
-    body: payFields(b.buyPriceUgx, { fixed: true, methodLabel: "Paid with", method: s && s.phone ? "mtn_momo" : "cash" }),
+    body: payFields(b.buyPriceUgx, { fixed: true, methodLabel: "Paid with", method: s && s.phone ? "mtn_momo" : "cash" }) + paySource("sugarcane", { noPayee: true, need: b.buyPriceUgx, cat: "buy" }),
     submit: "Save payment",
-    onSubmit: (fd) => act("pay_seller", { id: b.id, method: fd.method, reference: fd.reference, date: fd.date }),
+    onSubmit: (fd) => act("pay_seller", { id: b.id, method: fd.method, reference: fd.reference, date: fd.date, source: fd.source || "" }),
   });
 }
 const METHOD_LABEL = { cash: "Cash", mtn_momo: "MTN MoMo", airtel_money: "Airtel Money", bank: "Bank transfer", mobile_money: "Mobile money", invoice: "Invoice" };
@@ -3275,6 +3277,24 @@ function viewPassionSpend() {
 }
 function viewFleetSpend() { return viewFundsAdmin("trucking"); }
 // "Pay from" select for manager forms that cost money (paying a seller, farm work)
+// Paid from: advance on hand · spending already recorded from an advance (assign it, no new money) · new money
+function unassignedOf(u) { return u.blockId || u.caneBuyId || u.jobId ? 0 : Math.max(0, (Number(u.amountUgx) || 0) - (Number(u.assignedUgx) || 0)); }
+function paySource(tag, opts = {}) {
+  const admin = DATA.me.role === "admin";
+  const fl = (DATA.disbursements || []).filter((f) => (f.tag || "trucking") === tag && f.status !== "closed");
+  const holder = (f) => { const p = recipientOf(f); return p ? String(p.name || "").split(" ")[0] : ""; };
+  const onHand = fl.filter((f) => f.status !== "sent" && advLeft(f).left > 0 && (!opts.need || advLeft(f).left >= opts.need)).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const spent = fl.flatMap((f) => (f.usages || []).filter((u) => unassignedOf(u) > 0 && (!opts.need || unassignedOf(u) >= opts.need)).map((u) => ({ f, u, free: unassignedOf(u) })));
+  const match = (k) => opts.cat && String(k || "").slice(0, 4) === String(opts.cat).slice(0, 4);
+  const best = spent.find((x) => match(x.u.category)) ? "use:" + spent.find((x) => match(x.u.category)).f.id + ":" + spent.find((x) => match(x.u.category)).u.id : onHand.length ? "adv:" + onHand[0].id : spent.length ? "use:" + spent[0].f.id + ":" + spent[0].u.id : "";
+  const o = (v, label, left) => `<option value="${esc(v)}" data-left="${left || 0}" ${v === best ? "selected" : ""}>${label}</option>`;
+  return `<label class="lbl" style="margin-top:10px">Paid from<select class="field js-paysource" name="source">
+      ${spent.length ? `<optgroup label="Already spent from an advance — no new money">${spent.map(({ f, u, free }) => o("use:" + f.id + ":" + u.id, `${esc(catLabel(tag, u.category) || "Spending")} · ${fmtDay(u.date)}${admin && holder(f) ? " · " + esc(holder(f)) : ""} · ${ugx(free)} to assign`, free)).join("")}</optgroup>` : ""}
+      ${onHand.length ? `<optgroup label="Advance on hand">${onHand.map((f) => o("adv:" + f.id, `Advance ${fmtDay(f.date)}${admin && holder(f) ? " · " + esc(holder(f)) : ""} · ${ugx(advLeft(f).left)} left`, advLeft(f).left)).join("")}</optgroup>` : ""}
+      ${o("", admin ? "Office pays now (new money out)" : "Cash on hand (new money out)")}
+    </select></label>
+    ${opts.noPayee ? "" : `<label class="lbl" style="margin-top:10px">Paid to<input class="field" name="payeeName" placeholder="e.g. 5 workers / supplier name" /></label>`}`;
+}
 function fundSelect(tag, noPayee, need) {
   if (!DATA || DATA.me.role === "admin") return "";
   // only offer office money that can cover the payment; the fullest first
@@ -4507,7 +4527,7 @@ function bind() {
       } else if (kind === "direct-spend") {
         try { await act("log_direct_spend", fd); } catch (err) { return; }
       } else if (kind === "pay-seller") {
-        try { await act("pay_seller", { id: form.dataset.id, floatId: fd.floatId || "" }); } catch (err) { return; }
+        try { await act("pay_seller", { id: form.dataset.id, source: fd.source || "" }); } catch (err) { return; }
       } else if (kind === "doc") {
         const inp = form.querySelector(".js-doc-file");
         let file = inp.dataset.src || "";

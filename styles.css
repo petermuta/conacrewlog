@@ -1166,3 +1166,4 @@ body::after { transform: translateZ(0); }
 tr.js-editsale { cursor: pointer; } tr.js-editsale:active td { background: rgba(242,138,31,.1); }
 .pay-line.paid { flex-wrap: wrap; }
 .pl-acts { flex-basis: 100%; display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.adv-hint{margin-top:12px;border-left:3px solid var(--good)!important}
