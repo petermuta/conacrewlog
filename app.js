@@ -701,6 +701,8 @@ function viewBizProfit(tag) {
     <div class="card item" style="margin-top:10px">${facts([...ins.map(([k, v]) => [k, ugx(v)]), ...outs.map(([k, v]) => [k, "− " + ugx(v)]), [profit < 0 ? "Loss" : "Profit", money(profit) + (tin ? ` <span class="muted">· ${Math.abs(Math.round((profit / tin) * 100))}% of earnings</span>` : tout && !tin ? ` <span class="muted">· nothing earned yet</span>` : "")], ...extra.filter(Boolean)])}</div>`;
 }
 
+// Cane standard rates: mill price and cutting cost per tonne (both can be changed on a sale)
+const CANE_PRICE_T = 115000, CANE_CUT_T = 12000;
 function viewDrivers() {
   const today = todayYmd();
   const card = (d) => {
@@ -1918,16 +1920,16 @@ function viewCaneSell() {
       <label class="lbl js-new-mill" style="margin-top:10px" ${mills.length ? "hidden" : ""}>New mill name<input class="field" name="millName" placeholder="e.g. Kakira Sugar" /></label>
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Tonnes<input class="field" name="tonnes" id="saleT" required inputmode="decimal" placeholder="0" /></label>
-        <label class="lbl">Price per tonne (UGX)<input class="field" name="pricePerTonne" id="saleP" required inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Price per tonne (UGX)<input class="field" name="pricePerTonne" id="saleP" required inputmode="numeric" value="${CANE_PRICE_T}" /></label>
       </div>
       <p class="sum-line" id="saleSum">Total UGX 0</p>
       <div class="grid g2">
         <label class="lbl">Mill paid by<select class="field" name="method">${methodOptions("bank")}</select></label>
         <label class="lbl">For cane buy <span class="muted">(optional)</span><select class="field" name="buyId"><option value="">— Not linked —</option>${(DATA.caneBuys || []).map((b) => `<option value="${b.id}">${esc(b.location || b.id)} · ${b.acres ? b.acres + " ac" : (b.tripsAgreed || 0) + " trips"}</option>`).join("")}</select></label>
       </div>
-      <p class="form-step">Costs for this sale <span class="muted">(optional)</span></p>
+      <p class="form-step">Costs for this sale</p>
       <div class="grid g3">
-        <label class="lbl">Cutting cost (UGX)<input class="field" name="cuttingCostUgx" inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Cutting cost (UGX) <span class="muted">· ${ugx(CANE_CUT_T)}/t</span><input class="field" name="cuttingCostUgx" id="saleCut" inputmode="numeric" placeholder="Worked out from tonnes" /></label>
         <label class="lbl">Loading cost (UGX)<input class="field" name="loadingCostUgx" inputmode="numeric" placeholder="0" /></label>
         <label class="lbl">Transport cost (UGX)<input class="field" name="transportUgx" inputmode="numeric" placeholder="0" /></label>
       </div>
@@ -1936,9 +1938,9 @@ function viewCaneSell() {
     </form>
     <div class="card" style="margin-top:14px;overflow:auto">
       <table>
-        <thead><tr><th>Date</th><th>t</th><th>UGX/t</th><th>Total</th></tr></thead>
+        <thead><tr><th>Date</th><th>t</th><th>Total</th><th>Costs</th><th>Net</th></tr></thead>
         <tbody>
-          ${sales.map((x)=>`<tr><td>${x.date}<div class="muted">${x.note||""}</div></td><td>${x.tonnes}</td><td>${ugx(x.pricePerTonne)}</td><td><b>${ugx(x.amountUgx)}</b></td></tr>`).join("") || `<tr><td colspan="4" class="muted">None</td></tr>`}
+          ${sales.map((x)=>{ const c = (x.cuttingCostUgx||0)+(x.loadingCostUgx||0)+(x.transportUgx||0); return `<tr><td>${fmtDay(x.date)}<div class="muted">${ugx(x.pricePerTonne)}/t${x.note ? " · " + esc(x.note) : ""}</div></td><td>${x.tonnes}</td><td><b>${ugx(x.amountUgx)}</b></td><td>${c ? ugx(c) : "—"}<div class="muted">${x.cuttingCostUgx ? "cut " + ugx(x.cuttingCostUgx) : ""}</div></td><td><b class="${x.amountUgx - c < 0 ? "neg" : "pos"}">${ugx(x.amountUgx - c)}</b></td></tr>`; }).join("") || `<tr><td colspan="5" class="muted">None</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -4571,11 +4573,15 @@ function bind() {
   const saleT = $("#saleT");
   const saleP = $("#saleP");
   const saleSum = $("#saleSum");
+  const saleCut = $("#saleCut");
+  if (saleCut) saleCut.addEventListener("input", () => { saleCut.dataset.typed = saleCut.value ? "1" : ""; });
   const sumSale = () => {
     if (!saleSum) return;
     const t = Number(saleT && saleT.value) || 0;
-    const p = Number(saleP && saleP.value) || 0;
-    saleSum.textContent = "Total " + ugx(Math.round(t * p));
+    const p = Number(String(saleP && saleP.value).replace(/[^\d.]/g, "")) || 0;
+    const cut = Math.round(t * CANE_CUT_T);
+    if (saleCut && !saleCut.dataset.typed) saleCut.value = t ? cut : "";
+    saleSum.innerHTML = `Total <b>${ugx(Math.round(t * p))}</b>${t ? ` · cutting ${ugx(saleCut && saleCut.value ? Number(saleCut.value) : cut)}` : ""}`;
   };
   if (saleT) saleT.oninput = sumSale;
   if (saleP) saleP.oninput = sumSale;
