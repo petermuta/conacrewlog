@@ -497,9 +497,9 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
-    cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
+    cane_manager: ["update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
   };
   return (map[role] || []).includes(action);
@@ -1267,6 +1267,24 @@ function applyAction(db, user, body) {
     if (done.cash) done.cash.note = "Paid seller · " + (seller ? seller.name : buy.id);
   }
 
+  if (action === "update_cane_sale") {
+    const sale = (db.caneSales || []).find((x) => x.id === body.id);
+    if (!sale) throw new Error("Sale not found");
+    if (user.role === "cane_manager" && sale.byUserId && sale.byUserId !== user.id) throw new Error("No access");
+    const num = (v) => Math.max(0, Number(String(v == null ? "" : v).replace(/[^\d.]/g, "")) || 0);
+    const tonnes = num(body.tonnes), price = num(body.pricePerTonne);
+    if (tonnes <= 0 || price <= 0) throw new Error("Enter tonnes and price");
+    Object.assign(sale, { date: body.date || sale.date, tonnes, pricePerTonne: price, amountUgx: Math.round(tonnes * price), method: body.method || sale.method, note: body.note != null ? String(body.note) : sale.note,
+      cuttingCostUgx: num(body.cuttingCostUgx), loadingCostUgx: num(body.loadingCostUgx), transportUgx: num(body.transportUgx), fuelUgx: num(body.fuelUgx), editedBy: user.name, editedAt: todayStr() });
+    // keep the money-in line and the manager's pay line in step
+    const cash = (db.cash || []).find((c) => c.refId === sale.id && c.direction === "in");
+    if (cash) Object.assign(cash, { amountUgx: sale.amountUgx, date: sale.date, method: sale.method, note: "Cane sale " + sale.tonnes + " t" });
+    const stub = (db.payStubs || []).find((x) => x.refId === sale.id && x.status !== "paid");
+    if (stub) Object.assign(stub, { refLabel: sale.tonnes + " t", tripIncome: sale.amountUgx });
+    const buy = sale.buyId && (db.caneBuys || []).find((b) => b.id === sale.buyId);
+    if (buy) Object.assign(buy, { millTonnes: tonnes, millPriceUgx: price, millSaleUgx: sale.amountUgx, cuttingCostUgx: sale.cuttingCostUgx, loadingCostUgx: sale.loadingCostUgx, fuelUgx: sale.transportUgx + sale.fuelUgx });
+    return;
+  }
   if (action === "create_cane_sale") {
     if (!db.caneSales) db.caneSales = [];
     const tonnes = Number(body.tonnes) || 0;
@@ -1298,6 +1316,7 @@ function applyAction(db, user, body) {
       cuttingCostUgx: Number(body.cuttingCostUgx) || 0,
       loadingCostUgx: Number(body.loadingCostUgx) || 0,
       transportUgx: Number(body.transportUgx) || 0,
+      fuelUgx: Number(body.fuelUgx) || 0,
     };
     db.caneSales.unshift(sale);
     const forBuy = sale.buyId && db.caneBuys.find((b) => b.id === sale.buyId);

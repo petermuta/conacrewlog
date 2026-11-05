@@ -701,6 +701,22 @@ function viewBizProfit(tag) {
     <div class="card item" style="margin-top:10px">${facts([...ins.map(([k, v]) => [k, ugx(v)]), ...outs.map(([k, v]) => [k, "− " + ugx(v)]), [profit < 0 ? "Loss" : "Profit", money(profit) + (tin ? ` <span class="muted">· ${Math.abs(Math.round((profit / tin) * 100))}% of earnings</span>` : tout && !tin ? ` <span class="muted">· nothing earned yet</span>` : "")], ...extra.filter(Boolean)])}</div>`;
 }
 
+function saleCosts(x) { return (x.cuttingCostUgx || 0) + (x.loadingCostUgx || 0) + (x.transportUgx || 0) + (x.fuelUgx || 0); }
+function openEditSale(id) {
+  const x = (DATA.caneSales || []).find((s) => s.id === id); if (!x) return;
+  const f = (name, label, v, extra) => `<label class="lbl">${label}<input class="field" name="${name}" inputmode="${name === "tonnes" ? "decimal" : "numeric"}" value="${v || ""}" ${extra || ""} /></label>`;
+  openSheet({ title: "Edit sale", sub: esc(((DATA.mills || []).find((m) => m.id === x.millId) || {}).name || "Mill") + " · " + fmtDay(x.date),
+    body: `<div class="grid g2">${f("tonnes", "Tonnes", x.tonnes, "required")}${f("pricePerTonne", "Price per tonne (UGX)", x.pricePerTonne, "required")}</div>
+      <div class="grid g2" style="margin-top:10px"><label class="lbl">Sale date<input class="field" type="date" name="date" value="${esc(x.date)}" /></label><label class="lbl">Mill paid by<select class="field" name="method">${methodOptions(x.method || "bank")}</select></label></div>
+      <p class="form-step">Costs</p>
+      <div class="grid g2">${f("cuttingCostUgx", "Cutting (UGX)", x.cuttingCostUgx)}${f("loadingCostUgx", "Loading (UGX)", x.loadingCostUgx)}${f("transportUgx", "Transport (UGX)", x.transportUgx)}${f("fuelUgx", "Fuel (UGX)", x.fuelUgx)}</div>
+      <label class="lbl" style="margin-top:10px">Note<input class="field" name="note" value="${esc(x.note || "")}" /></label>`,
+    submit: "Save changes",
+    onSubmit: (fd) => act("update_cane_sale", { ...fd, id: x.id }) });
+  // cutting follows the tonnes while it is still the standard 12,000 a tonne
+  const sh = document.getElementById("sheet"), t = sh && sh.querySelector("[name=tonnes]"), c = sh && sh.querySelector("[name=cuttingCostUgx]");
+  if (t && c) { let auto = !x.cuttingCostUgx || Math.round(x.tonnes * CANE_CUT_T) === Number(x.cuttingCostUgx); c.addEventListener("input", () => { auto = false; }); t.addEventListener("input", () => { if (auto) c.value = Math.round((Number(t.value) || 0) * CANE_CUT_T) || ""; }); }
+}
 // Cane standard rates: mill price and cutting cost per tonne (both can be changed on a sale)
 const CANE_PRICE_T = 115000, CANE_CUT_T = 12000;
 function viewDrivers() {
@@ -1928,10 +1944,11 @@ function viewCaneSell() {
         <label class="lbl">For cane buy <span class="muted">(optional)</span><select class="field" name="buyId"><option value="">— Not linked —</option>${(DATA.caneBuys || []).map((b) => `<option value="${b.id}">${esc(b.location || b.id)} · ${b.acres ? b.acres + " ac" : (b.tripsAgreed || 0) + " trips"}</option>`).join("")}</select></label>
       </div>
       <p class="form-step">Costs for this sale</p>
-      <div class="grid g3">
+      <div class="grid g2">
         <label class="lbl">Cutting cost (UGX) <span class="muted">· ${ugx(CANE_CUT_T)}/t</span><input class="field" name="cuttingCostUgx" id="saleCut" inputmode="numeric" placeholder="Worked out from tonnes" /></label>
         <label class="lbl">Loading cost (UGX)<input class="field" name="loadingCostUgx" inputmode="numeric" placeholder="0" /></label>
         <label class="lbl">Transport cost (UGX)<input class="field" name="transportUgx" inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Fuel cost (UGX)<input class="field" name="fuelUgx" inputmode="numeric" placeholder="0" /></label>
       </div>
       <label class="lbl" style="margin-top:10px">Note <span class="muted">(optional)</span><input class="field" name="note" /></label>
       <button class="btn btn-primary wide" style="margin-top:14px">Save sale</button>
@@ -1940,7 +1957,7 @@ function viewCaneSell() {
       <table>
         <thead><tr><th>Date</th><th>t</th><th>Total</th><th>Costs</th><th>Net</th></tr></thead>
         <tbody>
-          ${sales.map((x)=>{ const c = (x.cuttingCostUgx||0)+(x.loadingCostUgx||0)+(x.transportUgx||0); return `<tr><td>${fmtDay(x.date)}<div class="muted">${ugx(x.pricePerTonne)}/t${x.note ? " · " + esc(x.note) : ""}</div></td><td>${x.tonnes}</td><td><b>${ugx(x.amountUgx)}</b></td><td>${c ? ugx(c) : "—"}<div class="muted">${x.cuttingCostUgx ? "cut " + ugx(x.cuttingCostUgx) : ""}</div></td><td><b class="${x.amountUgx - c < 0 ? "neg" : "pos"}">${ugx(x.amountUgx - c)}</b></td></tr>`; }).join("") || `<tr><td colspan="5" class="muted">None</td></tr>`}
+          ${sales.map((x)=>{ const c = saleCosts(x); return `<tr class="js-editsale" data-id="${esc(x.id)}" tabindex="0" title="Tap to edit"><td>${fmtDay(x.date)}<div class="muted">${ugx(x.pricePerTonne)}/t${x.note ? " · " + esc(x.note) : ""}</div></td><td>${x.tonnes}</td><td><b>${ugx(x.amountUgx)}</b></td><td>${c ? ugx(c) : "—"}<div class="muted">${x.cuttingCostUgx ? "cut " + ugx(x.cuttingCostUgx) : ""}</div></td><td><b class="${x.amountUgx - c < 0 ? "neg" : "pos"}">${ugx(x.amountUgx - c)}</b><div class="muted">Edit ›</div></td></tr>`; }).join("") || `<tr><td colspan="5" class="muted">None</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -4232,6 +4249,7 @@ function bind() {
   document.querySelectorAll(".js-owedpay").forEach((a) => { a.onclick = () => sessionStorage.setItem("owedTab", "pay"); });
   document.querySelectorAll("[data-mprof]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofBiz", b.dataset.mprof); route(); }; });
   document.querySelectorAll("[data-mproffleet]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofFleet", b.dataset.mproffleet); route(); }; });
+  document.querySelectorAll(".js-editsale").forEach((r) => { r.onclick = () => openEditSale(r.dataset.id); });
   document.querySelectorAll(".js-taxm").forEach((el) => { el.onchange = () => { sessionStorage.setItem("taxMonth", el.value); route(); }; });
   document.querySelectorAll(".js-taxcsv").forEach((b) => { b.onclick = taxCsv; });
   document.querySelectorAll(".js-lpf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
