@@ -500,8 +500,10 @@ function fleetTabs(on) {
   return tabMenu(items, on);
 }
 
+// drivers still working here (removed drivers stay in the records for their loads and pay)
+function liveDrivers() { return (DATA.drivers || []).filter((d) => !d.archived); }
 function truckForm(t) {
-  const drivers = DATA.drivers || [];
+  const drivers = liveDrivers();
   const v = t || {};
   return `<form data-form="save-truck" class="truck-form">
     ${t ? `<input type="hidden" name="id" value="${esc(t.id)}" />` : ""}
@@ -716,14 +718,17 @@ function viewDrivers() {
           <label class="lbl">Licence photo<input class="field" name="licensePhoto" type="file" accept="image/*" capture="environment" /></label>
         </div>
         <button class="btn btn-primary wide" style="margin-top:12px">Save driver</button>
-      </form></details>`;
+      </form></details>
+      ${DATA.me.assistant ? "" : `<button type="button" class="btn btn-ghost btn-sm btn-remove" style="margin-top:12px" data-act="remove_driver" data-id="${esc(d.id)}">Remove ${esc(String(d.name || "").split(" ")[0])} from the team</button>`}`;
     return foldCard(head, body);
   };
+  const gone = (DATA.drivers || []).filter((d) => d.archived);
   return `
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-drivers")}
-    <div class="list" style="margin-top:14px">${(DATA.drivers || []).map(card).join("") || `<div class="card item muted">No drivers yet.</div>`}</div>
-    <a class="btn btn-ghost btn-sm" href="#team" style="margin-top:10px">＋ Add a driver</a>`;
+    <div class="list" style="margin-top:14px">${liveDrivers().map(card).join("") || `<div class="card item muted">No drivers yet.</div>`}</div>
+    <a class="btn btn-primary btn-sm js-adddriver" href="#team" style="margin-top:10px">＋ Add a driver</a>
+    ${gone.length ? `<details class="settings" style="margin-top:16px"><summary>Removed drivers · ${gone.length}</summary>${gone.map((d) => `<div class="pay-line"><div><b>${esc(d.name)}</b><div class="muted">Removed ${fmtDay(d.removedAt)} · loads and pay kept</div></div></div>`).join("")}</details>` : ""}`;
 }
 function foldCard(head, body, cls) {
   return `<div class="card load-fold js-fold ${cls || ""}">
@@ -1268,7 +1273,7 @@ function viewLoadFromBooking(bk) {
       </dl>
       <div class="grid g2" style="margin-top:14px">
         <label class="lbl">Truck<select class="field js-bk-truck" name="truckId">${free.map(({ t, d }) => `<option value="${t.id}" data-driver="${d ? d.id : ""}" data-hp="${t.hp || 370}">${esc(t.plate)}${d ? " · " + esc(d.name) : ""}</option>`).join("")}</select></label>
-        <label class="lbl">Driver<select class="field js-bk-driver" name="driverId">${(DATA.drivers || []).map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
+        <label class="lbl">Driver<select class="field js-bk-driver" name="driverId">${liveDrivers().map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
       </div>
       <label class="lbl" style="margin-top:10px">Pickup time<input class="field" type="datetime-local" name="pickupAt" value="${at}" /></label>
       <p class="eyebrow" style="margin-top:14px">Fuel</p>
@@ -1336,7 +1341,7 @@ function viewNewJob() {
       <p class="form-step">Truck and driver</p>
       <div class="grid g2">
         <label class="lbl">Truck<select class="field js-nl-truck" name="truckId">${DATA.trucks.map((t) => { const d = DATA.drivers.find((x) => x.id === t.assignedDriverId); return `<option value="${t.id}" data-driver="${d ? d.id : ""}">${esc(t.plate)}${t.hp ? " · " + t.hp + " hp" : ""}</option>`; }).join("")}</select></label>
-        <label class="lbl">Driver<select class="field js-nl-driver" name="driverId">${DATA.drivers.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
+        <label class="lbl">Driver<select class="field js-nl-driver" name="driverId">${liveDrivers().map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
       </div>
       <p class="form-step">Price and fuel</p>
       <div class="grid g2">
@@ -2916,7 +2921,7 @@ function viewAllAdvances() {
 // people a leftover can move to: drivers and the two managers (not the person holding it)
 function moveTargets(f) {
   const out = [];
-  (DATA.drivers || []).forEach((d) => { if (d.id !== f.toDriverId) out.push(["d:" + d.id, d.name + " · driver"]); });
+  liveDrivers().forEach((d) => { if (d.id !== f.toDriverId) out.push(["d:" + d.id, d.name + " · driver"]); });
   (DATA.users || []).filter((u) => u.active !== false && ["cane_manager", "passion_manager"].includes(u.role) && u.id !== f.toUserId).forEach((u) => out.push(["u:" + u.id, u.name + " · " + (u.role === "cane_manager" ? "Cane" : "Passion")]));
   return out;
 }
@@ -2939,7 +2944,7 @@ function reqWhat(tag, r) {
 // The person who receives money for this business: the requester, the business manager, or (fleet, no request) a chosen driver.
 function fundPeople(tag) {
   const mgrRole = { sugarcane: "cane_manager", passion: "passion_manager" }[tag];
-  return tag === "trucking" ? (DATA.drivers || []) : (DATA.users || []).filter((u) => u.role === mgrRole && u.active !== false);
+  return tag === "trucking" ? liveDrivers() : (DATA.users || []).filter((u) => u.role === mgrRole && u.active !== false);
 }
 function sendForm(tag, req) {
   const people = fundPeople(tag);
@@ -3677,7 +3682,7 @@ function viewTeam() {
       <div class="card kpi steel"><span class="eyebrow">Ready to sign in</span><b>${ok}</b></div>
       <div class="card kpi ${waiting ? "attn-kpi" : ""}"><span class="eyebrow">Phones waiting</span><b>${waiting}</b></div>
     </div>
-    <details class="card team-row add" ${users.length <= 1 ? "open" : ""}>
+    <details class="card team-row add" ${users.length <= 1 || sessionStorage.getItem("openAddLogin") ? "open" : ""}>
       <summary><div class="avatar">+</div><div style="flex:1"><b>Add a login</b></div></summary>
       <form data-form="login" style="margin-top:12px">
         <div class="grid g2">
@@ -3694,7 +3699,8 @@ function viewTeam() {
         <button class="btn btn-primary wide" style="margin-top:12px">Add login</button>
       </form>
     </details>
-    <div class="list" style="margin-top:10px">${sorted.map(row).join("")}</div>
+    <div class="list" style="margin-top:10px">${sorted.filter((u) => !u.removedAt).map(row).join("")}</div>
+    ${sorted.some((u) => u.removedAt) ? `<details class="settings" style="margin-top:10px"><summary>Removed · ${sorted.filter((u) => u.removedAt).length}</summary>${sorted.filter((u) => u.removedAt).map((u) => `<div class="pay-line"><div><b>${esc(u.name)}</b><div class="muted">${ROLE_NAMES[u.role] || u.role} · removed ${fmtDay(u.removedAt)}</div></div></div>`).join("")}</details>` : ""}
     <h2 style="margin:22px 0 0">Sign-in history</h2>
     <div class="card" style="padding:4px 14px;margin-top:10px">
       ${log.length ? log.slice(0, 40).map((l) => { const t = LOG_TEXT[l.result] || ["blue", label(l.result)]; return `<div class="pay-line"><div><b>${esc(l.name || "—")}</b><div class="muted">${whenShort(l.at)} · ${esc(l.device || "")}${l.by ? " · by " + esc(l.by) : ""}</div>${whereLine(l)}</div><span class="badge ${t[0]}">${t[1]}</span></div>`; }).join("") : `<p class="muted" style="padding:10px 0">No sign-ins yet.</p>`}
@@ -3958,7 +3964,7 @@ function viewPayAdmin() {
   const biz = sessionStorage.getItem("payBiz") || "fleet";
   const users = (DATA.users || []).filter((u) => u.active !== false);
   const groups = {
-    fleet: { title: "Fleet", kind: "driver", people: DATA.drivers || [], none: "No drivers yet. Add drivers on Fleet › Drivers." },
+    fleet: { title: "Fleet", kind: "driver", people: (DATA.drivers || []).filter((d) => !d.archived || owedTo("driver", d, DATA.payStubs, DATA).waiting.length), none: "No drivers yet. Add drivers on Fleet › Drivers." },
     cane: { title: "Cane", kind: "cane", people: users.filter((u) => u.role === "cane_manager"), none: "No cane manager login yet." },
     passion: { title: "Passion", kind: "passion", people: users.filter((u) => u.role === "passion_manager"), none: "No passion manager login yet." },
   };
@@ -4163,6 +4169,8 @@ function bind() {
   document.querySelectorAll(".js-fuelok").forEach((b) => { b.onclick = () => act("save_truck", { id: b.dataset.id, fuelCheckedAt: todayYmd() }); });
   document.querySelectorAll(".js-alladv").forEach((l) => { l.onclick = () => { sessionStorage.setItem("advBiz", l.dataset.biz); sessionStorage.setItem("advSt", "all"); }; });
   document.querySelectorAll(".js-advf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
+  document.querySelectorAll(".js-adddriver").forEach((a) => { a.onclick = () => sessionStorage.setItem("openAddLogin", "1"); });
+  if (document.querySelector("details.team-row.add[open]")) sessionStorage.removeItem("openAddLogin");
   document.querySelectorAll(".js-taxm").forEach((el) => { el.onchange = () => { sessionStorage.setItem("taxMonth", el.value); route(); }; });
   document.querySelectorAll(".js-taxcsv").forEach((b) => { b.onclick = taxCsv; });
   document.querySelectorAll(".js-lpf").forEach((el) => { el.onchange = () => { sessionStorage.setItem(el.dataset.k, el.value); route(); }; });
@@ -4233,7 +4241,7 @@ function bind() {
   }; });
   document.querySelectorAll(".js-paid").forEach((b) => { b.onclick = () => openJobPaid(b.dataset.id); });
   document.querySelectorAll("[data-act-sheet=seller]").forEach((b) => { b.onclick = () => openSellerPaid(b.dataset.id); });
-  const ASK = { trash_job: "Move this load to the trash?", purge_job: "Delete this load for good? This can't be undone.", purge_booking: "Delete this booking for good? This can't be undone.", trash_booking: "Move this booking to the trash?", decline_advance: "Decline this request?", remove_device: "Remove this phone? The person will need approval again.", reject_device: "Reject this phone?" };
+  const ASK = { trash_job: "Move this load to the trash?", purge_job: "Delete this load for good? This can't be undone.", purge_booking: "Delete this booking for good? This can't be undone.", trash_booking: "Move this booking to the trash?", decline_advance: "Decline this request?", remove_device: "Remove this phone? The person will need approval again.", remove_driver: "Remove this driver? Their login stops working and their truck is freed. Past loads and pay stay in the records.", reject_device: "Reject this phone?" };
   document.querySelectorAll("[data-act]").forEach((btn) => {
     btn.onclick = () => (ASK[btn.dataset.act] && !confirm(ASK[btn.dataset.act])) ? null : act(btn.dataset.act, { id: btn.dataset.id, status: btn.dataset.status, refId: btn.dataset.ref, kind: btn.dataset.kind, amountUgx: btn.dataset.amount, personId: btn.dataset.person, personName: btn.dataset.name, month: btn.dataset.month, floatId: btn.dataset.float, userId: btn.dataset.user, deviceId: btn.dataset.device, label: btn.dataset.label });
   });
@@ -4845,7 +4853,7 @@ function startLiveMap() {
 }
 const ROLE_SHORT = { driver: "Driver", cane_manager: "Cane", passion_manager: "Passion", admin: "Admin II" };
 function viewTeamLive() {
-  const people = (DATA.users || []).filter((u) => u.active !== false && !(u.role === "admin" && !u.assistant));
+  const people = (DATA.users || []).filter((u) => u.active !== false && !u.removedAt && !(u.role === "admin" && !u.assistant));
   return `
     <h1>Home · Team live</h1>
     <div class="card item tl-map-card"><div id="teamMap" class="tl-map"></div><p class="muted tl-note" id="teamNote">Loading…</p></div>
@@ -4869,7 +4877,7 @@ async function drawTeamMap() {
   const hrs = data.hours || { from: 0, to: 0 }, f = document.getElementById("hoursForm");
   if (f && !f.dataset.set) { f.from.value = hrs.from; f.to.value = hrs.to; f.dataset.set = "1"; }
   const pings = data.people || {}, now = Date.now();
-  const people = (DATA.users || []).filter((u) => u.active !== false && !(u.role === "admin" && !u.assistant));
+  const people = (DATA.users || []).filter((u) => u.active !== false && !u.removedAt && !(u.role === "admin" && !u.assistant));
   const rows = people.map((u) => { const p = pings[u.id]; const age = p ? now - p.at : Infinity; return { u, p, tone: age < 15 * 60000 ? "green" : age < 12 * 3600000 ? "gold" : "red" }; })
     .sort((a, b) => (b.p ? b.p.at : 0) - (a.p ? a.p.at : 0));
   const hh = (h) => String(h).padStart(2, "0") + ":00";

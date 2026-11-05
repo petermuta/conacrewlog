@@ -190,7 +190,7 @@ function payProfile(rec) {
   return out;
 }
 function publicUser(user) {
-  return { id: user.id, name: user.name, phone: user.phone, role: user.role, driverId: user.driverId, active: user.active, hasPin: !!user.pin, assistant: !!user.assistant, ...payProfile(user) };
+  return { id: user.id, name: user.name, phone: user.phone, role: user.role, driverId: user.driverId, active: user.active, removedAt: user.removedAt || "", hasPin: !!user.pin, assistant: !!user.assistant, ...payProfile(user) };
 }
 // Who was paid and how. Mobile money needs a number, bank needs an account.
 const METHOD_NAMES = { cash: "Cash", mtn_momo: "MTN MoMo", airtel_money: "Airtel Money", bank: "Bank transfer", mobile_money: "Mobile money" };
@@ -497,7 +497,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -730,6 +730,17 @@ function applyAction(db, user, body) {
     }
   }
 
+  if (action === "remove_driver") {
+    if (!isMainAdmin(user)) throw new Error("Only the main admin can remove a driver");
+    const d = db.drivers.find((x) => x.id === body.id);
+    if (!d) throw new Error("Driver not found");
+    const u = (db.users || []).find((x) => x.id === d.userId || x.driverId === d.id);
+    if (u) { u.active = false; u.devices = []; u.pendingDevices = []; u.removedAt = todayStr(); }
+    (db.trucks || []).forEach((t) => { if (t.assignedDriverId === d.id) t.assignedDriverId = ""; });
+    (db.jobs || []).forEach((j) => { if (j.driverId === d.id && j.status === "booked" && !j.paid) j.driverId = ""; }); // loads not started go back to the office
+    d.archived = true; d.removedAt = todayStr(); d.assignedTruckId = "";
+    return;
+  }
   if (action === "save_taxinfo") {
     if (!isMainAdmin(user)) throw new Error("Only the main admin can change the company tax details");
     const rate = Math.min(50, Math.max(0, Number(body.vatRate) || 0));

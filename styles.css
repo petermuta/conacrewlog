@@ -913,3 +913,4 @@ input[type="datetime-local"]::-webkit-date-and-time-value,input[type="date"]::-w
 .efris-row .lbl{color:inherit}
 .tax-fix2{grid-template-columns:1fr auto}
 .tax-setup b{flex-basis:100%}
+.btn-remove{color:#ff8a7a;border-color:rgba(255,120,100,.45)}
