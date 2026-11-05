@@ -914,3 +914,12 @@ input[type="datetime-local"]::-webkit-date-and-time-value,input[type="date"]::-w
 .tax-fix2{grid-template-columns:1fr auto}
 .tax-setup b{flex-basis:100%}
 .btn-remove{color:#ff8a7a;border-color:rgba(255,120,100,.45)}
+/* Money › Owed */
+.owe-list{padding:4px 14px;margin-top:8px}
+.owe-line{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.owe-line:last-child{border-bottom:0}
+.owe-l{flex:1;min-width:0;display:flex;flex-direction:column}
+.owe-l b,.owe-l .muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.owe-r{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.owe-r b{white-space:nowrap}
+.link-kpi{text-decoration:none;color:inherit}
