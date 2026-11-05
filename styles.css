@@ -1164,3 +1164,5 @@ body::after { transform: translateZ(0); }
 }
 .admin-nav .biz a:active, .admin-nav .sub a:active { color: #fff; background: rgba(242,138,31,.18); }
 tr.js-editsale { cursor: pointer; } tr.js-editsale:active td { background: rgba(242,138,31,.1); }
+.pay-line.paid { flex-wrap: wrap; }
+.pl-acts { flex-basis: 100%; display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }

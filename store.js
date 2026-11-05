@@ -497,7 +497,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -1267,6 +1267,25 @@ function applyAction(db, user, body) {
     if (done.cash) done.cash.note = "Paid seller · " + (seller ? seller.name : buy.id);
   }
 
+  if (action === "update_pay" || action === "delete_pay") {
+    const stub = (db.payStubs || []).find((x) => x.id === body.id && x.status === "paid");
+    if (!stub) throw new Error("Payment not found");
+    const cash = (db.cash || []).find((c) => c.refId === stub.id && c.category === "employee_pay");
+    if (action === "delete_pay") {
+      if (cash) db.cash = db.cash.filter((c) => c !== cash);
+      if (stub.kind === "extra" || stub.kind === "month") db.payStubs = db.payStubs.filter((x) => x !== stub);
+      else Object.assign(stub, { status: "pending", paidAt: "", paidVia: "", method: "", reference: "", undoneBy: user.name, undoneAt: todayStr() }); // the trip shows as waiting again
+      return;
+    }
+    const amount = Math.round(Number(String(body.amountUgx || "").replace(/[^\d.]/g, "")) || 0);
+    if (amount <= 0) throw new Error("Enter the amount paid");
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || "") ? body.date : stub.paidAt;
+    const upd = { amountUgx: amount, paidAt: date, method: body.method || stub.method, reference: String(body.reference || "").slice(0, 60), payeePhone: String(body.payeePhone || stub.payeePhone || "").trim(), editedBy: user.name, editedAt: todayStr() };
+    if (stub.kind === "extra" && String(body.forWhat || "").trim()) upd.refLabel = String(body.forWhat).trim().slice(0, 80);
+    Object.assign(stub, upd);
+    if (cash) Object.assign(cash, { amountUgx: amount, date, method: upd.method, reference: upd.reference, payeePhone: upd.payeePhone, note: (stub.refLabel || "Pay") + " · " + (stub.personName || "") });
+    return;
+  }
   if (action === "update_cane_sale") {
     const sale = (db.caneSales || []).find((x) => x.id === body.id);
     if (!sale) throw new Error("Sale not found");

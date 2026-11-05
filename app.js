@@ -3983,7 +3983,22 @@ function paidLine(s) {
       ${(() => { const k = s.kind === "trip" ? "Trip allowance" : s.kind === "cane_trip" ? "Pay for delivered trip" : s.kind === "sale" ? "Pay for sale" : s.kind === "month" ? "" : s.kind === "extra" ? "Paid without a trip" : (s.refLabel || ""); const line = [k, s.drop].filter(Boolean).join(" · "); return line ? `<div class="muted">${esc(line)}</div>` : ""; })()}
       <div class="muted">Paid ${fmtDay(s.paidAt)} · ${how}${s.reference ? " · Ref " + esc(s.reference) : ""}</div></div>
     <b class="amt">${ugx(s.amountUgx || 0)}</b>
+    ${DATA.me.role === "admin" && !DATA.viewingAs ? `<div class="pl-acts"><button type="button" class="btn btn-ghost btn-sm js-editpay" data-id="${esc(s.id)}">Edit</button><button type="button" class="btn btn-ghost btn-sm btn-remove" data-act="delete_pay" data-id="${esc(s.id)}">Delete</button></div>` : ""}
   </div>`;
+}
+function openEditPay(id) {
+  const s = (DATA.payStubs || []).find((x) => x.id === id); if (!s) return;
+  openSheet({ title: "Edit payment", sub: esc((s.personName || "") + " · " + (s.refLabel || "Pay")),
+    body: `<div class="grid g2">
+        <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" inputmode="numeric" required value="${s.amountUgx || ""}" /></label>
+        <label class="lbl">Date paid<input class="field" type="date" name="date" value="${esc(String(s.paidAt || "").slice(0, 10))}" /></label>
+        <label class="lbl">Paid by<select class="field" name="method">${methodOptions(s.method || "mtn_momo")}</select></label>
+        <label class="lbl">Phone<input class="field" name="payeePhone" inputmode="tel" value="${esc(s.payeePhone || s.phone || "")}" /></label>
+        <label class="lbl">Reference<input class="field" name="reference" value="${esc(s.reference || "")}" placeholder="Optional" /></label>
+        ${s.kind === "extra" ? `<label class="lbl">For<input class="field" name="forWhat" value="${esc(s.refLabel || "")}" /></label>` : ""}
+      </div>`,
+    submit: "Save changes",
+    onSubmit: (fd) => act("update_pay", { ...fd, id: s.id }) });
 }
 function workerCard(kind, person, src) {
   const o = owedTo(kind, person, DATA.payStubs, src);
@@ -4249,6 +4264,7 @@ function bind() {
   document.querySelectorAll(".js-owedpay").forEach((a) => { a.onclick = () => sessionStorage.setItem("owedTab", "pay"); });
   document.querySelectorAll("[data-mprof]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofBiz", b.dataset.mprof); route(); }; });
   document.querySelectorAll("[data-mproffleet]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofFleet", b.dataset.mproffleet); route(); }; });
+  document.querySelectorAll(".js-editpay").forEach((b) => { b.onclick = () => openEditPay(b.dataset.id); });
   document.querySelectorAll(".js-editsale").forEach((r) => { r.onclick = () => openEditSale(r.dataset.id); });
   document.querySelectorAll(".js-taxm").forEach((el) => { el.onchange = () => { sessionStorage.setItem("taxMonth", el.value); route(); }; });
   document.querySelectorAll(".js-taxcsv").forEach((b) => { b.onclick = taxCsv; });
@@ -4320,7 +4336,7 @@ function bind() {
   }; });
   document.querySelectorAll(".js-paid").forEach((b) => { b.onclick = () => openJobPaid(b.dataset.id); });
   document.querySelectorAll("[data-act-sheet=seller]").forEach((b) => { b.onclick = () => openSellerPaid(b.dataset.id); });
-  const ASK = { trash_job: "Move this load to the trash?", purge_job: "Delete this load for good? This can't be undone.", purge_booking: "Delete this booking for good? This can't be undone.", trash_booking: "Move this booking to the trash?", decline_advance: "Decline this request?", remove_device: "Remove this phone? The person will need approval again.", remove_driver: "Remove this driver? Their login stops working and their truck is freed. Past loads and pay stay in the records.", reject_device: "Reject this phone?" };
+  const ASK = { trash_job: "Move this load to the trash?", purge_job: "Delete this load for good? This can't be undone.", purge_booking: "Delete this booking for good? This can't be undone.", trash_booking: "Move this booking to the trash?", decline_advance: "Decline this request?", remove_device: "Remove this phone? The person will need approval again.", delete_pay: "Delete this payment? It comes off the payroll and Money out. A trip it paid for shows as waiting again.", remove_driver: "Remove this driver? Their login stops working and their truck is freed. Past loads and pay stay in the records.", reject_device: "Reject this phone?" };
   document.querySelectorAll("[data-act]").forEach((btn) => {
     btn.onclick = () => (ASK[btn.dataset.act] && !confirm(ASK[btn.dataset.act])) ? null : act(btn.dataset.act, { id: btn.dataset.id, status: btn.dataset.status, refId: btn.dataset.ref, kind: btn.dataset.kind, amountUgx: btn.dataset.amount, personId: btn.dataset.person, personName: btn.dataset.name, month: btn.dataset.month, floatId: btn.dataset.float, userId: btn.dataset.user, deviceId: btn.dataset.device, label: btn.dataset.label });
   });
