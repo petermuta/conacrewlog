@@ -1052,3 +1052,21 @@ select.field, select.nav-jump { background-color: var(--bg-deep); background-rep
 /* needs you = gold, everywhere */
 .pick-attn { background: var(--gold) !important; color: #101a24 !important; }
 .ny-chip, .ny-chip.blue, .ny-chip.purple { background: var(--gold); color: #101a24; }
+
+/* ═════════════ Base: navy with a soft brand glow (orange top-right, green left) ═════════════ */
+:root { --bg: #0d1f33; --bg-deep: #091726; --surface: #152a42; --surface-2: #1b3352; --surface-3: #234062; }
+html, body { background: #091726; }
+body,
+body[data-page="home"], body[data-page="trucks"], body[data-page="drive"],
+body[data-page="cane"], body[data-page="passion"], body[data-page="money"] {
+  background:
+    radial-gradient(700px 360px at 100% -5%, rgba(242,138,31,.22), transparent 60%),
+    radial-gradient(600px 340px at -10% 20%, rgba(34,196,122,.16), transparent 60%),
+    linear-gradient(180deg, #11283f, #0d1f33 300px, #091726) fixed;
+}
+.top { background: rgba(9,23,38,.92); }
+.login-page, .login-panel { background:
+    radial-gradient(600px 320px at 100% 0%, rgba(242,138,31,.18), transparent 60%),
+    radial-gradient(520px 300px at 0% 30%, rgba(34,196,122,.14), transparent 60%),
+    #091726; }
+.login-brand { background: linear-gradient(180deg, #11283f, #0d1f33); }
