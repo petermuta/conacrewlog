@@ -3901,7 +3901,7 @@ function paidLine(s) {
   const how = (METHOD_LABEL[s.method] || "Paid") + (s.payeePhone || s.phone ? " · " + esc(s.payeePhone || s.phone) : s.bankAccount ? " · " + esc(s.bankName || "") + " " + esc(s.bankAccount) : "");
   return `<div class="pay-line paid">
     <div><b>${esc(s.loadId ? "Load " + s.loadId : (s.refLabel || "Pay").replace(/^Trip allowance · /, ""))}</b>
-      ${(() => { const k = s.kind === "trip" ? "Trip allowance" : s.kind === "cane_trip" ? "Pay for delivered trip" : s.kind === "sale" ? "Pay for sale" : s.kind === "month" ? "" : (s.refLabel || ""); const line = [k, s.drop].filter(Boolean).join(" · "); return line ? `<div class="muted">${esc(line)}</div>` : ""; })()}
+      ${(() => { const k = s.kind === "trip" ? "Trip allowance" : s.kind === "cane_trip" ? "Pay for delivered trip" : s.kind === "sale" ? "Pay for sale" : s.kind === "month" ? "" : s.kind === "extra" ? "Paid without a trip" : (s.refLabel || ""); const line = [k, s.drop].filter(Boolean).join(" · "); return line ? `<div class="muted">${esc(line)}</div>` : ""; })()}
       <div class="muted">Paid ${fmtDay(s.paidAt)} · ${how}${s.reference ? " · Ref " + esc(s.reference) : ""}</div></div>
     <b class="amt">${ugx(s.amountUgx || 0)}</b>
   </div>`;
