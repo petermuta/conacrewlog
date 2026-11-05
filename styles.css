@@ -1020,3 +1020,35 @@ select.field, select.nav-jump { background-color: var(--bg-deep); background-rep
 .login-page, .login-panel { background: var(--bg-deep); }
 .login-brand { background: linear-gradient(180deg, #13212b, var(--bg)); }
 .pick-row.flash { padding-left: 12px !important; border-radius: 10px; margin: 2px 0; }
+
+/* ═════════════ Colour roles: orange = brand/selected/in progress · green = money in/good/live · red = problems · gold = needs you ═════════════ */
+:root { --brand: #f28a1f; --brand-deep: #d97410; --brand-soft: rgba(242,138,31,.15); --good: #22c47a; --good-soft: rgba(34,196,122,.15); --bad: #ef3b5a; --bad-soft: rgba(239,59,90,.15); --accent: var(--brand); --accent-deep: var(--brand-deep); --accent-soft: var(--brand-soft); }
+.top { border-bottom: 1px solid rgba(242,138,31,.5); }
+/* selected = orange */
+.admin-nav .biz a.on::after { background: var(--brand); }
+.admin-nav .sub a.on, .seg-btn.on, .block-btn.on, .tabs a.on { background: var(--brand); border-color: var(--brand); color: #15100a; font-weight: 800; }
+.btn-primary { background: var(--brand); color: #15100a; font-weight: 800; }
+.btn-primary:hover { background: var(--brand-deep); }
+.field:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.seg .count { background: #15100a; color: var(--brand); }
+.seg-btn:not(.on) .count { background: var(--bad); color: #fff; }
+/* in progress = orange */
+.badge.blue { background: var(--brand-soft); color: #ffad5c; }
+.req-progress span { background: var(--brand); } .lp-bar i { background: var(--good); } .lp-bar i.neg { background: var(--bad); }
+.adv-mini i, .adv-bar span { background: linear-gradient(90deg, var(--brand), var(--good)); }
+.bar i { background: var(--brand); }
+/* good / money in / live = green */
+.pos, .pb-total.pos b { color: var(--good); }
+.badge.green { background: var(--good-soft); color: #3fdc93; }
+.kpi.in-kpi::before { background: var(--good); }
+.bar .pos-bar { background: var(--good); }
+.pb-total { background: var(--good-soft); border-color: rgba(34,196,122,.4); }
+/* problems = red; money out stays neutral */
+.neg, .pb-total.neg b, .pb-line.neg b { color: #ff6b81; }
+.badge.red { background: var(--bad-soft); color: #ff6b81; }
+.pb-total.neg { background: var(--bad-soft); border-color: rgba(239,59,90,.45); }
+.kpi.out-kpi::before { background: #5d7383; }
+.btn-remove { color: #ff6b81; border-color: rgba(239,59,90,.45); }
+/* needs you = gold, everywhere */
+.pick-attn { background: var(--gold) !important; color: #101a24 !important; }
+.ny-chip, .ny-chip.blue, .ny-chip.purple { background: var(--gold); color: #101a24; }
