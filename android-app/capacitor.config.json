@@ -7,7 +7,7 @@
     "allowNavigation": ["conacrewlogs.com", "*.conacrewlogs.com"],
     "androidScheme": "https"
   },
-  "android": { "backgroundColor": "#0b1626" },
+  "android": { "backgroundColor": "#0a131a" },
   "plugins": {
     "LocalNotifications": { "smallIcon": "ic_stat_conacrew", "iconColor": "#f5c400" }
   }
