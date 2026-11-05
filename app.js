@@ -633,7 +633,7 @@ function viewTruckProfit() {
   const none = rep._none;
   const tot = rows.concat([none]).reduce((s, r) => ({ income: s.income + r.income, cost: s.cost + r.costTotal, owed: s.owed + r.owed, km: s.km + r.km, loads: s.loads + r.loads }), { income: 0, cost: 0, owed: 0, km: 0, loads: 0 });
   const profit = tot.income - tot.cost;
-  const money = (n) => `<b class="${n < 0 ? "neg" : "pos"}">${n < 0 ? "−" : ""}${ugx(Math.abs(n))}</b>`;
+  const money = (n) => `<b class="${n < 0 ? "neg" : "pos"}">${ugx(Math.abs(n))}${n < 0 ? " loss" : ""}</b>`;
   const perKm = (p, km) => km ? `${p < 0 ? "−" : ""}UGX ${Math.round(Math.abs(p) / km).toLocaleString()} / km` : "—";
   const card = (r) => {
     const d = (DATA.drivers || []).find((x) => x.id === r.t.assignedDriverId);
@@ -643,7 +643,7 @@ function viewTruckProfit() {
       ["Money in", ugx(r.income)],
       r.owed ? ["Clients still owe", ugx(r.owed)] : null,
       ...COST_ORDER.filter((g) => r.costs[g]).map((g) => [g, "− " + ugx(r.costs[g])]),
-      ["Profit", money(r.profit) + (r.income ? ` <span class="muted">· ${r.profit < 0 ? "−" : ""}${Math.abs(Math.round((r.profit / r.income) * 100))}% of income</span>` : "")],
+      [r.profit < 0 ? "Loss" : "Profit", money(r.profit) + (r.income ? ` <span class="muted">· ${Math.abs(Math.round((r.profit / r.income) * 100))}% of income</span>` : "")],
       ["Distance", r.km ? Math.round(r.km).toLocaleString() + " km · " + perKm(r.profit, r.km) : "No loads delivered"],
     ]) + `<div class="fuel-check ${v ? v.tone : ""}">
       <b>Fuel check</b>
@@ -658,7 +658,7 @@ function viewTruckProfit() {
     ${fleetTabs("trucks-profit")}
     <div class="seg seg-sm" style="margin-top:14px">${[["month", "This month"], ["lastmonth", "Last month"], ["quarter", "Quarter"], ["year", "Year"], ["all", "All"]].map(([k, l]) => `<button type="button" class="seg-btn ${per === k ? "on" : ""}" data-profitper="${k}">${l}</button>`).join("")}</div>
     <div class="card item profit-total" style="margin-top:12px">
-      <div class="profit-head"><span class="eyebrow">Fleet profit · ${esc(title)}</span>${money(profit)}</div>
+      <div class="profit-head"><span class="eyebrow">Fleet ${profit < 0 ? "loss" : "profit"} · ${esc(title)}</span>${money(profit)}</div>
       <div class="grid g3 profit-grid">
         <div><span class="eyebrow">Money in</span><b>${ugx(tot.income)}</b></div>
         <div><span class="eyebrow">Costs</span><b>${ugx(tot.cost)}</b></div>
@@ -680,7 +680,7 @@ function viewBizProfit(tag) {
   const ins = group("in"), outs = group("out");
   const tin = ins.reduce((s, [, v]) => s + v, 0), tout = outs.reduce((s, [, v]) => s + v, 0), profit = tin - tout;
   const held = (DATA.disbursements || []).filter((f) => f.tag === tag && f.status !== "closed").reduce((s, f) => s + advLeft(f).left, 0);
-  const money = (n) => `<b class="${n < 0 ? "neg" : "pos"}">${n < 0 ? "−" : ""}${ugx(Math.abs(n))}</b>`;
+  const money = (n) => `<b class="${n < 0 ? "neg" : "pos"}">${ugx(Math.abs(n))}${n < 0 ? " loss" : ""}</b>`;
   let extra = [];
   if (tag === "sugarcane") {
     const sold = (DATA.caneSales || []).filter((s) => s.date >= from && s.date <= to).reduce((s, x) => s + (Number(x.tonnes) || 0), 0);
@@ -695,10 +695,10 @@ function viewBizProfit(tag) {
   return `<h1>${tag === "sugarcane" ? "Cane" : "Passion"}</h1>${head}
     <div class="seg seg-sm" style="margin-top:14px">${[["month", "This month"], ["lastmonth", "Last month"], ["quarter", "Quarter"], ["year", "Year"], ["all", "All"]].map(([k, l]) => `<button type="button" class="seg-btn ${per === k ? "on" : ""}" data-bizper="${k}" data-key="${key}">${l}</button>`).join("")}</div>
     <div class="card item profit-total" style="margin-top:12px">
-      <div class="profit-head"><span class="eyebrow">Profit · ${esc(title)}</span>${money(profit)}</div>
+      <div class="profit-head"><span class="eyebrow">${profit < 0 ? "Loss" : "Profit"} · ${esc(title)}</span>${money(profit)}</div>
       <div class="grid g3 profit-grid"><div><span class="eyebrow">Earned</span><b>${ugx(tin)}</b></div><div><span class="eyebrow">Spent</span><b>${ugx(tout)}</b></div><div><span class="eyebrow">With the team</span><b>${ugx(held)}</b></div></div>
     </div>
-    <div class="card item" style="margin-top:10px">${facts([...ins.map(([k, v]) => [k, ugx(v)]), ...outs.map(([k, v]) => [k, "− " + ugx(v)]), ["Profit", money(profit) + (tin ? ` <span class="muted">· ${profit < 0 ? "−" : ""}${Math.abs(Math.round((profit / tin) * 100))}% of earnings</span>` : "")], ...extra.filter(Boolean)])}</div>`;
+    <div class="card item" style="margin-top:10px">${facts([...ins.map(([k, v]) => [k, ugx(v)]), ...outs.map(([k, v]) => [k, "− " + ugx(v)]), [profit < 0 ? "Loss" : "Profit", money(profit) + (tin ? ` <span class="muted">· ${Math.abs(Math.round((profit / tin) * 100))}% of earnings</span>` : tout && !tin ? ` <span class="muted">· nothing earned yet</span>` : "")], ...extra.filter(Boolean)])}</div>`;
 }
 
 function viewDrivers() {
@@ -811,7 +811,7 @@ function profitBreakdown(lp) {
     ${line("Equipment earned", ugx(lp.equipment), "Price less material", "sub")}
     ${line("Fuel", "−" + ugx(lp.fuel.amt), lp.fuel.how, "neg")}
     ${line("Driver pay", "−" + ugx(lp.driver.amt), lp.driver.how, "neg")}
-    <div class="pb-total ${lp.profit < 0 ? "neg" : "pos"}"><span>Load profit</span><b>${lp.profit < 0 ? "−" : ""}${ugx(Math.abs(lp.profit))}</b></div>
+    <div class="pb-total ${lp.profit < 0 ? "neg" : "pos"}"><span>Load ${lp.profit < 0 ? "loss" : "profit"}</span><b>${lp.profit < 0 ? "−" : ""}${ugx(Math.abs(lp.profit))}</b></div>
     <div class="pb-pct"><span>Margin on price <b>${lp.pct}%</b></span>${lp.matPct !== null ? `<span>Return on material <b>${lp.matPct}%</b></span>` : ""}</div>
   </div>`;
 }
@@ -854,7 +854,7 @@ function viewLoadProfit() {
       <div class="card kpi"><span class="eyebrow">Loads</span><b>${rows.length}</b></div>
       <div class="card kpi in-kpi"><span class="eyebrow">Charged</span><b>${ugx(price)}</b></div>
       <div class="card kpi out-kpi"><span class="eyebrow">Costs</span><b>${ugx(costs)}</b></div>
-      <div class="card kpi gold"><span class="eyebrow">Profit · ${price ? Math.round((profit / price) * 100) : 0}%</span><b class="${profit < 0 ? "neg" : "pos"}">${profit < 0 ? "−" : ""}${ugx(Math.abs(profit))}</b></div>
+      <div class="card kpi gold"><span class="eyebrow">${profit < 0 ? "Loss" : "Profit"} · ${price ? Math.abs(Math.round((profit / price) * 100)) : 0}%</span><b class="${profit < 0 ? "neg" : "pos"}">${profit < 0 ? "−" : ""}${ugx(Math.abs(profit))}</b></div>
     </div>
     ${rows.length ? `<div class="card item lp-split">${[["Material", sum("material")], ["Fuel", sum("fuel")], ["Driver pay", sum("driver")], ["Profit", Math.max(0, profit)]].map(([k, v]) => `<div class="bar-line"><span>${k}</span><span class="bar"><i class="${k === "Profit" ? "pos-bar" : ""}" style="width:${price ? Math.round((v / price) * 100) : 0}%"></i></span><b>${price ? Math.round((v / price) * 100) : 0}%</b></div>`).join("")}<p class="muted" style="margin:6px 0 0">Share of every shilling charged</p></div>` : ""}
     <div class="row keep" style="margin-top:16px;align-items:center"><h2 style="margin:0">Loads</h2>
