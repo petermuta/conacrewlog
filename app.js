@@ -3210,6 +3210,32 @@ function workerFundsView(tag) {
       <div class="card kpi ${toConfirm(tag).length ? "attn-kpi" : ""}"><span class="eyebrow">To confirm</span><b>${floats.filter((f) => f.status === "sent").length}</b></div>
       <div class="card kpi steel"><span class="eyebrow">Spent this month</span><b>${ugx(spentMonth)}</b></div>
     </div>
+    ${(() => {
+      const usable = open.filter((f) => advLeft(f).left > 0).sort((x, y) => String(x.date).localeCompare(String(y.date)));
+      return `<details class="card team-row spend-card" style="margin-top:10px" ${usable.length ? "open" : ""}>
+      <summary><div class="avatar">＋</div><div style="flex:1"><b>Record spending</b><div class="muted">${usable.length ? ugx(withMe + floats.filter((f) => f.status === "sent").reduce((a, f) => a + advLeft(f).left, 0)) + " in advances to use" : "No advance on hand"}</div></div></summary>
+      <form data-form="worker-spend" style="margin-top:12px">
+        <div class="grid g3">
+          <label class="lbl">What<select class="field js-use-cat" name="category" data-fuel="${fuelKey}">${FUND_FOR[tag].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+          <label class="lbl">Amount (UGX)<input class="field js-spend-amt" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
+          <label class="lbl js-use-litres">Litres<input class="field" name="litres" inputmode="decimal" placeholder="e.g. 120" /></label>
+        </div>
+        <label class="lbl" style="margin-top:10px">Paid from<select class="field js-spend-from" name="floatId">
+          ${usable.map((f, i) => `<option value="${esc(f.id)}" data-left="${advLeft(f).left}" ${i === 0 ? "selected" : ""}>Advance ${fmtDay(f.date)} · ${esc(catLabel(tag, f.activity) || "")} · ${ugx(advLeft(f).left)} left</option>`).join("")}
+          <option value="" data-left="0">Cash on hand (not from an advance)</option>
+        </select></label>
+        <p class="muted js-spend-split" style="margin:6px 0 0"></p>
+        ${tag !== "trucking" ? `<div style="margin-top:10px">${linkSelect(tag)}</div>` : ""}
+        <div style="margin-top:10px">${payeeFields("ws", { method: "cash" }, { efris: true })}</div>
+        <div class="grid g3" style="margin-top:10px">
+          ${dateField("date", "Date spent")}
+          <label class="lbl">Receipt photo<input class="field use-photo" type="file" accept="image/*" capture="environment" /></label>
+          <label class="lbl">Note<input class="field" name="note" placeholder="Optional" /></label>
+        </div>
+        <div class="thumbs use-preview"></div>
+        <button class="btn btn-primary wide" style="margin-top:12px">Save spending</button>
+      </form>
+    </details>`; })()}
     <details class="card team-row" style="margin-top:10px">
       <summary><div class="avatar">+</div><div style="flex:1"><b>Request money</b></div></summary>
       <form data-form="request-advance" style="margin-top:12px">
@@ -3232,39 +3258,10 @@ function workerFundsView(tag) {
         const { left } = advLeft(f);
         return `${advanceCard(f, false)}
         ${f.status === "sent" ? `<button class="btn btn-primary wide adv-act" data-act="ack_float" data-id="${esc(f.id)}">I received ${ugx(f.amountUgx)}</button>` : ""}
-        ${f.status === "received" && left > 0 ? `<details class="card team-row adv-act" ${f.usages && f.usages.length ? "" : "open"}>
-          <summary><div class="avatar">＋</div><div style="flex:1"><b>Record how it was spent</b><div class="muted">UGX ${Number(left).toLocaleString("en-UG")} left</div></div></summary>
-          <form data-form="float-use" data-id="${esc(f.id)}" style="margin-top:12px">
-            <div class="grid g3">
-              <label class="lbl">What<select class="field js-use-cat" name="category" data-fuel="${fuelKey}">${FUND_FOR[tag].map(([k, l]) => `<option value="${k}" ${k === f.activity ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-              <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
-              <label class="lbl js-use-litres">Litres<input class="field" name="litres" inputmode="decimal" placeholder="e.g. 120" /></label>
-            </div>
-            <div style="margin-top:10px">${payeeFields("use", { method: "cash" }, { efris: true })}</div>
-            <div class="grid g3" style="margin-top:10px">
-              ${dateField("date", "Date spent")}
-              <label class="lbl">Receipt photo<input class="field use-photo" type="file" accept="image/*" capture="environment" /></label>
-              <label class="lbl">Note<input class="field" name="note" placeholder="Optional" /></label>
-            </div>
-            <div class="thumbs use-preview"></div>
-            <button class="btn btn-primary wide" style="margin-top:12px">Save</button>
-          </form>
-        </details>` : ""}`;
+`;
       }).join("") : `<div class="card item muted">Nothing received yet.</div>`}
     </div>
-    ${tag !== "trucking" ? `<details class="card team-row" style="margin-top:14px">
-      <summary><div class="avatar">⋯</div><div style="flex:1"><b>Spent from cash on hand</b></div></summary>
-      <form data-form="direct-spend" style="margin-top:12px">
-        <div class="grid g2">
-          <label class="lbl">What<select class="field" name="category">${FUND_FOR[tag].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
-          <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
-        </div>
-        <div style="margin-top:10px">${linkSelect(tag)}</div>
-        <div style="margin-top:10px">${payeeFields("direct", { method: "cash" }, { efris: true })}</div>
-        <div class="grid g2" style="margin-top:10px">${dateField("date", "Date spent")}<label class="lbl">Note<input class="field" name="note" placeholder="Optional" /></label></div>
-        <button class="btn btn-steel wide" style="margin-top:12px">Save</button>
-      </form>
-    </details>` : ""}`;
+`;
 }
 function driverAdvanceView() { return `<h1>Advance</h1>${workerFundsView("trucking")}`; }
 function viewCaneSpend() {
@@ -3462,10 +3459,10 @@ function bindSpend() {
     if (form.caneBuyId) form.caneBuyId.addEventListener("change", fillSeller);
     form.activity.addEventListener("change", fillSeller);
   }
-  document.querySelectorAll("form[data-form=direct-spend]").forEach((f) => bindPayee(f));
+  document.querySelectorAll("form[data-form=direct-spend], form[data-form=worker-spend]").forEach((f) => bindPayee(f));
 }
 function bindDriverAdvance() {
-  document.querySelectorAll("form[data-form=float-use]").forEach((form) => {
+  document.querySelectorAll("form[data-form=float-use], form[data-form=worker-spend]").forEach((form) => {
     const cat = form.querySelector(".js-use-cat"), lit = form.querySelector(".js-use-litres");
     if (cat && lit) {
       const fuel = cat.dataset.fuel, viaFuel = DATA.me.role === "driver" && fuel === "diesel";
@@ -4264,6 +4261,12 @@ function bind() {
   document.querySelectorAll(".js-owedpay").forEach((a) => { a.onclick = () => sessionStorage.setItem("owedTab", "pay"); });
   document.querySelectorAll("[data-mprof]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofBiz", b.dataset.mprof); route(); }; });
   document.querySelectorAll("[data-mproffleet]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofFleet", b.dataset.mproffleet); route(); }; });
+  document.querySelectorAll("form[data-form=worker-spend]").forEach((f) => {
+    const amt = f.querySelector(".js-spend-amt"), from = f.querySelector(".js-spend-from"), out = f.querySelector(".js-spend-split");
+    const calc = () => { const a = Number(String(amt.value).replace(/[^\d.]/g, "")) || 0, opt = from.selectedOptions[0], left = Number(opt && opt.dataset.left) || 0;
+      out.textContent = !a || !from.value ? "" : a <= left ? `${ugx(left - a)} stays on this advance` : `${ugx(left)} from the advance · ${ugx(a - left)} from cash on hand`; };
+    amt.addEventListener("input", calc); from.addEventListener("change", calc);
+  });
   document.querySelectorAll(".js-editpay").forEach((b) => { b.onclick = () => openEditPay(b.dataset.id); });
   document.querySelectorAll(".js-editsale").forEach((r) => { r.onclick = () => openEditSale(r.dataset.id); });
   document.querySelectorAll(".js-taxm").forEach((el) => { el.onchange = () => { sessionStorage.setItem("taxMonth", el.value); route(); }; });
@@ -4537,6 +4540,12 @@ function bind() {
         try { await act("pay_worker", fd); } catch (err) { return; }
       } else if (kind === "pay-profile") {
         await act("save_pay_profile", fd);
+      } else if (kind === "worker-spend") {
+        const file = form.querySelector(".use-photo") && form.querySelector(".use-photo").files[0];
+        const photo = file ? await compressPhoto(file) : "";
+        const a = Number(String(fd.amountUgx).replace(/[^\d.]/g, "")) || 0, opt = form.querySelector(".js-spend-from").selectedOptions[0], left = fd.floatId ? Number(opt && opt.dataset.left) || 0 : 0;
+        try { await act("log_spend", { ...fd, photo }); } catch (err) { return; }
+        toast(!fd.floatId ? "Saved · cash on hand" : a > left ? `${ugx(left)} from the advance · ${ugx(a - left)} cash on hand` : `Saved · ${ugx(left - a)} left on the advance`);
       } else if (kind === "float-use") {
         const file = form.querySelector(".use-photo") && form.querySelector(".use-photo").files[0];
         let photo = "";

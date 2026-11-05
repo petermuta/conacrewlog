@@ -498,9 +498,9 @@ function scopedDb(db, user) {
 function roleAllowedAction(role, action) {
   const map = {
     admin: ["update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
-    driver: ["read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
-    cane_manager: ["update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
-    passion_manager: ["save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
+    driver: ["log_spend", "read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
+    cane_manager: ["log_spend", "update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
+    passion_manager: ["log_spend", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
   };
   return (map[role] || []).includes(action);
 }
@@ -1267,6 +1267,28 @@ function applyAction(db, user, body) {
     if (done.cash) done.cash.note = "Paid seller · " + (seller ? seller.name : buy.id);
   }
 
+  // One way for staff to record spending: from an advance on hand first, anything above what is left from cash on hand.
+  // The advance part only explains the advance (no new money out); the cash part is new money out. Never both for the same shilling.
+  if (action === "log_spend") {
+    const tag = TAG_OF_ROLE[user.role];
+    if (!tag) throw new Error("Not available");
+    const amount = Math.round(Number(String(body.amountUgx || "").replace(/[^\d.]/g, "")) || 0);
+    if (amount <= 0) throw new Error("Enter the amount spent");
+    const refs = { caneBuyId: body.caneBuyId || "", blockId: body.blockId || "", jobId: body.jobId || "", truckId: user.role === "driver" ? ((db.drivers.find((d) => d.id === user.driverId) || {}).assignedTruckId || "") : body.truckId || "" };
+    let fromAdv = 0;
+    if (body.floatId) {
+      const fl = (db.disbursements || []).find((x) => x.id === body.floatId);
+      if (!fl || !ownsFloat(fl, user)) throw new Error("Advance not found");
+      if (fl.status === "sent") { fl.status = "received"; fl.receivedAt = todayStr(); } // spending it confirms it arrived
+      const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
+      const left = Math.max(0, fl.amountUgx - used - (fl.returnedUgx || 0) - (fl.movedUgx || 0));
+      fromAdv = Math.min(left, amount);
+      if (fromAdv > 0) addFloatUse(db, fl, { ...body, amountUgx: fromAdv, note: [body.note, fromAdv < amount ? "part of UGX " + amount.toLocaleString("en-UG") : ""].filter(Boolean).join(" · ") }, user);
+    }
+    const rest = amount - fromAdv;
+    if (rest > 0) spendFromAdvanceOrCash(db, user, { ...body, floatId: "", amountUgx: rest, note: [body.note, fromAdv ? "rest of UGX " + amount.toLocaleString("en-UG") + " (advance ran out)" : ""].filter(Boolean).join(" · ") }, tag, refs);
+    return { fromAdvance: fromAdv, fromCash: rest };
+  }
   if (action === "update_pay" || action === "delete_pay") {
     const stub = (db.payStubs || []).find((x) => x.id === body.id && x.status === "paid");
     if (!stub) throw new Error("Payment not found");
