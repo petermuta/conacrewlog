@@ -2020,6 +2020,16 @@ function applyAction(db, user, body) {
       const sale = (db.fruitSales || []).find((x) => x.id === refId);
       if (!person || !sale) throw new Error("Sale not found");
       refLabel = "Fruit sale · " + (sale.kg || 0) + " kg · " + (sale.buyer || "") + " · " + sale.date; tripIncome = sale.amountUgx || 0;
+    } else if (kind === "extra") {
+      // pay without a trip: lump sum, catch-up or bonus
+      const m = { driver: ["driver", "trucking"], cane: ["cane_manager", "sugarcane"], passion: ["passion_manager", "passion"] }[body.who];
+      if (!m) throw new Error("Choose who is paid");
+      role = m[0]; tag = m[1];
+      person = role === "driver" ? db.drivers.find((d) => d.id === body.personId) : (db.users || []).find((u) => u.id === body.personId && u.role === role);
+      if (!person) throw new Error("Person not found");
+      refId = uid("x");
+      refLabel = String(body.forWhat || "").trim().slice(0, 80) || "Pay";
+      if (role === "driver") truckId = person.assignedTruckId || "";
     } else throw new Error("Unknown payment");
     const same = (x) => x.personId === person.id && x.refId === refId && (x.kind === kind || (kind === "cane_trip" && x.role === "cane_manager") || (kind === "sale" && x.role === "passion_manager") || (kind === "trip" && x.kind === "trip"));
     if (db.payStubs.some((x) => same(x) && x.status === "paid" && (x.method || x.paidVia))) throw new Error("This was already paid");

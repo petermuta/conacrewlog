@@ -476,7 +476,7 @@ function pagePick(items, current) {
       ${cur ? "" : `<option value="" selected>Choose a page</option>`}
       ${(() => { const opt = ([href, label, n]) => `<option value="${href}" ${cur && cur[0] === href ? "selected" : ""}>${esc(label)}${n ? ` (${n})` : ""}</option>`; if (!items.some((x) => x[3])) return items.map(opt).join(""); const gs = [...new Set(items.map((x) => x[3]))]; return gs.map((g) => `<optgroup label="${esc(g)}">${items.filter((x) => x[3] === g).map(opt).join("")}</optgroup>`).join(""); })()}
     </select>
-    ${waiting ? `<span class="pick-attn">${waiting} waiting</span>` : ""}
+    ${waiting ? `<span class="pick-attn">${(() => { const w = items.filter(([href, , n]) => n && href !== (cur && cur[0])); return w.length === 1 ? esc(w[0][1]) + " · " + w[0][2] : waiting + " waiting"; })()}</span>` : ""}
   </div>`;
 }
 function tabMenu(items, on) {
@@ -2657,7 +2657,7 @@ function planText(kind, p) {
 function payoutText(p) {
   const m = p.payMethod;
   if (!m) return `<span class="muted">No payout details yet</span>`;
-  const who = p.accountName ? " · " + esc(p.accountName) : "";
+  const who = p.accountName && String(p.accountName).trim().toLowerCase() !== String(p.name || "").trim().toLowerCase() ? " · " + esc(p.accountName) : "";
   if (m === "bank") return `${METHOD_LABEL.bank} · ${esc(p.bankName || "")} ${esc(p.bankAccount || "")}${who}`;
   return `${METHOD_LABEL[m] || label(m)}${p.payPhone ? " · " + esc(p.payPhone) : ""}${who}`;
 }
@@ -3923,11 +3923,25 @@ function workerCard(kind, person, src) {
       ${closeBtn}
     </div>
     <div class="stat-strip">
-      <div><span>Waiting</span><b>${o.waiting.length}${known ? ` · ${ugx(known)}` : ""}</b></div>
+      <div><span>Waiting</span><b>${ugx(known)}${o.waiting.length ? ` · ${o.waiting.length}` : ""}</b></div>
       <div><span>This week</span><b>${ugx(o.sums.week)}</b></div>
       <div><span>This month</span><b>${ugx(o.sums.month)}</b></div>
       <div><span>YTD</span><b>${ugx(o.sums.ytd)}</b></div>
     </div>
+    <details class="card team-row pay-now" style="margin-top:12px">
+      <summary><div class="avatar">＋</div><div style="flex:1"><b>Pay ${esc(String(person.name || "").split(" ")[0])}</b><div class="muted">Any amount, no trip needed</div></div></summary>
+      <form data-form="pay-worker" class="pay-form" style="margin-top:12px">
+        <input type="hidden" name="kind" value="extra" /><input type="hidden" name="who" value="${kind}" /><input type="hidden" name="personId" value="${esc(person.id)}" />
+        <div class="grid g2">
+          <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
+          <label class="lbl">For<input class="field" name="forWhat" placeholder="e.g. October trips" /></label>
+        </div>
+        <div class="grid g2" style="margin-top:10px">${dateField("date", "Date paid")}</div>
+        <div style="margin-top:10px">${payeeFields("payx", { ...profilePayee(person), name: profilePayee(person).name || person.name })}</div>
+        <label class="check"><input type="checkbox" name="remember" value="1" checked /> Save these payout details</label>
+        <button class="btn btn-primary wide" style="margin-top:10px">Confirm payment</button>
+      </form>
+    </details>
     ${profileForm(kind, person)}
     <p class="eyebrow" style="margin-top:14px">Waiting to be paid</p>
     ${o.waiting.length ? o.waiting.map((w) => `<details class="pay-line due">
