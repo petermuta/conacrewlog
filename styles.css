@@ -1070,3 +1070,72 @@ body[data-page="cane"], body[data-page="passion"], body[data-page="money"] {
     radial-gradient(520px 300px at 0% 30%, rgba(34,196,122,.14), transparent 60%),
     #091726; }
 .login-brand { background: linear-gradient(180deg, #11283f, #0d1f33); }
+
+/* ═════════════ 3D depth with a green feel ═════════════ */
+body,
+body[data-page="home"], body[data-page="trucks"], body[data-page="drive"],
+body[data-page="cane"], body[data-page="passion"], body[data-page="money"] {
+  isolation: isolate;
+  background:
+    radial-gradient(520px 300px at 100% -6%, rgba(242,138,31,.20), transparent 62%),
+    radial-gradient(760px 520px at -12% 18%, rgba(34,196,122,.30), transparent 62%),
+    radial-gradient(640px 420px at 110% 70%, rgba(34,196,122,.14), transparent 65%),
+    radial-gradient(900px 600px at 50% 120%, rgba(16,120,80,.35), transparent 70%),
+    linear-gradient(180deg, #0f2a3c 0%, #0c2132 320px, #08182a 100%) fixed;
+}
+/* glowing green floor grid in perspective, behind everything */
+body::before {
+  content: ""; position: fixed; left: -50%; right: -50%; bottom: -10vh; height: 70vh; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(61,220,147,.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(61,220,147,.16) 1px, transparent 1px);
+  background-size: 56px 56px;
+  transform: perspective(520px) rotateX(62deg); transform-origin: 50% 100%;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 45%, #000 100%); mask-image: linear-gradient(180deg, transparent 0%, #000 45%, #000 100%);
+  opacity: .8;
+}
+/* soft horizon glow where the grid fades */
+body::after {
+  content: ""; position: fixed; left: 0; right: 0; bottom: 34vh; height: 30vh; z-index: -1; pointer-events: none;
+  background: radial-gradient(60% 50% at 50% 100%, rgba(34,196,122,.18), transparent 70%);
+}
+/* raised panels: lit top edge, deeper bottom, green-tinted shadow */
+.card, .admin-nav, .sheet {
+  background: linear-gradient(180deg, rgba(36,66,96,.92) 0%, rgba(21,42,66,.94) 38%, rgba(17,35,56,.96) 100%);
+  border: 1px solid rgba(120,200,170,.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    inset 0 -1px 0 rgba(0,0,0,.35),
+    0 2px 4px rgba(0,0,0,.25),
+    0 14px 30px -10px rgba(0,0,0,.55),
+    0 18px 40px -22px rgba(34,196,122,.35);
+}
+.card .card { background: linear-gradient(180deg, #1f3a58, #182f4a); box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 6px 14px -8px rgba(0,0,0,.5); }
+.kpi { background: linear-gradient(180deg, rgba(38,70,100,.95), rgba(19,38,60,.96)); }
+.field, select.field, textarea.field { background-color: rgba(6,16,28,.75); box-shadow: inset 0 2px 4px rgba(0,0,0,.45); }
+/* touch: pressed things sink, buttons have depth */
+.btn { box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 4px 10px -4px rgba(0,0,0,.6); transition: transform .08s ease, box-shadow .08s ease; }
+.btn-primary { background: linear-gradient(180deg, #ffa043, #ef7f14); }
+.btn:active, .seg-btn:active, a.card:active, .js-fold-btn:active, .pick-row:active, details > summary:active {
+  transform: translateY(1px) scale(.985);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.45);
+}
+.seg { box-shadow: inset 0 2px 6px rgba(0,0,0,.45); }
+.seg-btn.on, .admin-nav .sub a.on { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 10px -4px rgba(242,138,31,.6); }
+@media (prefers-reduced-motion: reduce) { .btn, .seg-btn { transition: none; } }
+/* paint the scene on a fixed layer so it fills the screen on every page (iPhone ignores fixed backgrounds) */
+html { background: #08182a; }
+body,
+body[data-page="home"], body[data-page="trucks"], body[data-page="drive"],
+body[data-page="cane"], body[data-page="passion"], body[data-page="money"] { background: transparent; min-height: 100vh; }
+body::after {
+  inset: 0; bottom: 0; height: auto; z-index: -2;
+  background:
+    radial-gradient(60% 22% at 50% 66%, rgba(34,196,122,.16), transparent 70%),
+    radial-gradient(520px 300px at 100% -6%, rgba(242,138,31,.20), transparent 62%),
+    radial-gradient(760px 520px at -12% 18%, rgba(34,196,122,.30), transparent 62%),
+    radial-gradient(640px 420px at 110% 70%, rgba(34,196,122,.14), transparent 65%),
+    radial-gradient(900px 600px at 50% 120%, rgba(16,120,80,.38), transparent 70%),
+    linear-gradient(180deg, #0f2a3c 0%, #0c2132 40%, #08182a 100%);
+}
+body::before { height: 85vh; transform: perspective(560px) rotateX(58deg); background-image: linear-gradient(rgba(61,220,147,.22) 1px, transparent 1px), linear-gradient(90deg, rgba(61,220,147,.22) 1px, transparent 1px); }
