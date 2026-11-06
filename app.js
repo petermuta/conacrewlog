@@ -1995,30 +1995,58 @@ function lastWork(blockId, kind) {
 
 function viewPassion() {
   const k = DATA.kpis || {};
-  const kinds = ["harvest", "prune", "spray", "fertilize", "weed"];
+  const KINDS = [["harvest", "Harvest", "🧺"], ["prune", "Prune", "✂"], ["spray", "Spray", "💧"], ["fertilize", "Feed", "🌱"], ["weed", "Weed", "🌿"]];
+  const blocks = ((DATA.blocks || []).length ? DATA.blocks.slice() : ["B1", "B2", "B3", "B4"].map((id) => ({ id, acres: "" }))).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
+  const mKey = todayYmd().slice(0, 7), today = new Date(todayYmd() + "T12:00:00");
+  const daysAgo = (d) => d ? Math.max(0, Math.round((today - new Date(String(d).slice(0, 10) + "T12:00:00")) / 864e5)) : null;
+  const tone = (n) => n === null ? "none" : n <= 14 ? "fresh" : n <= 30 ? "due" : "late";
+  const monthW = works().filter((w) => String(w.date).startsWith(mKey));
+  const sales = (DATA.fruitSales || []);
+  const monthS = sales.filter((x) => String(x.date).startsWith(mKey));
+  const picked = monthW.reduce((s, w) => s + (Number(w.kg) || 0), 0), soldKg = monthS.reduce((s, x) => s + (Number(x.kg) || 0), 0);
+  const income = monthS.reduce((s, x) => s + (Number(x.amountUgx) || 0), 0), cost = monthW.reduce((s, w) => s + (Number(w.costUgx) || 0), 0);
+  const stock = k.stockKg ?? DATA.stockKg ?? 0, allPicked = k.harvestedKg || 0, allSold = k.soldKg || 0;
+  const avail = typeof advAvailable === "function" ? advAvailable("passion", true) : 0;
+  const owed = sales.filter((x) => (x.amountUgx || 0) > (x.paidUgx || 0)).reduce((s, x) => s + (x.amountUgx - (x.paidUgx || 0)), 0);
+  const kindName = Object.fromEntries(KINDS.map(([a, b]) => [a, b]));
+  const recent = works().slice().sort((x, y) => String(y.date).localeCompare(String(x.date))).slice(0, 6);
+  const blockCard = (b) => {
+    const bw = monthW.filter((w) => w.blockId === b.id);
+    const kg = bw.reduce((s, w) => s + (Number(w.kg) || 0), 0), c = bw.reduce((s, w) => s + (Number(w.costUgx) || 0), 0);
+    const care = KINDS.map(([kind, label]) => { const w = lastWork(b.id, kind), n = w ? daysAgo(w.date) : null; return `<a class="care ${tone(n)}" href="#field/${kind}" title="${label}"><span>${label}</span><b>${n === null ? "—" : n === 0 ? "today" : n + "d"}</b></a>`; }).join("");
+    const lateN = KINDS.filter(([kind]) => kind !== "harvest" && tone(lastWork(b.id, kind) ? daysAgo(lastWork(b.id, kind).date) : null) !== "fresh").length;
+    return `<div class="card blk">
+      <div class="blk-h"><div><b>Block ${esc(String(b.id).replace(/^B/, ""))}</b>${b.acres ? `<span class="muted"> · ${b.acres} ac</span>` : ""}</div>${lateN ? `<span class="badge gold">${lateN} due</span>` : `<span class="badge green">On track</span>`}</div>
+      <div class="blk-n"><div><span class="eyebrow">Picked · month</span><b>${kg.toLocaleString()} kg</b></div><div><span class="eyebrow">Cost · month</span><b>${ugx(c)}</b></div></div>
+      <div class="care-row">${care}</div>
+    </div>`;
+  };
   return `
     <h1>Passion</h1>
     ${farmTabs("passion")}
-    <div class="grid g4" style="margin-top:14px">
-      <div class="card kpi passion"><span class="eyebrow">Stock</span><b>${k.stockKg ?? DATA.stockKg ?? 0} kg</b></div>
-      <div class="card kpi"><span class="eyebrow">Picked</span><b>${k.harvestedKg || 0} kg</b></div>
-      <div class="card kpi"><span class="eyebrow">Sold</span><b>${k.soldKg || 0} kg</b></div>
-      <div class="card kpi gold"><span class="eyebrow">Work cost</span><b>${ugx(k.workCost || 0)}</b></div>
+    <div class="card pf-hero">
+      <div class="pf-hero-top"><span class="eyebrow">${new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</span>${DATA.me.role === "admin" || DATA.me.role === "passion_manager" ? `<a class="pf-adv" href="#field"><span>Advance available</span><b>${ugx(avail)}</b></a>` : ""}</div>
+      <div class="pf-stats">
+        <div><span class="eyebrow">Picked</span><b>${picked.toLocaleString()} kg</b></div>
+        <div><span class="eyebrow">Sold</span><b>${soldKg.toLocaleString()} kg</b><small>${ugx(income)}</small></div>
+        <div><span class="eyebrow">Work cost</span><b>${ugx(cost)}</b></div>
+        <div><span class="eyebrow">${income - cost < 0 ? "Loss" : "Margin"}</span><b class="${income - cost < 0 ? "neg" : "pos"}">${ugx(Math.abs(income - cost))}</b></div>
+      </div>
+      <div class="pf-stock">
+        <div class="pf-stock-h"><span>In store</span><b>${Number(stock).toLocaleString()} kg</b></div>
+        <span class="pf-bar"><i style="width:${allPicked ? Math.min(100, Math.round((allSold / allPicked) * 100)) : 0}%"></i></span>
+        <div class="muted pf-stock-f"><span>${Number(allSold).toLocaleString()} kg sold of ${Number(allPicked).toLocaleString()} kg picked</span>${owed ? (DATA.me.role === "admin" ? `<a href="#money-owed">Buyers owe ${ugx(owed)} ›</a>` : `<span class="pf-owe">Buyers owe ${ugx(owed)}</span>`) : ""}</div>
+      </div>
     </div>
-    <div class="card" style="margin-top:14px;overflow:auto">
-      <table>
-        <thead><tr><th>Block</th><th>Harvest</th><th>Prune</th><th>Spray</th><th>Fertilize</th><th>Weed</th></tr></thead>
-        <tbody>
-          ${DATA.blocks.map((b) => `<tr>
-            <td><b>${b.id}</b><div class="muted">${b.acres} ac</div></td>
-            ${kinds.map((kind) => {
-              const w = lastWork(b.id, kind);
-              return `<td><a href="#field/${kind}">${w ? w.date : "—"}</a></td>`;
-            }).join("")}
-          </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>`;
+    <div class="pf-actions">
+      <a class="btn btn-primary" href="#field/harvest">＋ Harvest</a>
+      <a class="btn btn-ghost" href="#field/weed">＋ Work</a>
+      <a class="btn btn-ghost" href="#passion-sell">＋ Sell fruit</a>
+    </div>
+    <div class="row keep" style="margin-top:18px;align-items:center"><h2 style="margin:0">Blocks</h2><span class="care-key"><i class="fresh"></i>≤14d <i class="due"></i>15–30d <i class="late"></i>late</span></div>
+    <div class="blk-grid">${blocks.map(blockCard).join("")}</div>
+    <h2 style="margin:18px 0 0">Recent work</h2>
+    <div class="card item pf-recent">${recent.length ? recent.map((w) => `<div class="owe-line"><div class="owe-l"><b>${esc(kindName[w.kind] || w.kind)} · Block ${esc(String(w.blockId).replace(/^B/, ""))}</b><span class="muted">${fmtDay(w.date)}${w.kind === "harvest" && w.kg ? " · " + w.kg + " kg" : w.note ? " · " + esc(w.note) : ""}</span></div><div class="owe-r"><b>${w.costUgx ? ugx(w.costUgx) : "—"}</b></div></div>`).join("") : `<p class="muted">Nothing recorded yet.</p>`}</div>`;
 }
 
 function viewField() {
