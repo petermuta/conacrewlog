@@ -751,7 +751,19 @@ function viewDrivers() {
     <div class="row"><h1>Fleet</h1></div>
     ${fleetTabs("trucks-drivers")}
     <div class="list" style="margin-top:14px">${liveDrivers().map(card).join("") || `<div class="card item muted">No drivers yet.</div>`}</div>
-    <a class="btn btn-primary btn-sm js-adddriver" href="#team" style="margin-top:10px">＋ Add a driver</a>
+    ${DATA.me.assistant ? "" : `<details class="card team-row add" style="margin-top:12px" ${liveDrivers().length ? "" : "open"}>
+      <summary><div class="avatar">＋</div><div style="flex:1"><b>Add a driver</b></div></summary>
+      <form data-form="login" style="margin-top:12px">
+        <input type="hidden" name="role" value="driver" />
+        <div class="grid g2">
+          <label class="lbl">Full name<input class="field" name="name" required placeholder="e.g. John Okello" autocomplete="off" /></label>
+          <label class="lbl">Sign-in phone<input class="field" name="phone" required inputmode="tel" placeholder="07XX XXX XXX" autocomplete="off" /></label>
+          <label class="lbl">6-digit PIN<input class="field" name="pin" required inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="6 digits" autocomplete="off" /></label>
+          <label class="lbl">Truck<select class="field" name="truckId"><option value="">No truck yet</option>${(DATA.trucks || []).map((t) => `<option value="${esc(t.id)}">${esc(t.plate)}${t.assignedDriverId ? " · has a driver" : ""}</option>`).join("")}</select></label>
+        </div>
+        <button class="btn btn-primary wide" style="margin-top:12px">Add driver</button>
+      </form>
+    </details>`}
     ${gone.length ? `<details class="settings" style="margin-top:16px"><summary>Removed drivers · ${gone.length}</summary>${gone.map((d) => `<div class="pay-line"><div><b>${esc(d.name)}</b><div class="muted">Removed ${fmtDay(d.removedAt)} · loads and pay kept</div></div></div>`).join("")}</details>` : ""}`;
 }
 function foldCard(head, body, cls) {
