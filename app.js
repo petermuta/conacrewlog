@@ -1917,7 +1917,7 @@ function viewCaneId(id) {
       ${steps.map((st) => `<button class="chip ${b.status === st ? "on" : ""}" data-act="update_cane_buy" data-id="${b.id}" data-status="${st}">${label(st)}</button>`).join("")}
     </div>
     ${!b.millTonnes ? `<form class="card item" data-form="mill" data-id="${b.id}" style="margin-top:14px"><div class="grid g2"><input class="field" name="millTonnes" required placeholder="Tonnes" /><input class="field" name="millPriceUgx" placeholder="${m?.priceUgxPerTonne || "UGX/t"}" /></div><button class="btn btn-primary wide" style="margin-top:10px">Save weight</button></form>` : ""}
-    ${!b.sellerPaid ? (DATA.me.role === "admin" ? `<p class="muted" style="margin-top:10px"><span class="badge red">Seller not paid</span> · pay on <a href="#money-owed" class="js-owedpay">Money › Owed</a></p>` : `<form class="card item" data-form="pay-seller" data-id="${b.id}" style="margin-top:10px"><b>Pay seller ${ugx(b.buyPriceUgx)}</b>${paySource("sugarcane", { noPayee: true, need: b.buyPriceUgx, cat: "buy" })}<button class="btn btn-primary wide" style="margin-top:10px">Pay seller</button></form>`) : ""}`;
+    ${!b.sellerPaid ? (DATA.me.role === "admin" ? `<p class="muted" style="margin-top:10px"><span class="badge red">Seller not paid</span> · pay on <a href="#money-owed" class="js-owedpay">Money › Owed</a></p>` : `<form class="card item" data-form="pay-seller" data-id="${b.id}" style="margin-top:10px"><b>Pay seller ${ugx(b.buyPriceUgx)}</b>${advSource("sugarcane", { noPayee: true, useSpent: true, need: b.buyPriceUgx })}<button class="btn btn-primary wide" style="margin-top:10px">Pay seller</button></form>`) : ""}`;
 }
 
 
@@ -2051,7 +2051,7 @@ function viewField() {
       ${kind === "harvest" ? `<div class="card kpi passion"><span class="eyebrow">Picked</span><b>${kg} kg</b></div>` : ""}
     </div>
     ${(() => { const free = (DATA.disbursements || []).filter((f) => f.tag === "passion").reduce((a, f) => a + (f.usages || []).reduce((b, u) => b + unassignedOf(u), 0), 0), onHand = (DATA.disbursements || []).filter((f) => f.tag === "passion" && f.status !== "closed" && f.status !== "sent").reduce((a, f) => a + advLeft(f).left, 0);
-      return free || onHand ? `<div class="card item adv-hint"><b>Advance money for the blocks</b><div class="muted">${free ? ugx(free) + " already spent, not yet given to blocks" : ""}${free && onHand ? " · " : ""}${onHand ? ugx(onHand) + " still on hand" : ""}. Pick it under “Paid from” — no new money is added.</div></div>` : ""; })()}
+      return `<div class="card item adv-hint"><span class="eyebrow">Advance available</span><b>${ugx(advAvailable("passion", true))}</b></div>`; })()}
     <form class="card item" data-form="farm-work" style="margin-top:14px">
       <p class="eyebrow">${meta[1]}</p>
       <input type="hidden" name="kind" value="${kind}" />
@@ -2061,9 +2061,9 @@ function viewField() {
       <input type="hidden" name="blockId" value="${esc(((DATA.blocks || [])[0] || {}).id || "B1")}" />
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Date<input class="field" name="date" type="date" value="${todayYmd()}" max="${todayYmd()}" /></label>
-        <label class="lbl">Cost (UGX)<input class="field" name="costUgx" inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Cost (UGX)<input class="field js-src-amt" name="costUgx" inputmode="numeric" placeholder="0" /></label>
       </div>
-      ${paySource("passion", { cat: kind })}
+      ${advSource("passion", { useSpent: true })}
       <div style="margin-top:10px">${extra}</div>
       <button class="btn btn-passion wide" style="margin-top:10px">Save ${meta[1].toLowerCase()}</button>
     </form>
@@ -2071,7 +2071,7 @@ function viewField() {
       <table>
         <thead><tr><th>Date</th><th>Block</th><th>${kind === "harvest" ? "Kg" : meta[2]}</th><th>Cost</th></tr></thead>
         <tbody>
-          ${rows.map((w) => `<tr><td>${w.date}</td><td>${w.blockId}</td><td>${kind === "harvest" ? (w.kg || 0) + " kg" : (w.note || "—")}</td><td>${ugx(w.costUgx)}${w.costUgx ? `<div class="muted">${w.paidFrom === "spent_advance" || w.paidFrom === "advance" || w.floatId ? "from advance" : "new money"}</div>` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No ${meta[1].toLowerCase()} yet</td></tr>`}
+          ${rows.map((w) => `<tr><td>${w.date}</td><td>${w.blockId}</td><td>${kind === "harvest" ? (w.kg || 0) + " kg" : (w.note || "—")}</td><td>${ugx(w.costUgx)}${w.costUgx ? `<div class="muted">${w.paidFrom === "mixed" ? "advance + cash" : w.paidFrom === "spent_advance" || w.paidFrom === "advance" || w.floatId ? "advance" : "cash on hand"}</div>` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No ${meta[1].toLowerCase()} yet</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -2667,7 +2667,7 @@ function openSellerPaid(id) {
   const s = (DATA.sellers || []).find((x) => x.id === b.sellerId);
   openSheet({
     title: "Pay cane seller", sub: esc((s ? s.name + " · " : "") + (b.location || "")),
-    body: payFields(b.buyPriceUgx, { fixed: true, methodLabel: "Paid with", method: s && s.phone ? "mtn_momo" : "cash" }) + paySource("sugarcane", { noPayee: true, need: b.buyPriceUgx, cat: "buy" }),
+    body: payFields(b.buyPriceUgx, { fixed: true, methodLabel: "Paid with", method: s && s.phone ? "mtn_momo" : "cash" }) + advSource("sugarcane", { noPayee: true, useSpent: true, need: b.buyPriceUgx }),
     submit: "Save payment",
     onSubmit: (fd) => act("pay_seller", { id: b.id, method: fd.method, reference: fd.reference, date: fd.date, source: fd.source || "" }),
   });
@@ -3215,18 +3215,14 @@ function workerFundsView(tag) {
     ${(() => {
       const usable = open.filter((f) => advLeft(f).left > 0).sort((x, y) => String(x.date).localeCompare(String(y.date)));
       return `<details class="card team-row spend-card" style="margin-top:10px" ${usable.length ? "open" : ""}>
-      <summary><div class="avatar">＋</div><div style="flex:1"><b>Record spending</b><div class="muted">${usable.length ? ugx(withMe + floats.filter((f) => f.status === "sent").reduce((a, f) => a + advLeft(f).left, 0)) + " in advances to use" : "No advance on hand"}</div></div></summary>
+      <summary><div class="avatar">＋</div><div style="flex:1"><b>Record spending</b><div class="muted">${usable.length ? "Advance · " + ugx(advAvailable(tag, false)) + " available" : "No advance available"}</div></div></summary>
       <form data-form="worker-spend" style="margin-top:12px">
         <div class="grid g3">
           <label class="lbl">What<select class="field js-use-cat" name="category" data-fuel="${fuelKey}">${FUND_FOR[tag].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
-          <label class="lbl">Amount (UGX)<input class="field js-spend-amt" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
+          <label class="lbl">Amount (UGX)<input class="field js-spend-amt js-src-amt" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
           <label class="lbl js-use-litres">Litres<input class="field" name="litres" inputmode="decimal" placeholder="e.g. 120" /></label>
         </div>
-        <label class="lbl" style="margin-top:10px">Paid from<select class="field js-spend-from" name="floatId">
-          ${usable.map((f, i) => `<option value="${esc(f.id)}" data-left="${advLeft(f).left}" ${i === 0 ? "selected" : ""}>Advance ${fmtDay(f.date)} · ${esc(catLabel(tag, f.activity) || "")} · ${ugx(advLeft(f).left)} left</option>`).join("")}
-          <option value="" data-left="0">Cash on hand (not from an advance)</option>
-        </select></label>
-        <p class="muted js-spend-split" style="margin:6px 0 0"></p>
+        ${advSource(tag, { noPayee: true })}
         ${tag !== "trucking" ? `<div style="margin-top:10px">${linkSelect(tag)}</div>` : ""}
         <div style="margin-top:10px">${payeeFields("ws", { method: "cash" }, { efris: true })}</div>
         <div class="grid g3" style="margin-top:10px">
@@ -3293,6 +3289,21 @@ function paySource(tag, opts = {}) {
       ${onHand.length ? `<optgroup label="Advance on hand">${onHand.map((f) => o("adv:" + f.id, `Advance ${fmtDay(f.date)}${admin && holder(f) ? " · " + esc(holder(f)) : ""} · ${ugx(advLeft(f).left)} left`, advLeft(f).left)).join("")}</optgroup>` : ""}
       ${o("", admin ? "Office pays now (new money out)" : "Cash on hand (new money out)")}
     </select></label>
+    ${opts.noPayee ? "" : `<label class="lbl" style="margin-top:10px">Paid to<input class="field" name="payeeName" placeholder="e.g. 5 workers / supplier name" /></label>`}`;
+}
+// One advance balance per business: "Advance · UGX X available" or cash on hand. The app works out which advance it comes from.
+function advAvailable(tag, useSpent) {
+  const admin = DATA.me.role === "admin";
+  return (DATA.disbursements || []).filter((f) => (f.tag || "trucking") === tag && f.status !== "closed").reduce((a, f) =>
+    a + (f.status === "sent" && admin ? 0 : advLeft(f).left) + (useSpent ? (f.usages || []).reduce((t, u) => t + unassignedOf(u), 0) : 0), 0);
+}
+function advSource(tag, opts = {}) {
+  const avail = advAvailable(tag, opts.useSpent), admin = DATA.me.role === "admin";
+  return `<label class="lbl" style="margin-top:10px">Paid from<select class="field js-src" name="source" ${opts.need ? `data-need="${opts.need}"` : ""}>
+      ${avail > 0 ? `<option value="advance" data-left="${avail}" selected>Advance · ${ugx(avail)} available</option>` : ""}
+      <option value="" data-left="0">${admin ? "Office pays now" : "Cash on hand"}</option>
+    </select></label>
+    <p class="muted js-src-split" style="margin:6px 0 0">${avail > 0 ? "" : "No advance available"}</p>
     ${opts.noPayee ? "" : `<label class="lbl" style="margin-top:10px">Paid to<input class="field" name="payeeName" placeholder="e.g. 5 workers / supplier name" /></label>`}`;
 }
 function fundSelect(tag, noPayee, need) {
@@ -3861,7 +3872,7 @@ function driverFuelView() {
     <form class="card item" data-form="fuel" style="margin-top:14px">
       <div class="grid g3">
         <label class="lbl">Litres<input class="field" name="litres" required inputmode="decimal" placeholder="0" /></label>
-        <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Amount (UGX)<input class="field js-src-amt" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
         <label class="lbl">Odometer (km)<input class="field" name="odometerKm" inputmode="numeric" placeholder="Optional" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">${dateField("date", "Date")}</div>
@@ -3871,10 +3882,7 @@ function driverFuelView() {
       </div>
       ${efrisFields()}
       <div class="thumbs use-preview"></div>
-      <label class="lbl" style="margin-top:10px">Paid from<select class="field" name="floatId">
-        ${open.map((f, i) => `<option value="${esc(f.id)}" ${i === 0 ? "selected" : ""}>Advance ${fmtDay(f.date)} · ${ugx(advLeft(f).left)} left</option>`).join("")}
-        <option value="">Not from an advance</option>
-      </select></label>
+      ${advSource("trucking", { noPayee: true })}
       <button class="btn btn-primary wide" style="margin-top:12px">Save fuel</button>
     </form>
     ${logs.length ? `<p class="eyebrow" style="margin-top:16px">Recent fuel</p><div class="card" style="padding:4px 14px;margin-top:8px">${logs.map((l) => `<div class="pay-line"><div><b>${l.litres || 0} L · ${esc(l.station || "Station")}</b><div class="muted">${fmtDay(l.date)}${l.odometerKm ? " · " + Number(l.odometerKm).toLocaleString() + " km" : ""}${l.floatId ? " · from advance" : l.notFromAdvance ? " · not from an advance" : ""}</div></div><b class="amt">${ugx(l.amountUgx || 0)}</b></div>`).join("")}</div>` : ""}`;
@@ -4281,11 +4289,11 @@ function bind() {
   document.querySelectorAll(".js-owedpay").forEach((a) => { a.onclick = () => sessionStorage.setItem("owedTab", "pay"); });
   document.querySelectorAll("[data-mprof]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofBiz", b.dataset.mprof); route(); }; });
   document.querySelectorAll("[data-mproffleet]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofFleet", b.dataset.mproffleet); route(); }; });
-  document.querySelectorAll("form[data-form=worker-spend]").forEach((f) => {
-    const amt = f.querySelector(".js-spend-amt"), from = f.querySelector(".js-spend-from"), out = f.querySelector(".js-spend-split");
-    const calc = () => { const a = Number(String(amt.value).replace(/[^\d.]/g, "")) || 0, opt = from.selectedOptions[0], left = Number(opt && opt.dataset.left) || 0;
-      out.textContent = !a || !from.value ? "" : a <= left ? `${ugx(left - a)} stays on this advance` : `${ugx(left)} from the advance · ${ugx(a - left)} from cash on hand`; };
-    amt.addEventListener("input", calc); from.addEventListener("change", calc);
+  document.querySelectorAll("select.js-src").forEach((sel) => {
+    const form = sel.closest("form"), amt = form && form.querySelector(".js-src-amt"), out = sel.closest("label").nextElementSibling;
+    const calc = () => { if (!out || !out.classList.contains("js-src-split")) return; const opt = sel.selectedOptions[0], left = Number(opt && opt.dataset.left) || 0, a = Number(sel.dataset.need) || Number(String(amt ? amt.value : "").replace(/[^\d.]/g, "")) || 0;
+      out.textContent = !sel.value ? (left || !sel.options[0] || !sel.options[0].value ? "" : "") : !a ? "" : a <= left ? `${ugx(left - a)} advance left after this` : `${ugx(left)} from the advance · ${ugx(a - left)} cash on hand`; };
+    if (amt) amt.addEventListener("input", calc); sel.addEventListener("change", calc); calc();
   });
   document.querySelectorAll(".js-editpay").forEach((b) => { b.onclick = () => openEditPay(b.dataset.id); });
   document.querySelectorAll(".js-editsale").forEach((r) => { r.onclick = () => openEditSale(r.dataset.id); });
@@ -4563,9 +4571,9 @@ function bind() {
       } else if (kind === "worker-spend") {
         const file = form.querySelector(".use-photo") && form.querySelector(".use-photo").files[0];
         const photo = file ? await compressPhoto(file) : "";
-        const a = Number(String(fd.amountUgx).replace(/[^\d.]/g, "")) || 0, opt = form.querySelector(".js-spend-from").selectedOptions[0], left = fd.floatId ? Number(opt && opt.dataset.left) || 0 : 0;
+        const a = Number(String(fd.amountUgx).replace(/[^\d.]/g, "")) || 0, opt = form.querySelector(".js-src").selectedOptions[0], left = fd.source ? Number(opt && opt.dataset.left) || 0 : 0;
         try { await act("log_spend", { ...fd, photo }); } catch (err) { return; }
-        toast(!fd.floatId ? "Saved · cash on hand" : a > left ? `${ugx(left)} from the advance · ${ugx(a - left)} cash on hand` : `Saved · ${ugx(left - a)} left on the advance`);
+        toast(!fd.source ? "Saved · cash on hand" : a > left ? `${ugx(left)} from the advance · ${ugx(a - left)} cash on hand` : `Saved · ${ugx(left - a)} left on the advance`);
       } else if (kind === "float-use") {
         const file = form.querySelector(".use-photo") && form.querySelector(".use-photo").files[0];
         let photo = "";

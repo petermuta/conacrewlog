@@ -1167,3 +1167,5 @@ tr.js-editsale { cursor: pointer; } tr.js-editsale:active td { background: rgba(
 .pay-line.paid { flex-wrap: wrap; }
 .pl-acts { flex-basis: 100%; display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
 .adv-hint{margin-top:12px;border-left:3px solid var(--good)!important}
+.adv-hint { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.adv-hint b { font-size: 22px; color: var(--good); }
