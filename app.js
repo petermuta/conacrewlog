@@ -1993,60 +1993,49 @@ function lastWork(blockId, kind) {
   return works().find((w) => w.blockId === blockId && w.kind === kind);
 }
 
-function viewPassion() {
+// Passion home – shared figures
+function pfData() {
   const k = DATA.kpis || {};
-  const KINDS = [["harvest", "Harvest", "🧺"], ["prune", "Prune", "✂"], ["spray", "Spray", "💧"], ["fertilize", "Feed", "🌱"], ["weed", "Weed", "🌿"]];
+  const KINDS = [["harvest", "Harvest"], ["prune", "Prune"], ["spray", "Spray"], ["fertilize", "Feed"], ["weed", "Weed"]];
   const blocks = ((DATA.blocks || []).length ? DATA.blocks.slice() : ["B1", "B2", "B3", "B4"].map((id) => ({ id, acres: "" }))).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
   const mKey = todayYmd().slice(0, 7), today = new Date(todayYmd() + "T12:00:00");
   const daysAgo = (d) => d ? Math.max(0, Math.round((today - new Date(String(d).slice(0, 10) + "T12:00:00")) / 864e5)) : null;
-  const tone = (n) => n === null ? "none" : n <= 14 ? "fresh" : n <= 30 ? "due" : "late";
-  const monthW = works().filter((w) => String(w.date).startsWith(mKey));
-  const sales = (DATA.fruitSales || []);
-  const monthS = sales.filter((x) => String(x.date).startsWith(mKey));
-  const picked = monthW.reduce((s, w) => s + (Number(w.kg) || 0), 0), soldKg = monthS.reduce((s, x) => s + (Number(x.kg) || 0), 0);
-  const income = monthS.reduce((s, x) => s + (Number(x.amountUgx) || 0), 0), cost = monthW.reduce((s, w) => s + (Number(w.costUgx) || 0), 0);
-  const stock = k.stockKg ?? DATA.stockKg ?? 0, allPicked = k.harvestedKg || 0, allSold = k.soldKg || 0;
-  const avail = typeof advAvailable === "function" ? advAvailable("passion", true) : 0;
-  const owed = sales.filter((x) => (x.amountUgx || 0) > (x.paidUgx || 0)).reduce((s, x) => s + (x.amountUgx - (x.paidUgx || 0)), 0);
-  const kindName = Object.fromEntries(KINDS.map(([a, b]) => [a, b]));
-  const recent = works().slice().sort((x, y) => String(y.date).localeCompare(String(x.date))).slice(0, 6);
-  const blockCard = (b) => {
-    const bw = monthW.filter((w) => w.blockId === b.id);
-    const kg = bw.reduce((s, w) => s + (Number(w.kg) || 0), 0), c = bw.reduce((s, w) => s + (Number(w.costUgx) || 0), 0);
-    const care = KINDS.map(([kind, label]) => { const w = lastWork(b.id, kind), n = w ? daysAgo(w.date) : null; return `<a class="care ${tone(n)}" href="#field/${kind}" title="${label}"><span>${label}</span><b>${n === null ? "—" : n === 0 ? "today" : n + "d"}</b></a>`; }).join("");
-    const lateN = KINDS.filter(([kind]) => kind !== "harvest" && tone(lastWork(b.id, kind) ? daysAgo(lastWork(b.id, kind).date) : null) !== "fresh").length;
-    return `<div class="card blk">
-      <div class="blk-h"><div><b>Block ${esc(String(b.id).replace(/^B/, ""))}</b>${b.acres ? `<span class="muted"> · ${b.acres} ac</span>` : ""}</div>${lateN ? `<span class="badge gold">${lateN} due</span>` : `<span class="badge green">On track</span>`}</div>
-      <div class="blk-n"><div><span class="eyebrow">Picked · month</span><b>${kg.toLocaleString()} kg</b></div><div><span class="eyebrow">Cost · month</span><b>${ugx(c)}</b></div></div>
-      <div class="care-row">${care}</div>
-    </div>`;
-  };
-  return `
-    <h1>Passion</h1>
-    ${farmTabs("passion")}
-    <div class="card pf-hero">
-      <div class="pf-hero-top"><span class="eyebrow">${new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</span>${DATA.me.role === "admin" || DATA.me.role === "passion_manager" ? `<a class="pf-adv" href="#field"><span>Advance available</span><b>${ugx(avail)}</b></a>` : ""}</div>
-      <div class="pf-stats">
-        <div><span class="eyebrow">Picked</span><b>${picked.toLocaleString()} kg</b></div>
-        <div><span class="eyebrow">Sold</span><b>${soldKg.toLocaleString()} kg</b><small>${ugx(income)}</small></div>
-        <div><span class="eyebrow">Work cost</span><b>${ugx(cost)}</b></div>
-        <div><span class="eyebrow">${income - cost < 0 ? "Loss" : "Margin"}</span><b class="${income - cost < 0 ? "neg" : "pos"}">${ugx(Math.abs(income - cost))}</b></div>
+  const monthW = works().filter((w) => String(w.date).startsWith(mKey)), sales = DATA.fruitSales || [], monthS = sales.filter((x) => String(x.date).startsWith(mKey));
+  const sum = (a, f) => a.reduce((t, x) => t + (Number(x[f]) || 0), 0);
+  return { k, KINDS, blocks, daysAgo, monthW, monthS, sales, picked: sum(monthW, "kg"), soldKg: sum(monthS, "kg"), income: sum(monthS, "amountUgx"), cost: sum(monthW, "costUgx"),
+    stock: k.stockKg ?? DATA.stockKg ?? 0, avail: advAvailable("passion", true), owed: sales.reduce((t, x) => t + Math.max(0, (x.amountUgx || 0) - (x.paidUgx || 0)), 0),
+    blockKg: (id) => sum(monthW.filter((w) => w.blockId === id), "kg"), blockCost: (id) => sum(monthW.filter((w) => w.blockId === id), "costUgx"),
+    last: (id, kind) => { const w = lastWork(id, kind); return w ? daysAgo(w.date) : null; }, bName: (id) => "Block " + String(id).replace(/^B/, "") };
+}
+function pfAgo(n) { return n === null ? "never" : n === 0 ? "today" : n === 1 ? "yesterday" : n + " days ago"; }
+// Passion home: fruit in store, then one tile per block coloured by how well it is kept
+function viewPassion() {
+  const d = pfData();
+  const care = d.KINDS.slice(1); // prune, spray, feed, weed
+  const health = (id) => { const late = care.map(([k]) => d.last(id, k)).filter((n) => n === null || n > 30).length; return late >= 3 ? "late" : late ? "due" : "ok"; };
+  const lastJob = (id) => { const w = works().filter((x) => x.blockId === id).sort((x, y) => String(y.date).localeCompare(String(x.date)))[0]; return w ? (d.KINDS.find((k) => k[0] === w.kind) || [0, w.kind])[1] + " " + pfAgo(d.daysAgo(w.date)) : "Nothing recorded"; };
+  const due = (id) => care.filter(([k]) => { const n = d.last(id, k); return n === null || n > 30; }).map(([, l]) => l);
+  const margin = d.income - d.cost, staff = DATA.me.role === "admin" || DATA.me.role === "passion_manager";
+  return `<h1>Passion</h1>${farmTabs("passion")}
+    <div class="card pb-top">
+      <div class="pb-head"><div><span class="eyebrow">Fruit in store</span><b>${Number(d.stock).toLocaleString()}<small> kg</small></b></div>
+        ${staff && d.avail ? `<a class="pf-adv" href="#field"><span>Advance available</span><b>${ugx(d.avail)}</b></a>` : ""}</div>
+      <div class="pb-mini">
+        <div><span>Picked · month</span><b>${d.picked.toLocaleString()} kg</b></div>
+        <div><span>Sales · month</span><b>${ugx(d.income)}</b></div>
+        <div><span>${margin < 0 ? "Loss" : "Margin"}</span><b class="${margin < 0 ? "neg" : "pos"}">${ugx(Math.abs(margin))}</b></div>
       </div>
-      <div class="pf-stock">
-        <div class="pf-stock-h"><span>In store</span><b>${Number(stock).toLocaleString()} kg</b></div>
-        <span class="pf-bar"><i style="width:${allPicked ? Math.min(100, Math.round((allSold / allPicked) * 100)) : 0}%"></i></span>
-        <div class="muted pf-stock-f"><span>${Number(allSold).toLocaleString()} kg sold of ${Number(allPicked).toLocaleString()} kg picked</span>${owed ? (DATA.me.role === "admin" ? `<a href="#money-owed">Buyers owe ${ugx(owed)} ›</a>` : `<span class="pf-owe">Buyers owe ${ugx(owed)}</span>`) : ""}</div>
-      </div>
+      ${d.owed ? `<div class="pb-owe">${DATA.me.role === "admin" ? `<a href="#money-owed">Buyers owe ${ugx(d.owed)} ›</a>` : `Buyers owe ${ugx(d.owed)}`}</div>` : ""}
     </div>
-    <div class="pf-actions">
-      <a class="btn btn-primary" href="#field/harvest">＋ Harvest</a>
-      <a class="btn btn-ghost" href="#field/weed">＋ Work</a>
-      <a class="btn btn-ghost" href="#passion-sell">＋ Sell fruit</a>
-    </div>
-    <div class="row keep" style="margin-top:18px;align-items:center"><h2 style="margin:0">Blocks</h2><span class="care-key"><i class="fresh"></i>≤14d <i class="due"></i>15–30d <i class="late"></i>late</span></div>
-    <div class="blk-grid">${blocks.map(blockCard).join("")}</div>
-    <h2 style="margin:18px 0 0">Recent work</h2>
-    <div class="card item pf-recent">${recent.length ? recent.map((w) => `<div class="owe-line"><div class="owe-l"><b>${esc(kindName[w.kind] || w.kind)} · Block ${esc(String(w.blockId).replace(/^B/, ""))}</b><span class="muted">${fmtDay(w.date)}${w.kind === "harvest" && w.kg ? " · " + w.kg + " kg" : w.note ? " · " + esc(w.note) : ""}</span></div><div class="owe-r"><b>${w.costUgx ? ugx(w.costUgx) : "—"}</b></div></div>`).join("") : `<p class="muted">Nothing recorded yet.</p>`}</div>`;
+    <div class="pb-tiles">${d.blocks.map((b) => { const h = health(b.id), todo = due(b.id); return `<a class="pb-tile ${h} js-blocktile" data-tile="${esc(b.id)}" href="#field/${todo.length ? ({ Prune: "prune", Spray: "spray", Feed: "fertilize", Weed: "weed" }[todo[0]]) : "harvest"}">
+        <span class="pb-name">${d.bName(b.id)}${b.acres ? `<small> · ${b.acres} ac</small>` : ""}</span>
+        <span class="pb-state">${h === "ok" ? "Well kept" : h === "due" ? "Work due" : "Needs attention"}</span>
+        <b>${d.blockKg(b.id).toLocaleString()}<small> kg</small></b>
+        <span class="pb-sub">picked this month${d.blockCost(b.id) ? " · " + ugx(d.blockCost(b.id)) : ""}</span>
+        <span class="pb-last">${todo.length ? "Due: " + todo.join(", ") : esc(lastJob(b.id))}</span>
+      </a>`; }).join("")}</div>
+    <div class="pb-key"><span><i class="ok"></i>Well kept</span><span><i class="due"></i>Work due</span><span><i class="late"></i>Needs attention</span><span class="muted">· over 30 days counts as due</span></div>
+    <div class="pb-btns"><a class="btn btn-primary js-blocktile" data-tile="" href="#field/harvest">Record harvest</a><a class="btn btn-ghost" href="#passion-sell">Sell fruit</a></div>`;
 }
 
 function viewField() {
@@ -2084,9 +2073,9 @@ function viewField() {
       <p class="eyebrow">${meta[1]}</p>
       <input type="hidden" name="kind" value="${kind}" />
       <div class="tabs" style="margin-top:8px" id="blockPick">
-        ${(() => { const bl = (DATA.blocks || []).length ? DATA.blocks.map((b) => b.id) : ["B1", "B2", "B3", "B4"]; return bl.map((id, i) => `<button type="button" class="block-btn ${i === 0 ? "on" : ""}" data-block="${esc(id)}">${esc(id)}</button>`).join(""); })()}
+        ${(() => { const bl = (DATA.blocks || []).length ? DATA.blocks.map((b) => b.id) : ["B1", "B2", "B3", "B4"]; const pre = bl.includes(sessionStorage.getItem("workBlock")) ? sessionStorage.getItem("workBlock") : bl[0]; return bl.map((id) => `<button type="button" class="block-btn ${id === pre ? "on" : ""}" data-block="${esc(id)}">${esc(id)}</button>`).join(""); })()}
       </div>
-      <input type="hidden" name="blockId" value="${esc(((DATA.blocks || [])[0] || {}).id || "B1")}" />
+      <input type="hidden" name="blockId" value="${esc((() => { const bl = (DATA.blocks || []).length ? DATA.blocks.map((b) => b.id) : ["B1", "B2", "B3", "B4"]; return bl.includes(sessionStorage.getItem("workBlock")) ? sessionStorage.getItem("workBlock") : bl[0]; })())}" />
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Date<input class="field" name="date" type="date" value="${todayYmd()}" max="${todayYmd()}" /></label>
         <label class="lbl">Cost (UGX)<input class="field js-src-amt" name="costUgx" inputmode="numeric" placeholder="0" /></label>
@@ -4354,6 +4343,7 @@ function bind() {
   document.querySelectorAll("[data-mproffleet]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofFleet", b.dataset.mproffleet); route(); }; });
   bindSrcSplit(document);
   document.querySelectorAll(".js-editpay").forEach((b) => { b.onclick = () => openEditPay(b.dataset.id); });
+  document.querySelectorAll(".js-blocktile").forEach((t) => { t.onclick = () => { if (t.dataset.tile) sessionStorage.setItem("workBlock", t.dataset.tile); else sessionStorage.removeItem("workBlock"); }; });
   document.querySelectorAll(".js-editwork").forEach((r) => { r.onclick = () => openEditWork(r.dataset.id); });
   document.querySelectorAll(".js-editsale").forEach((r) => { r.onclick = () => openEditSale(r.dataset.id); });
   document.querySelectorAll(".js-taxm").forEach((el) => { el.onchange = () => { sessionStorage.setItem("taxMonth", el.value); route(); }; });
