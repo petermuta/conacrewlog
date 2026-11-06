@@ -1169,3 +1169,4 @@ tr.js-editsale { cursor: pointer; } tr.js-editsale:active td { background: rgba(
 .adv-hint{margin-top:12px;border-left:3px solid var(--good)!important}
 .adv-hint { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .adv-hint b { font-size: 22px; color: var(--good); }
+tr.js-editwork { cursor: pointer; } tr.js-editwork:active td { background: rgba(242,138,31,.1); } .sheet .btn-remove.wide { width: 100%; }

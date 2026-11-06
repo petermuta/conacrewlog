@@ -2071,7 +2071,7 @@ function viewField() {
       <table>
         <thead><tr><th>Date</th><th>Block</th><th>${kind === "harvest" ? "Kg" : meta[2]}</th><th>Cost</th></tr></thead>
         <tbody>
-          ${rows.map((w) => `<tr><td>${w.date}</td><td>${w.blockId}</td><td>${kind === "harvest" ? (w.kg || 0) + " kg" : (w.note || "—")}</td><td>${ugx(w.costUgx)}${w.costUgx ? `<div class="muted">${w.paidFrom === "mixed" ? "advance + cash" : w.paidFrom === "spent_advance" || w.paidFrom === "advance" || w.floatId ? "advance" : "cash on hand"}</div>` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No ${meta[1].toLowerCase()} yet</td></tr>`}
+          ${rows.map((w) => `<tr class="js-editwork" data-id="${esc(w.id)}" tabindex="0"><td>${fmtDay(w.date)}<div class="muted">Edit ›</div></td><td>${w.blockId}</td><td>${kind === "harvest" ? (w.kg || 0) + " kg" : (w.note || "—")}</td><td>${ugx(w.costUgx)}${w.costUgx ? `<div class="muted">${w.paidFrom === "mixed" ? "advance + cash" : w.paidFrom === "spent_advance" || w.paidFrom === "advance" || w.floatId ? "advance" : "cash on hand"}</div>` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No ${meta[1].toLowerCase()} yet</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -3291,6 +3291,41 @@ function paySource(tag, opts = {}) {
     </select></label>
     ${opts.noPayee ? "" : `<label class="lbl" style="margin-top:10px">Paid to<input class="field" name="payeeName" placeholder="e.g. 5 workers / supplier name" /></label>`}`;
 }
+function bindSrcSplit(root) {
+  root.querySelectorAll("select.js-src").forEach((sel) => {
+    const form = sel.closest("form"), amt = form && form.querySelector(".js-src-amt"), out = sel.closest("label").nextElementSibling;
+    const calc = () => { if (!out || !out.classList.contains("js-src-split")) return; const opt = sel.selectedOptions[0], left = Number(opt && opt.dataset.left) || 0, a = Number(sel.dataset.need) || Number(String(amt ? amt.value : "").replace(/[^\d.]/g, "")) || 0;
+      out.textContent = !sel.value || !a ? "" : a <= left ? `${ugx(left - a)} advance left after this` : `${ugx(left)} from the advance · ${ugx(a - left)} cash on hand`; };
+    if (amt) amt.addEventListener("input", calc); sel.addEventListener("change", calc); calc();
+  });
+}
+function openEditWork(id) {
+  const w = (DATA.farmWorks || []).find((x) => x.id === id); if (!w) return;
+  const blocks = (DATA.blocks || []).length ? DATA.blocks.map((b) => b.id) : ["B1", "B2", "B3", "B4"];
+  const mine = Number(w.fromAdvanceUgx) || (w.floatId && w.paidFrom !== "cash" ? Number(w.costUgx) || 0 : 0); // what this record already takes from the advance
+  const avail = advAvailable("passion", true) + mine, fromAdv = w.paidFrom && w.paidFrom !== "cash";
+  openSheet({ title: "Edit " + ({ harvest: "harvest", prune: "pruning", spray: "spraying", fertilize: "fertilizing", weed: "weeding" }[w.kind] || "work"), sub: "Block " + esc(w.blockId) + " · " + fmtDay(w.date),
+    body: `<div class="grid g2">
+        <label class="lbl">Block<select class="field" name="blockId">${blocks.map((b) => `<option value="${esc(b)}" ${b === w.blockId ? "selected" : ""}>${esc(b)}</option>`).join("")}</select></label>
+        <label class="lbl">Date<input class="field" type="date" name="date" value="${esc(String(w.date).slice(0, 10))}" max="${todayYmd()}" /></label>
+        <label class="lbl">Cost (UGX)<input class="field js-src-amt" name="costUgx" inputmode="numeric" value="${w.costUgx || ""}" /></label>
+        ${w.kind === "harvest" ? `<label class="lbl">Kg picked<input class="field" name="kg" inputmode="decimal" value="${w.kg || ""}" /></label>` : `<label class="lbl">Note<input class="field" name="note" value="${esc(w.note || "")}" /></label>`}
+      </div>
+      <label class="lbl" style="margin-top:10px">Paid from<select class="field js-src" name="source">
+        ${avail > 0 ? `<option value="advance" data-left="${avail}" ${fromAdv || !w.costUgx ? "selected" : ""}>Advance · ${ugx(avail)} available</option>` : ""}
+        <option value="" data-left="0" ${!fromAdv && w.costUgx ? "selected" : ""}>${DATA.me.role === "admin" ? "Office pays now" : "Cash on hand"}</option>
+      </select></label>
+      <p class="muted js-src-split" style="margin:6px 0 0"></p>
+      <button type="button" class="btn btn-ghost btn-remove wide js-delwork" style="margin-top:14px">Delete this record</button>`,
+    submit: "Save changes",
+    onSubmit: (fd) => act("update_farm_work", { ...fd, id: w.id }) });
+  const sh = document.getElementById("sheet");
+  bindSrcSplit(sh);
+  sh.querySelector(".js-delwork").onclick = async () => {
+    if (!confirm("Delete this record? Its cost goes back: advance money becomes available again and any cash line is removed.")) return;
+    try { await act("delete_farm_work", { id: w.id }); closeSheet(); } catch (e) {}
+  };
+}
 // One advance balance per business: "Advance · UGX X available" or cash on hand. The app works out which advance it comes from.
 function advAvailable(tag, useSpent) {
   const admin = DATA.me.role === "admin";
@@ -4289,13 +4324,9 @@ function bind() {
   document.querySelectorAll(".js-owedpay").forEach((a) => { a.onclick = () => sessionStorage.setItem("owedTab", "pay"); });
   document.querySelectorAll("[data-mprof]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofBiz", b.dataset.mprof); route(); }; });
   document.querySelectorAll("[data-mproffleet]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofFleet", b.dataset.mproffleet); route(); }; });
-  document.querySelectorAll("select.js-src").forEach((sel) => {
-    const form = sel.closest("form"), amt = form && form.querySelector(".js-src-amt"), out = sel.closest("label").nextElementSibling;
-    const calc = () => { if (!out || !out.classList.contains("js-src-split")) return; const opt = sel.selectedOptions[0], left = Number(opt && opt.dataset.left) || 0, a = Number(sel.dataset.need) || Number(String(amt ? amt.value : "").replace(/[^\d.]/g, "")) || 0;
-      out.textContent = !sel.value ? (left || !sel.options[0] || !sel.options[0].value ? "" : "") : !a ? "" : a <= left ? `${ugx(left - a)} advance left after this` : `${ugx(left)} from the advance · ${ugx(a - left)} cash on hand`; };
-    if (amt) amt.addEventListener("input", calc); sel.addEventListener("change", calc); calc();
-  });
+  bindSrcSplit(document);
   document.querySelectorAll(".js-editpay").forEach((b) => { b.onclick = () => openEditPay(b.dataset.id); });
+  document.querySelectorAll(".js-editwork").forEach((r) => { r.onclick = () => openEditWork(r.dataset.id); });
   document.querySelectorAll(".js-editsale").forEach((r) => { r.onclick = () => openEditSale(r.dataset.id); });
   document.querySelectorAll(".js-taxm").forEach((el) => { el.onchange = () => { sessionStorage.setItem("taxMonth", el.value); route(); }; });
   document.querySelectorAll(".js-taxcsv").forEach((b) => { b.onclick = taxCsv; });

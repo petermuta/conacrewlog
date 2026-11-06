@@ -497,10 +497,10 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["log_spend", "read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["log_spend", "update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
-    passion_manager: ["log_spend", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
+    passion_manager: ["update_farm_work", "delete_farm_work", "log_spend", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
   };
   return (map[role] || []).includes(action);
 }
@@ -591,6 +591,36 @@ function drawAdvance(db, user, tag, amount, o) {
     parts.push({ floatId: f.id, usageId: use.id, amountUgx: take, kind: "hand" }); need -= take; got += take;
   }
   return { fromAdvance: got, rest: need, parts };
+}
+// Passion work cost: from the advance balance (spent-not-assigned first, then on hand) or cash on hand
+function payWorkCost(db, user, rec, body) {
+  Object.assign(rec, { fromAdvanceUgx: 0, fromCashUgx: 0, advParts: [], cashId: "", floatId: "", usageId: "", paidFrom: "" });
+  if (!(rec.costUgx > 0)) return;
+  const spend = { category: rec.kind, payeeName: body.payeeName || "Farm workers", method: body.method || "cash", payeePhone: body.payeePhone || "", note: (rec.note || rec.kind) + " · Block " + (rec.blockId || ""), photo: body.photo || "", date: rec.date };
+  if (body.source === "advance") {
+    const d = drawAdvance(db, user, "passion", rec.costUgx, { useSpent: true, cat: rec.kind, link: { blockId: rec.blockId, workId: rec.id }, spend });
+    const cash = d.rest > 0 ? spendFromAdvanceOrCash(db, user, { ...spend, floatId: "", amountUgx: d.rest, note: spend.note + " · advance ran out" }, "passion", { blockId: rec.blockId, refId: rec.id }).cash : null;
+    Object.assign(rec, { fromAdvanceUgx: d.fromAdvance, fromCashUgx: d.rest, advParts: d.parts, cashId: cash ? cash.id : "", paidFrom: d.rest ? (d.fromAdvance ? "mixed" : "cash") : "advance" });
+  } else {
+    const how = payFromSource(db, user, body, "passion", rec.costUgx, { blockId: rec.blockId, refId: rec.id }, spend);
+    Object.assign(rec, { floatId: how.floatId || "", usageId: how.usageId || "", cashId: how.cashId || "", paidFrom: how.assigned || how.floatId ? "advance" : "cash" });
+  }
+}
+// Put back whatever a work record took: advance spending is released, assignments undone, cash lines removed
+function undoWorkCost(db, rec) {
+  const fls = db.disbursements || [];
+  const resettle = (fl) => { const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0); if (fl.status === "spent" && used < fl.amountUgx) fl.status = "received"; };
+  const unassign = (u, amt) => { u.assignedUgx = Math.max(0, (Number(u.assignedUgx) || 0) - amt); const i = (u.assigned || []).findIndex((a) => a.workId === rec.id || (a.blockId === rec.blockId && Math.abs((a.amountUgx || 0) - amt) < 1)); if (i >= 0) u.assigned.splice(i, 1); };
+  const dropUse = (fl, uidv) => { fl.usages = (fl.usages || []).filter((u) => u.id !== uidv); resettle(fl); };
+  (rec.advParts || []).forEach((pt) => { const fl = fls.find((f) => f.id === pt.floatId); if (!fl) return; if (pt.kind === "spent") { const u = (fl.usages || []).find((x) => x.id === pt.usageId); if (u) unassign(u, pt.amountUgx); } else dropUse(fl, pt.usageId); });
+  if (!(rec.advParts || []).length && rec.floatId) { // older records
+    const fl = fls.find((f) => f.id === rec.floatId);
+    if (fl) {
+      const u = rec.usageId ? (fl.usages || []).find((x) => x.id === rec.usageId) : (fl.usages || []).find((x) => (x.amountUgx || 0) === rec.costUgx && String(x.note || "").includes("Block " + rec.blockId));
+      if (u) { if ((u.assigned || []).some((a) => a.blockId === rec.blockId)) unassign(u, rec.costUgx); else dropUse(fl, u.id); }
+    }
+  }
+  db.cash = (db.cash || []).filter((c) => !(c.id && c.id === rec.cashId) && !(c.refId === rec.id && c.direction === "out"));
 }
 // Spending recorded against an advance. It explains where the advance went; the money
 // already left the business when the advance was sent, so no new cash line is added.
@@ -1579,6 +1609,18 @@ function applyAction(db, user, body) {
     body.costUgx = body.costUgx || 0;
   }
 
+  if (action === "update_farm_work" || action === "delete_farm_work") {
+    const rec = (db.farmWorks || []).find((w) => w.id === body.id);
+    if (!rec) throw new Error("Work record not found");
+    if (user.role !== "admin" && user.role !== "passion_manager") throw new Error("No access");
+    undoWorkCost(db, rec);
+    if (action === "delete_farm_work") { db.farmWorks = db.farmWorks.filter((w) => w !== rec); return; }
+    const kg = rec.kind === "harvest" ? Number(body.kg) || 0 : 0;
+    if (rec.kind === "harvest" && kg <= 0) throw new Error("Enter kg picked");
+    Object.assign(rec, { blockId: body.blockId || rec.blockId, date: dayOf(body), costUgx: Math.round(Number(String(body.costUgx || "").replace(/[^\d.]/g, "")) || 0), kg, note: body.note != null ? String(body.note) : rec.note, editedBy: user.name, editedAt: todayStr() });
+    payWorkCost(db, user, rec, body);
+    return;
+  }
   if (action === "log_farm_work" || action === "log_harvest" || action === "add_field_log") {
     if (!db.farmWorks) db.farmWorks = [];
     const kind = body.kind || "weed";
@@ -1596,17 +1638,7 @@ function applyAction(db, user, body) {
       note: body.note || "",
       by: user.name,
     };
-    if (rec.costUgx > 0) {
-      const spend = { category: kind, payeeName: body.payeeName || "Farm workers", method: body.method || "cash", payeePhone: body.payeePhone || "", note: (rec.note || kind) + " · Block " + (rec.blockId || ""), photo: body.photo || "", date: rec.date };
-      if (body.source === "advance") {
-        const d = drawAdvance(db, user, "passion", rec.costUgx, { useSpent: true, cat: kind, link: { blockId: rec.blockId }, spend });
-        const cash = d.rest > 0 ? spendFromAdvanceOrCash(db, user, { ...spend, floatId: "", amountUgx: d.rest, note: spend.note + " · advance ran out" }, "passion", { blockId: rec.blockId }).cash : null;
-        Object.assign(rec, { fromAdvanceUgx: d.fromAdvance, fromCashUgx: d.rest, advParts: d.parts, cashId: cash ? cash.id : "", paidFrom: d.rest ? (d.fromAdvance ? "mixed" : "cash") : "advance" });
-      } else {
-        const how = payFromSource(db, user, body, "passion", rec.costUgx, { blockId: rec.blockId }, spend);
-        Object.assign(rec, { floatId: how.floatId || "", usageId: how.usageId || "", cashId: how.cashId || "", paidFrom: how.assigned || how.floatId ? "advance" : "cash" });
-      }
-    }
+    payWorkCost(db, user, rec, body);
     db.farmWorks.unshift(rec);
   }
 
