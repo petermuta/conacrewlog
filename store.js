@@ -959,6 +959,8 @@ function applyAction(db, user, body) {
       tonnesDelivered: Number(body.tonnes) || 0,
       fuelLitres: Number(body.fuelLitres) || 0,
       fuelCostUgx: body.payBasis === "count" && body.clientFuel !== "0" ? 0 : Number(body.fuelCostUgx) || 0,
+      ...(Number(body.pickupLat) && Number(body.pickupLng) ? { pickupPin: { lat: Number(body.pickupLat), lng: Number(body.pickupLng) } } : {}),
+      ...(Number(body.dropLat) && Number(body.dropLng) ? { dropPin: { lat: Number(body.dropLat), lng: Number(body.dropLng) } } : {}),
       dieselUgxPerLitre: Number(body.dieselUgxPerLitre) || db.dieselDefaultUgx || 0,
       kmToPickup: Number(body.kmToPickup) || 0,
       kmHaul: Number(body.kmHaul) || 0,

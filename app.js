@@ -1422,7 +1422,6 @@ function viewNewJob() {
       <div class="grid g2 js-new-contractor new-client" style="display:none">
         <label class="lbl">Client name<input class="field" name="contractorName" placeholder="Company or person" autocomplete="off" /></label>
         <label class="lbl">Client phone<input class="field" name="contractorPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
-        <label class="lbl">Client TIN / NIN<input class="field" name="contractorTaxId" placeholder="For the tax invoice" autocomplete="off" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Material${cargoSelect("")}</label>
@@ -1796,7 +1795,6 @@ function viewDrive(page, taskId) {
       <div class="grid g2 js-new-contractor new-client" style="display:none">
         <label class="lbl">Client name<input class="field" name="contractorName" placeholder="Company or person" autocomplete="off" /></label>
         <label class="lbl">Client phone<input class="field" name="contractorPhone" inputmode="tel" placeholder="07XX XXX XXX" /></label>
-        <label class="lbl">Client TIN / NIN<input class="field" name="contractorTaxId" placeholder="For the tax invoice" autocomplete="off" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Material${cargoSelect("")}</label>
@@ -1817,16 +1815,13 @@ function viewDrive(page, taskId) {
       <input type="hidden" name="kmHaul" class="js-haul" />
       <div class="pin-pick" role="group" aria-label="Map pin"><button type="button" class="pin-btn on js-pinmode" data-pin="pick"><span class="pdot a"></span>Pickup</button><button type="button" class="pin-btn js-pinmode" data-pin="drop"><span class="pdot b"></span>Drop-off</button></div>
       <div id="routeMap" style="height:240px;margin-top:8px;border-radius:14px"></div>
-      <div class="grid g3" style="margin-top:10px">
+      <div class="grid g2" style="margin-top:10px">
         <label class="lbl">Distance (km)<input class="field js-km" name="km" inputmode="decimal" /></label>
-        <label class="lbl">Client pays<select class="field" name="payBasis"><option value="trip">Per trip</option><option value="tonne">Per tonne</option></select></label>
-        <label class="lbl">UGX per tonne <span class="muted">(if known)</span><input class="field" name="payPerTonne" inputmode="numeric" /></label>
+        <label class="lbl">Fuel needed (L)<input class="field js-litres" name="fuelLitres" readonly placeholder="Worked out" /></label>
       </div>
-      <div class="grid g3" style="margin-top:10px">
-        <label class="lbl">Diesel UGX / litre<input class="field js-diesel" name="dieselUgxPerLitre" inputmode="numeric" value="${DATA.dieselDefaultUgx || 5200}" /></label>
-        <label class="lbl">Litres needed<input class="field js-litres" name="fuelLitres" readonly placeholder="Worked out" /></label>
-        <label class="lbl">Fuel cost (UGX)<input class="field js-fuel" name="fuelCostUgx" readonly placeholder="Worked out" /></label>
-      </div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" name="payBasis" value="tonne" /> Weighed in tonnes</label>
+      <input type="hidden" class="js-diesel" name="dieselUgxPerLitre" value="${DATA.dieselDefaultUgx || 5200}" />
+      <input type="hidden" class="js-fuel" name="fuelCostUgx" />
       <button class="btn btn-primary wide" style="margin-top:14px">Add load</button>
     </form>
     </details>
@@ -1834,12 +1829,21 @@ function viewDrive(page, taskId) {
       ${jobs.filter((j) => !isPaid(j)).length ? jobs.filter((j) => !isPaid(j)).map((j) => {
         const c = DATA.contractors.find((x) => x.id === j.contractorId);
         const n = next[j.status];
-        const income = j.incomeUgx || ((j.tonnesDelivered || 0) * (j.payPerTonne || 0)) || j.rateUgx;
         const dir = j.pickupPin && j.dropPin ? `https://www.google.com/maps/dir/?api=1&origin=${j.pickupPin.lat},${j.pickupPin.lng}&destination=${j.dropPin.lat},${j.dropPin.lng}&travelmode=driving` : "";
-        return `<div class="card item ${newOfficeLoad(j) ? "flash" : ""}"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">${j.bookingRef ? "Client booking " + esc(j.bookingRef) : "From office"}</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""}${j.payBasis === "count" ? " · paid per trip" : ` · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}`}</p></div>${j.payBasis === "count" ? "" : badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
-        ${j.payBasis === "count" ? "" : j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : `<form data-form="scale" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><label class="lbl">Tonnes on the scale<input class="field" name="tonnes" required inputmode="decimal" /></label><label class="lbl">Scale ticket photo<input class="field" name="ticket" type="file" accept="image/*" capture="environment" required /></label></div><button class="btn btn-steel wide" style="margin-top:8px">Save scale ticket</button></form>`}
-        ${j.scaleTicket && !j.invoice ? `<form data-form="invoice" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><label class="lbl">Invoice amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" value="${income || ""}" /></label><label class="lbl">Has the client paid?<select class="field" name="paidNow"><option value="0">Not yet</option><option value="1">Yes, paid now</option></select></label></div><label class="lbl" style="margin-top:8px">Invoice photo<input class="field" name="invoice" type="file" accept="image/*" capture="environment" required /></label><button class="btn btn-primary wide" style="margin-top:8px">Send invoice</button></form>` : ""}
-        ${j.invoice ? `<img src="${j.invoice}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : ""}
+        const pin = (p) => p && p.lat ? `<a class="dl-map" href="https://www.google.com/maps?q=${p.lat},${p.lng}" target="_blank" rel="noopener">Map</a>` : "";
+        const when = (v) => v ? new Date(v).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "";
+        const litres = j.payBasis === "count" && j.clientFuel ? "" : Number(j.fuelLitres) || (j.km ? estimateTripFuel((Number(j.kmToPickup) || 0) + Number(j.km), Number(j.km), (DATA.trucks || []).find((t) => t.id === j.truckId) || 370, 5200).litres : 0);
+        return `<div class="card item dl-card ${newOfficeLoad(j) ? "flash" : ""}">
+          <div class="dl-head"><b>${esc(j.cargo || "Load")}</b><span class="muted">${esc(j.code || "")}</span></div>
+          <div class="dl-rows">
+            <div class="dl-row"><span>Client</span><b>${esc(c ? c.name : "—")}</b>${c && c.phone ? `<a class="dl-map" href="tel:${esc(c.phone)}">Call</a>` : ""}</div>
+            <div class="dl-row"><span><i class="pdot a"></i>Pickup</span><b>${esc(j.origin || "—")}${j.pickupAt ? `<small>${when(j.pickupAt)}</small>` : ""}</b>${pin(j.pickupPin)}</div>
+            <div class="dl-row"><span><i class="pdot b"></i>Drop-off</span><b>${esc(j.destination || "—")}${j.dropAt ? `<small>${when(j.dropAt)}</small>` : ""}</b>${pin(j.dropPin)}</div>
+            <div class="dl-row dl-two"><div><span>Distance</span><b>${j.km ? j.km + " km" : "—"}</b></div><div><span>Fuel needed</span><b>${j.payBasis === "count" && j.clientFuel ? "Client fuel" : litres ? litres + " L" : "—"}</b></div></div>
+          </div>
+          ${dir ? `<a class="btn btn-ghost wide" style="margin-top:10px" href="${dir}" target="_blank" rel="noopener">Directions</a>` : ""}
+          ${j.notes ? `<p class="muted" style="margin:8px 0 0">${esc(j.notes)}</p>` : ""}
+          ${j.payBasis === "tonne" ? (j.scaleTicket ? `<div class="dl-row dl-weigh"><span>Weighed</span><b>${j.tonnesDelivered || 0} t</b><img src="${j.scaleTicket}" alt="Scale ticket" /></div>` : `<form data-form="scale" data-id="${j.id}" style="margin-top:10px"><div class="grid g2"><label class="lbl">Tonnes after weighing<input class="field" name="tonnes" required inputmode="decimal" /></label><label class="lbl">Scale ticket photo<input class="field" name="ticket" type="file" accept="image/*" capture="environment" required /></label></div><button class="btn btn-steel wide" style="margin-top:8px">Save weight</button></form>`) : ""}
         ${j.payBasis === "count" ? tripPanel(j, "driver") : ""}
         ${j.source === "driver" && !j.fromOffice && !j.bookingId ? `<button class="btn btn-ghost wide" style="margin-top:8px" data-act="trash_job" data-id="${j.id}">Remove</button>` : ""}
         ${n && j.payBasis !== "count" ? `<div class="trip-now">${badge(j.status)}${tripTime(j, j.status) ? ` <span class="muted">${tripTime(j, j.status)}</span>` : ""}</div><button class="btn btn-steel wide" style="margin-top:10px" data-act="update_job" data-id="${j.id}" data-status="${n}">${nextLabel[n]}</button>` : ""}
@@ -4031,7 +4035,7 @@ function loadFold(j, right, more) {
     j.km ? ["Distance", j.km + " km"] : null,
     j.tonnesDelivered ? ["Tonnes", j.tonnesDelivered + " t"] : null,
     j.deliveredAt ? ["Delivered", fmtDay(j.deliveredAt)] : null,
-    isPaid(j) ? ["Client paid", (j.paidAt ? fmtDay(j.paidAt) + " · " : "") + ugx(j.paidUgx || j.rateUgx || 0)] : null,
+    isPaid(j) && DATA.me.role === "admin" ? ["Client paid", (j.paidAt ? fmtDay(j.paidAt) + " · " : "") + ugx(j.paidUgx || j.rateUgx || 0)] : null,
     j.notes ? ["Notes", esc(j.notes)] : null,
   ].filter(Boolean).concat(more || []);
   return `<div class="card load-fold js-fold">
@@ -5418,6 +5422,9 @@ function bindRouteCalc() {
   };
   const placePin = (which, pt) => {
     if (which === "pick") pick = pt; else drop = pt;
+    // keep the GPS pins with the load, so the driver gets a map link for pickup and drop-off
+    const fm = (pv && pv.form) || (dv && dv.form);
+    if (fm) [["Lat", pt.lat], ["Lng", pt.lon]].forEach(([k, v]) => { const name = (which === "pick" ? "pickup" : "drop") + k; let inp = fm.querySelector(`input[name=${name}]`); if (!inp) { inp = document.createElement("input"); inp.type = "hidden"; inp.name = name; fm.appendChild(inp); } inp.value = v; });
     if (map) {
       if (which === "pick") { if (m1) map.removeLayer(m1); m1 = L.marker([pt.lat, pt.lon], { icon: icon("a") }).addTo(map).bindTooltip("Pickup", { permanent: true, direction: "top", offset: [0, -10] }); }
       else { if (m2) map.removeLayer(m2); m2 = L.marker([pt.lat, pt.lon], { icon: icon("b") }).addTo(map).bindTooltip("Drop-off", { permanent: true, direction: "top", offset: [0, -10] }); }
