@@ -4914,9 +4914,16 @@ function startPersonWatch() {
     return;
   }
   if (!navigator.geolocation || PERSON.watch !== null) return;
-  const go = () => { if (PERSON.watch === null) PERSON.watch = navigator.geolocation.watchPosition((pos) => sendPersonPing(pos.coords), () => {}, { enableHighAccuracy: false, maximumAge: 60000, timeout: 60000 }); };
-  if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: "geolocation" }).then((p) => { if (p.state === "granted") go(); p.onchange = () => { if (p.state === "granted") go(); }; }).catch(go);
-  else go();
+  // Start straight away: iPhone home-screen apps often report "prompt" even after location was allowed,
+  // so waiting for "granted" meant some phones never sent anything after sign-in.
+  const opts = { enableHighAccuracy: false, maximumAge: 60000, timeout: 30000 };
+  PERSON.watch = navigator.geolocation.watchPosition((pos) => sendPersonPing(pos.coords), () => {}, opts);
+  const now = (force) => navigator.geolocation.getCurrentPosition((pos) => { if (force) PERSON.sentAt = 0; sendPersonPing(pos.coords); }, () => {}, opts);
+  now(true);
+  // a fresh spot every time the app comes back to the screen, and every 3 minutes while it is open
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) now(true); });
+  window.addEventListener("focus", () => now(true));
+  setInterval(() => { if (!document.hidden) now(false); }, 180000);
 }
 function startLiveWatch(ask) {
   if (DATA && DATA.me.role === "driver" && DATA.truck && native() && plugin("BackgroundGeolocation")) {
@@ -5061,7 +5068,7 @@ async function drawTeamMap() {
     .sort((a, b) => (b.p ? b.p.at : 0) - (a.p ? a.p.at : 0));
   const hh = (h) => String(h).padStart(2, "0") + ":00";
   note.textContent = `${hrs.from === hrs.to ? "Tracking 24/7" : "Tracking " + hh(hrs.from) + "–" + hh(hrs.to)} · updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-  list.innerHTML = rows.map(({ u, p, tone }) => `<div class="card item tl-row"><span class="avatar sm">${esc((u.name || "?").charAt(0))}</span><span class="tl-who"><b>${esc(u.name)}</b><span class="muted">${ROLE_SHORT[u.role] || u.role} · ${p ? "seen " + agoText(p.at) + (p.app === "android" ? " · Android app" : "") : "no location yet"}</span></span>${p ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.lat},${p.lng}">Map</a><span class="badge ${tone}">${tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old"}</span>` : ""}</div>`).join("") || `<div class="card item muted">No team logins yet.</div>`;
+  list.innerHTML = rows.map(({ u, p, tone }) => `<div class="card item tl-row"><span class="avatar sm">${esc((u.name || "?").charAt(0))}</span><span class="tl-who"><b>${esc(u.name)}</b><span class="muted">${ROLE_SHORT[u.role] || u.role} · ${p ? "seen " + agoText(p.at) + (p.app === "android" ? " · Android app" : now - p.at > 15 * 60000 ? " · updates when they open the app" : " · app open") : "no location yet"}</span></span>${p ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.lat},${p.lng}">Map</a><span class="badge ${tone}">${tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old"}</span>` : ""}</div>`).join("") || `<div class="card item muted">No team logins yet.</div>`;
   if (!window.L || !L.map) { box.style.display = "none"; return; }
   if (!box._map) { box._map = L.map(box).setView([0.3476, 32.5825], 7); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(box._map); box._layer = L.layerGroup().addTo(box._map); }
   box._layer.clearLayers();
