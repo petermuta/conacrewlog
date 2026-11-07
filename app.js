@@ -267,6 +267,7 @@ function route() {
   let r = parseRoute();
   if (OLD_PAGES[r.name]) { location.replace("#" + OLD_PAGES[r.name]); return; }
   if ((r.name === "team" || r.name === "team-live") && DATA.me.assistant) { location.hash = "home"; return; }
+  if (r.name === "locate") { location.replace("#home"); return; }
   if (r.name !== "money-tx") sessionStorage.removeItem("openSpend");
   if (DATA.me.role === "admin") {
     const advOf = { "trucks-spend": "trucking", "cane-spend": "sugarcane", "passion-spend": "passion" }[r.name];
@@ -5119,7 +5120,16 @@ async function drawTeamMap() {
     .sort((a, b) => (b.p ? b.p.at : 0) - (a.p ? a.p.at : 0));
   const hh = (h) => String(h).padStart(2, "0") + ":00";
   note.textContent = `${hrs.from === hrs.to ? "Tracking 24/7" : "Tracking " + hh(hrs.from) + "–" + hh(hrs.to)} · updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-  list.innerHTML = rows.map(({ u, p, tone }) => `<div class="card item tl-row"><span class="avatar sm">${esc((u.name || "?").charAt(0))}</span><span class="tl-who"><b>${esc(u.name)}</b><span class="muted">${ROLE_SHORT[u.role] || u.role} · ${p ? "seen " + agoText(p.at) + (p.app === "android" ? " · Android app" : now - p.at > 15 * 60000 ? " · updates when they open the app" : " · app open") : "no location yet"}</span></span>${p ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.lat},${p.lng}">Map</a><span class="badge ${tone}">${tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old"}</span>` : ""}</div>`).join("") || `<div class="card item muted">No team logins yet.</div>`;
+  list.innerHTML = rows.map(({ u, p, tone }) => `<div class="card item tl-row"><span class="avatar sm">${esc((u.name || "?").charAt(0))}</span><span class="tl-who"><b>${esc(u.name)}</b><span class="muted">${ROLE_SHORT[u.role] || u.role} · ${p ? "seen " + agoText(p.at) + (p.app === "android" ? " · Android app" : now - p.at > 15 * 60000 ? " · updates when they open the app" : " · app open") : "no location yet"}</span></span><button type="button" class="btn btn-ghost btn-sm js-locate" data-id="${esc(u.id)}" data-name="${esc(String(u.name || "").split(" ")[0])}">Ask</button>${p ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.lat},${p.lng}">Map</a><span class="badge ${tone}">${tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old"}</span>` : ""}</div>`).join("") || `<div class="card item muted">No team logins yet.</div>`;
+  list.querySelectorAll(".js-locate").forEach((b) => { b.onclick = async () => {
+    b.disabled = true; b.textContent = "Asking…";
+    try {
+      const r = await fetch("/.netlify/functions/live", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ kind: "locate", userId: b.dataset.id }) });
+      const d = await r.json().catch(() => ({}));
+      toast(d.sent ? `Sent to ${b.dataset.name}'s phone. Their spot appears here when they tap it.` : `${b.dataset.name} hasn't turned on notifications. Ask them to open the app.`);
+    } catch (e) { toast("Couldn't reach the office"); }
+    b.textContent = "Ask"; b.disabled = false;
+  }; });
   if (!window.L || !L.map) { box.style.display = "none"; return; }
   if (!box._map) { box._map = L.map(box).setView([0.3476, 32.5825], 7); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(box._map); box._layer = L.layerGroup().addTo(box._map); }
   box._layer.clearLayers();

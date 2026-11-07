@@ -672,6 +672,24 @@ export async function handleLive(kv, { method, token, body, query }) {
     await kv.set("live/hours", JSON.stringify(h), {});
     return { status: 200, body: { ok: true, hours: h } };
   }
+  if (method === "POST" && body && body.kind === "locate") {
+    // main admin asks one person's phone for its location: a notification they tap, which opens the app and sends a fresh spot
+    if (!isMainAdmin(who.user)) return { status: 403, body: { error: "main admin only" } };
+    const target = (book.users || []).find((u) => u.id === body.userId && u.active !== false);
+    if (!target) return { status: 404, body: { error: "not found" } };
+    const subs = await loadJson(kv, "push/subs", {});
+    const list = subs[target.id] || [];
+    if (!list.length) return { status: 200, body: { sent: 0, noPush: true } };
+    const keys = await vapidKeys(kv);
+    const payload = JSON.stringify({ title: "Location check", body: "Tap to share your location with the office", url: "#locate", tag: "conacrew-locate" });
+    let sent = 0, changed = false;
+    for (const sub of list.slice()) {
+      try { await webpush.sendNotification(sub, payload, { vapidDetails: { subject: "mailto:noreply@conacrewlogs.com", publicKey: keys.publicKey, privateKey: keys.privateKey }, TTL: 3600, urgency: "high" }); sent++; }
+      catch (e) { if (e && (e.statusCode === 404 || e.statusCode === 410)) { subs[target.id] = subs[target.id].filter((x) => x.endpoint !== sub.endpoint); changed = true; } }
+    }
+    if (changed) await kv.set("push/subs", JSON.stringify(subs), {});
+    return { status: 200, body: { sent, noPush: !sent } };
+  }
   if (method === "POST" && body && body.kind === "person") {
     if (isMainAdmin(who.user)) return { status: 200, body: { ok: true, skip: true } };
     if (body.lat == null || body.lng == null) return { status: 400, body: { error: "missing" } };
