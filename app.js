@@ -800,12 +800,33 @@ function jobCard(j, paidView) {
     ${j.scaleTicket || j.invoice ? `<div class="thumbs">${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="Scale ticket" />` : ""}${j.invoice ? `<img src="${j.invoice}" alt="Invoice" />` : ""}</div>` : ""}
     ${paidView ? "" : `<div class="lf-trip">${tripControls(j)}</div>`}
     ${bk && !paidView ? `<div class="bk-actions"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay flash" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>` : ""}
+    ${j.payBasis === "count" ? tripPanel(j, "office") : ""}
     ${paidView ? "" : `<div class="lf-actions">${DATA.me.role === "admin" ? "" : `<button type="button" class="btn btn-primary js-paid" data-id="${j.id}">Client paid</button>`}<button type="button" class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></div>`}`;
   return foldCard(head, body, due ? "flash" : "");
 }
 // ───────────── Load profit (admin + Admin II) ─────────────
-function loadPrice(j) { return Number(j.incomeUgx || j.rateUgx || 0) || (j.payBasis === "tonne" ? Math.round((Number(j.payPerTonne) || 0) * (Number(j.tonnesDelivered) || 0)) : 0); }
+// Trip counter: the driver taps +1 per trip; trips he adds later wait for the office to confirm
+function tripPanel(j, who) {
+  const t = tripsOf(j), rate = Number(j.ratePerTrip) || 0, dRate = Number(j.driverPerTrip) || 0, closed = ["delivered", "invoiced", "paid"].includes(j.status) || isPaid(j);
+  const today = todayYmd(), todayN = t.list.filter((x) => x.ok && String(x.at).slice(0, 10) === today).length;
+  const paidT = (DATA.payStubs || []).filter((x) => x.kind === "pertrip" && x.jobId === j.id && x.status === "paid").reduce((a, x) => a + (x.trips || 0), 0);
+  const waitList = t.list.filter((x) => !x.ok);
+  const time = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `<div class="trip-box">
+    <div class="trip-top"><div><span class="eyebrow">Trips${closed ? "" : " · live"}</span><b class="trip-n">${t.ok}</b><small>${todayN !== t.ok ? todayN + " today" : "today"}${t.wait ? ` · <span class="pf-owe">${t.wait} waiting OK</span>` : ""}</small></div>
+      <div class="trip-money">${who === "office" ? `<span>Client · ${ugx(rate)}/trip</span><b>${ugx(t.ok * rate)}</b><span>Driver · ${ugx(dRate)}/trip</span><b>${ugx(t.ok * dRate)}</b>` : `<span>My pay · ${ugx(dRate)}/trip</span><b>${ugx((t.ok - paidT) * dRate)}</b><span>${paidT ? paidT + " trips paid" : "waiting to be paid"}</span>`}</div></div>
+    ${who === "driver" && !closed ? `<button type="button" class="btn btn-primary trip-plus js-addtrip" data-id="${esc(j.id)}">＋1 trip</button>
+      <div class="trip-row"><button type="button" class="btn btn-ghost btn-sm js-undotrip" data-id="${esc(j.id)}">Undo last</button><button type="button" class="btn btn-ghost btn-sm js-misstrip" data-id="${esc(j.id)}">Forgot one?</button><button type="button" class="btn btn-ghost btn-sm js-endtrips" data-id="${esc(j.id)}">End day</button></div>` : ""}
+    ${who === "office" && !closed ? `<div class="trip-row"><button type="button" class="btn btn-ghost btn-sm js-addtrip" data-id="${esc(j.id)}">＋ Add a trip</button><button type="button" class="btn btn-ghost btn-sm js-endtrips" data-id="${esc(j.id)}">Close the day</button></div>` : ""}
+    ${waitList.length ? `<div class="trip-wait">${waitList.map((x) => `<div class="owe-line"><div class="owe-l"><b>Added later · ${time(x.at)}</b><span class="muted">${esc(x.by || "")} forgot to tap · ${fmtDay(x.at)}</span></div>${who === "office" ? `<div class="owe-r" style="flex-direction:row"><button type="button" class="btn btn-primary btn-sm js-oktrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}">Confirm</button><button type="button" class="btn btn-ghost btn-sm btn-remove js-rmtrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}">Remove</button></div>` : `<span class="badge gold">Waiting OK</span>`}</div>`).join("")}</div>` : ""}
+    ${t.ok ? `<details class="settings" style="margin-top:8px"><summary>Trip times · ${t.ok}</summary><div class="trip-times">${t.list.filter((x) => x.ok).map((x, i) => `<span>${i + 1}. ${time(x.at)}${x.late ? "*" : ""}${who === "office" && !closed ? ` <a href="#" class="js-rmtrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}" aria-label="Remove">✕</a>` : ""}</span>`).join("")}</div></details>` : ""}
+    ${j.clientFuel ? `<p class="muted" style="margin:6px 0 0">Client gives the fuel</p>` : ""}
+  </div>`;
+}
+function tripsOf(j) { const t = j.trips || []; return { all: t.length, ok: t.filter((x) => x.ok).length, wait: t.filter((x) => !x.ok).length, list: t }; }
+function loadPrice(j) { if (j.payBasis === "count") return tripsOf(j).ok * (Number(j.ratePerTrip) || 0); return Number(j.incomeUgx || j.rateUgx || 0) || (j.payBasis === "tonne" ? Math.round((Number(j.payPerTonne) || 0) * (Number(j.tonnesDelivered) || 0)) : 0); }
 function loadDriverPay(j) {
+  if (j.payBasis === "count") { const n = tripsOf(j).ok; return { amt: n * (Number(j.driverPerTrip) || 0), how: n + " trips × " + ugx(j.driverPerTrip || 0) }; }
   if (j.driverPayUgx !== undefined && j.driverPayUgx !== null && j.driverPayUgx !== "") return { amt: Number(j.driverPayUgx) || 0, how: "Set on this load" };
   const d = (DATA.drivers || []).find((x) => x.id === j.driverId);
   if (d) {
@@ -819,6 +840,7 @@ function loadDriverPay(j) {
   return { amt: pricing().driverPerTrip, how: "Estimate · price settings", est: true };
 }
 function loadFuel(j) {
+  if (j.payBasis === "count" && j.clientFuel) return { amt: 0, how: "Client gives the fuel" };
   if (Number(j.fuelCostUgx)) return { amt: Number(j.fuelCostUgx), how: (j.fuelLitres ? j.fuelLitres + " L · " : "") + (j.fuelEdited ? "set on this load" : "worked out from km and truck") };
   const km = Number(j.kmHaul || j.km) || 0; if (!km) return { amt: 0, how: "No distance yet", est: true };
   const t = (DATA.trucks || []).find((x) => x.id === j.truckId);
@@ -1428,9 +1450,16 @@ function viewNewJob() {
         <label class="lbl">Driver<select class="field js-nl-driver" name="driverId">${liveDrivers().map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
       </div>
       <p class="form-step">Price and fuel</p>
-      <div class="grid g2">
+      <div class="seg seg-sm js-basis" role="group" aria-label="Client pays"><button type="button" class="seg-btn on" data-v="trip">One load</button><button type="button" class="seg-btn" data-v="count">Per trip · many a day</button></div>
+      <input type="hidden" name="payBasis" value="trip" />
+      <div class="grid g2 js-one" style="margin-top:10px">
         <label class="lbl">Distance (km)<input class="field js-km" name="km" inputmode="decimal" placeholder="One way" /></label>
         <label class="lbl">Price to client (UGX)<input class="field js-nl-price" name="rateUgx" required inputmode="numeric" placeholder="0" /></label>
+      </div>
+      <div class="grid g2 js-count" hidden style="margin-top:10px">
+        <label class="lbl">Client pays per trip (UGX)<input class="field" name="ratePerTrip" inputmode="numeric" placeholder="e.g. 60000" /></label>
+        <label class="lbl">Driver gets per trip (UGX)<input class="field" name="driverPerTrip" inputmode="numeric" placeholder="e.g. 10000" /></label>
+        <label class="check" style="grid-column:1/-1"><input type="checkbox" name="clientFuel" value="1" checked /> Client gives the fuel</label>
       </div>
       <p class="form-step">Material</p>
       <div class="seg seg-sm js-matby" role="group" aria-label="Material paid by"><button type="button" class="seg-btn on" data-v="client">Client's material</button><button type="button" class="seg-btn" data-v="us">Conacrew buys it</button></div>
@@ -1807,12 +1836,13 @@ function viewDrive(page, taskId) {
         const n = next[j.status];
         const income = j.incomeUgx || ((j.tonnesDelivered || 0) * (j.payPerTonne || 0)) || j.rateUgx;
         const dir = j.pickupPin && j.dropPin ? `https://www.google.com/maps/dir/?api=1&origin=${j.pickupPin.lat},${j.pickupPin.lng}&destination=${j.dropPin.lat},${j.dropPin.lng}&travelmode=driving` : "";
-        return `<div class="card item ${newOfficeLoad(j) ? "flash" : ""}"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">${j.bookingRef ? "Client booking " + esc(j.bookingRef) : "From office"}</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""} · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}</p></div>${badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
-        ${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : `<form data-form="scale" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><label class="lbl">Tonnes on the scale<input class="field" name="tonnes" required inputmode="decimal" /></label><label class="lbl">Scale ticket photo<input class="field" name="ticket" type="file" accept="image/*" capture="environment" required /></label></div><button class="btn btn-steel wide" style="margin-top:8px">Save scale ticket</button></form>`}
+        return `<div class="card item ${newOfficeLoad(j) ? "flash" : ""}"><div class="row"><div>${j.fromOffice ? `<span class="badge blue">${j.bookingRef ? "Client booking " + esc(j.bookingRef) : "From office"}</span> ` : ""}<b>${j.code || ""} ${j.cargo}</b><p class="muted">${j.origin} → ${j.destination}</p>${j.pickupAt ? `<p class="muted">Pickup ${esc(String(j.pickupAt).replace("T", " "))}</p>` : ""}${dir ? `<p><a class="btn btn-ghost btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a></p>` : ""}${j.notes ? `<p class="muted">${esc(j.notes)}</p>` : ""}<p class="muted">${c?.name || ""}${j.payBasis === "count" ? " · paid per trip" : ` · ${j.km || 0} km · ${j.payBasis === "tonne" ? (j.tonnesDelivered ? j.tonnesDelivered + " t" : "await scale") : "per trip"}`}</p></div>${j.payBasis === "count" ? "" : badge(j.invoice && !isPaid(j) ? "invoiced" : "not paid")}</div>
+        ${j.payBasis === "count" ? "" : j.scaleTicket ? `<img src="${j.scaleTicket}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : `<form data-form="scale" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><label class="lbl">Tonnes on the scale<input class="field" name="tonnes" required inputmode="decimal" /></label><label class="lbl">Scale ticket photo<input class="field" name="ticket" type="file" accept="image/*" capture="environment" required /></label></div><button class="btn btn-steel wide" style="margin-top:8px">Save scale ticket</button></form>`}
         ${j.scaleTicket && !j.invoice ? `<form data-form="invoice" data-id="${j.id}" style="margin-top:8px"><div class="grid g2"><label class="lbl">Invoice amount (UGX)<input class="field" name="amountUgx" required inputmode="numeric" value="${income || ""}" /></label><label class="lbl">Has the client paid?<select class="field" name="paidNow"><option value="0">Not yet</option><option value="1">Yes, paid now</option></select></label></div><label class="lbl" style="margin-top:8px">Invoice photo<input class="field" name="invoice" type="file" accept="image/*" capture="environment" required /></label><button class="btn btn-primary wide" style="margin-top:8px">Send invoice</button></form>` : ""}
         ${j.invoice ? `<img src="${j.invoice}" alt="" style="max-width:160px;border-radius:10px;margin-top:8px" />` : ""}
+        ${j.payBasis === "count" ? tripPanel(j, "driver") : ""}
         ${j.source === "driver" && !j.fromOffice && !j.bookingId ? `<button class="btn btn-ghost wide" style="margin-top:8px" data-act="trash_job" data-id="${j.id}">Remove</button>` : ""}
-        ${n ? `<div class="trip-now">${badge(j.status)}${tripTime(j, j.status) ? ` <span class="muted">${tripTime(j, j.status)}</span>` : ""}</div><button class="btn btn-steel wide" style="margin-top:10px" data-act="update_job" data-id="${j.id}" data-status="${n}">${nextLabel[n]}</button>` : ""}
+        ${n && j.payBasis !== "count" ? `<div class="trip-now">${badge(j.status)}${tripTime(j, j.status) ? ` <span class="muted">${tripTime(j, j.status)}</span>` : ""}</div><button class="btn btn-steel wide" style="margin-top:10px" data-act="update_job" data-id="${j.id}" data-status="${n}">${nextLabel[n]}</button>` : ""}
         </div>`;
       }).join("") : `<div class="card item">None</div>`}
     </div>`;
@@ -2765,7 +2795,11 @@ function owedTo(kind, person, stubs, src) {
   if (kind === "driver") {
     const plan = driverPlan(person);
     if (plan !== "month") {
-      (src.jobs || []).filter((j) => j.driverId === person.id && (["delivered", "invoiced", "paid"].includes(j.status) || isPaid(j)))
+      (src.jobs || []).filter((j) => j.driverId === person.id && j.payBasis === "count").forEach((j) => {
+        const ok = (j.trips || []).filter((t) => t.ok).length, paidT = mine.filter((s) => s.kind === "pertrip" && s.jobId === j.id && realPaid(s)).reduce((a, s) => a + (s.trips || 0), 0);
+        if (ok > paidT) waiting.push({ kind: "pertrip", refId: j.id, trips: ok - paidT, title: (ok - paidT) + " trip" + (ok - paidT > 1 ? "s" : "") + " · Load " + (j.code || j.id), sub: [j.cargo, (j.origin || "") + " → " + (j.destination || ""), (Number(j.driverPerTrip) || 0).toLocaleString() + " per trip"].filter(Boolean).join(" · "), date: String((j.trips || []).slice(-1)[0]?.at || "").slice(0, 10), amount: (ok - paidT) * (Number(j.driverPerTrip) || 0) });
+      });
+      (src.jobs || []).filter((j) => j.driverId === person.id && j.payBasis !== "count" && (["delivered", "invoiced", "paid"].includes(j.status) || isPaid(j)))
         .forEach((j) => {
           if (paidRef(j.id, "trip")) return;
           waiting.push({ kind: "trip", refId: j.id, title: "Load " + (j.code || j.id), sub: [j.cargo, (j.origin || "") + " → " + (j.destination || "")].filter(Boolean).join(" · "), date: deliveredOn(j), amount: Number(person.tripAllowanceUgx) || 0 });
@@ -3942,6 +3976,7 @@ function payForm(kind, person, w) {
     <input type="hidden" name="kind" value="${w.kind}" />
     <input type="hidden" name="personId" value="${esc(person.id)}" />
     <input type="hidden" name="refId" value="${esc(w.refId)}" />
+    ${w.trips ? `<input type="hidden" name="trips" value="${w.trips}" />` : ""}
     <div class="grid g2"><label class="lbl">Amount to pay (UGX)<input class="field" name="amountUgx" required inputmode="numeric" value="${w.amount || ""}" placeholder="0" /></label>${dateField("date", "Date paid")}</div>
     <div style="margin-top:10px">${payeeFields("pay", { ...pp, name: pp.name || person.name })}</div>
     <label class="check"><input type="checkbox" name="remember" value="1" checked /> Save these payout details for ${esc(person.name)}</label>
@@ -4338,6 +4373,22 @@ function bind() {
   document.querySelectorAll("[data-mproffleet]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofFleet", b.dataset.mproffleet); route(); }; });
   bindSrcSplit(document);
   document.querySelectorAll(".js-editpay").forEach((b) => { b.onclick = () => openEditPay(b.dataset.id); });
+  document.querySelectorAll(".js-basis").forEach((g) => { const f = g.closest("form"); g.querySelectorAll("[data-v]").forEach((b) => { b.onclick = () => {
+    g.querySelectorAll("[data-v]").forEach((x) => x.classList.toggle("on", x === b)); f.payBasis.value = b.dataset.v;
+    const count = b.dataset.v === "count"; f.querySelector(".js-one").hidden = count; f.querySelector(".js-count").hidden = !count;
+    f.rateUgx.required = !count; f.ratePerTrip.required = count; f.dispatchEvent(new Event("input")); }; }); });
+  document.querySelectorAll(".js-addtrip").forEach((b) => { b.onclick = async () => {
+    b.disabled = true; b.textContent = "Saving…";
+    const pos = await new Promise((r) => { if (!navigator.geolocation) return r(null); navigator.geolocation.getCurrentPosition((p) => r(p.coords), () => r(null), { enableHighAccuracy: true, timeout: 4000, maximumAge: 60000 }); });
+    try { await act("add_trip", { id: b.dataset.id, lat: pos ? pos.latitude : "", lng: pos ? pos.longitude : "" }); if (navigator.vibrate) navigator.vibrate(60); toast("Trip saved"); } catch (e) { b.disabled = false; b.textContent = "＋1 trip"; }
+  }; });
+  document.querySelectorAll(".js-undotrip").forEach((b) => { b.onclick = async () => { if (!confirm("Remove your last trip?")) return; try { await act("undo_trip", { id: b.dataset.id }); toast("Last trip removed"); } catch (e) {} }; });
+  document.querySelectorAll(".js-endtrips").forEach((b) => { b.onclick = async () => { if (!confirm("Close today's trips? No more trips can be added by the driver.")) return; try { await act("end_trips", { id: b.dataset.id }); } catch (e) {} }; });
+  document.querySelectorAll(".js-oktrip").forEach((b) => { b.onclick = async () => { try { await act("approve_trip", { id: b.dataset.id, tripId: b.dataset.trip }); } catch (e) {} }; });
+  document.querySelectorAll(".js-rmtrip").forEach((b) => { b.onclick = async (e) => { e.preventDefault(); if (!confirm("Remove this trip?")) return; try { await act("remove_trip", { id: b.dataset.id, tripId: b.dataset.trip }); } catch (err) {} }; });
+  document.querySelectorAll(".js-misstrip").forEach((b) => { b.onclick = () => openSheet({ title: "Add a trip you forgot", sub: "The office confirms it before it counts for pay",
+    body: `<label class="lbl">About what time?<input class="field" type="datetime-local" name="at" required value="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" max="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" /></label>`,
+    submit: "Send to office", onSubmit: (fd) => act("add_trip", { id: b.dataset.id, at: fd.at }) }); });
   document.querySelectorAll(".js-editwork").forEach((r) => { r.onclick = () => openEditWork(r.dataset.id); });
   document.querySelectorAll(".js-editsale").forEach((r) => { r.onclick = () => openEditSale(r.dataset.id); });
   document.querySelectorAll(".js-taxm").forEach((el) => { el.onchange = () => { sessionStorage.setItem("taxMonth", el.value); route(); }; });

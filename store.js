@@ -497,8 +497,8 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
-    driver: ["log_spend", "read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
+    admin: ["add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    driver: ["add_trip", "undo_trip", "remove_trip", "end_trips", "log_spend", "read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["log_spend", "update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["update_farm_work", "delete_farm_work", "log_spend", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
   };
@@ -944,9 +944,10 @@ function applyAction(db, user, body) {
       dropAt: body.dropAt || "",
       km: Number(body.km) || 0,
       hoursEst: Number(body.hoursEst) || (Number(body.km) ? Math.round((Number(body.km) / 50) * 10) / 10 : 0),
-      rateUgx: Number(body.rateUgx) || 0,
-      payBasis: body.payBasis === "tonne" ? "tonne" : "trip",
+      rateUgx: body.payBasis === "count" ? 0 : Number(body.rateUgx) || 0,
+      payBasis: body.payBasis === "tonne" ? "tonne" : body.payBasis === "count" ? "count" : "trip",
       payPerTonne: Number(body.payPerTonne) || 0,
+      ...(body.payBasis === "count" ? { ratePerTrip: Math.max(0, Number(String(body.ratePerTrip || "").replace(/[^\d.]/g, "")) || 0), driverPerTrip: Math.max(0, Number(String(body.driverPerTrip || "").replace(/[^\d.]/g, "")) || 0), clientFuel: body.clientFuel !== "0", trips: [] } : {}),
       driverId,
       truckId,
       status: "booked",
@@ -957,7 +958,7 @@ function applyAction(db, user, body) {
       source: user.role === "driver" ? "driver" : "admin",
       tonnesDelivered: Number(body.tonnes) || 0,
       fuelLitres: Number(body.fuelLitres) || 0,
-      fuelCostUgx: Number(body.fuelCostUgx) || 0,
+      fuelCostUgx: body.payBasis === "count" && body.clientFuel !== "0" ? 0 : Number(body.fuelCostUgx) || 0,
       dieselUgxPerLitre: Number(body.dieselUgxPerLitre) || db.dieselDefaultUgx || 0,
       kmToPickup: Number(body.kmToPickup) || 0,
       kmHaul: Number(body.kmHaul) || 0,
@@ -1401,6 +1402,42 @@ function applyAction(db, user, body) {
     const rest = amount - fromAdv;
     if (rest > 0) spendFromAdvanceOrCash(db, user, { ...body, floatId: "", amountUgx: rest, note: [body.note, fromAdv ? "rest of UGX " + amount.toLocaleString("en-UG") + " (advance ran out)" : ""].filter(Boolean).join(" · ") }, tag, refs);
     return { fromAdvance: fromAdv, fromCash: rest };
+  }
+  // Trip-counting loads (e.g. murram): one load for the day, the driver taps +1 per trip
+  if (["add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips"].includes(action)) {
+    const job = db.jobs.find((j) => j.id === body.id);
+    if (!job || job.payBasis !== "count") throw new Error("Load not found");
+    if (user.role === "driver" && job.driverId !== user.driverId) throw new Error("Not your load");
+    if (user.role !== "driver" && user.role !== "admin") throw new Error("No access");
+    job.trips = job.trips || [];
+    const sync = () => { job.rateUgx = job.trips.filter((t) => t.ok).length * (job.ratePerTrip || 0); };
+    if (action === "add_trip") {
+      if (["delivered", "invoiced", "paid"].includes(job.status) && user.role === "driver") throw new Error("This load's day is closed");
+      const late = !!body.at && user.role === "driver"; // a trip he forgot to tap: the office confirms it
+      const at = body.at ? new Date(body.at).toISOString() : new Date().toISOString();
+      job.trips.push({ id: uid("tr"), at, lat: Number(body.lat) || null, lng: Number(body.lng) || null, by: user.name, late, ok: !late });
+      job.trips.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+      if (job.status === "booked") job.status = "en_route";
+    } else if (action === "undo_trip") {
+      const mine = job.trips.filter((t) => t.by === user.name && !t.late).slice(-1)[0];
+      if (!mine) throw new Error("Nothing to undo");
+      if (user.role === "driver" && Date.now() - new Date(mine.at).getTime() > 15 * 60000) throw new Error("Too late to undo. Ask the office to remove it.");
+      job.trips = job.trips.filter((t) => t !== mine);
+    } else if (action === "remove_trip") {
+      const t = job.trips.find((x) => x.id === body.tripId);
+      if (!t) throw new Error("Trip not found");
+      if (user.role === "driver" && !(t.late && !t.ok)) throw new Error("Ask the office to remove it");
+      job.trips = job.trips.filter((x) => x !== t);
+    } else if (action === "approve_trip") {
+      if (user.role !== "admin") throw new Error("Only the office can confirm");
+      const t = job.trips.find((x) => x.id === body.tripId);
+      if (t) { t.ok = true; t.okBy = user.name; }
+    } else if (action === "end_trips") {
+      job.status = "delivered"; job.deliveredAt = new Date().toISOString();
+      job.timeline = job.timeline || []; job.timeline.push({ status: "delivered", at: job.deliveredAt });
+    }
+    sync();
+    return;
   }
   if (action === "update_pay" || action === "delete_pay") {
     const stub = (db.payStubs || []).find((x) => x.id === body.id && x.status === "paid");
@@ -2182,6 +2219,18 @@ function applyAction(db, user, body) {
         if (!/^\d{4}-\d{2}$/.test(refId)) throw new Error("Choose the month");
         refLabel = "Monthly salary · " + new Date(refId + "-15").toLocaleString("en-UG", { month: "long", year: "numeric" });
       }
+    } else if (kind === "pertrip") {
+      role = "driver"; tag = "trucking";
+      person = db.drivers.find((d) => d.id === body.personId);
+      const job = db.jobs.find((j) => j.id === String(body.refId || "").split("#")[0]);
+      if (!person || !job || job.driverId !== person.id || job.payBasis !== "count") throw new Error("Load not found for this driver");
+      const ok = (job.trips || []).filter((t) => t.ok).length;
+      const paidT = (db.payStubs || []).filter((x) => x.kind === "pertrip" && x.jobId === job.id && x.status === "paid").reduce((a, x) => a + (x.trips || 0), 0);
+      const n = Math.min(Number(body.trips) || 0, ok - paidT);
+      if (n <= 0) throw new Error("No unpaid trips on this load");
+      refId = job.id + "#" + (paidT + n); loadId = job.code || job.id; refLabel = n + " trip" + (n > 1 ? "s" : "") + " · Load " + loadId;
+      truckId = job.truckId || ""; jobId = job.id; tripIncome = n * (job.ratePerTrip || 0);
+      body._trips = n;
     } else if (kind === "cane_trip") {
       role = "cane_manager"; tag = "sugarcane";
       person = (db.users || []).find((u) => u.id === body.personId && u.role === "cane_manager");
@@ -2212,7 +2261,7 @@ function applyAction(db, user, body) {
     Object.assign(stub, {
       role, personId: person.id, personName: person.name, kind, refId, refLabel, loadId, drop, tripIncome,
       amountUgx: amount, status: "paid", paidAt: today, year: new Date().getFullYear(), paidVia: "payroll",
-      phone: payee.payeePhone, note: body.note || "", ...payee,
+      phone: payee.payeePhone, note: body.note || "", ...payee, ...(kind === "pertrip" ? { jobId, trips: body._trips } : {}),
     });
     db.cash.unshift({
       id: uid("k"), date: today, direction: "out", amountUgx: amount, tag, category: "employee_pay",
