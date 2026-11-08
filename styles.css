@@ -1297,3 +1297,7 @@ tr.js-editwork { cursor: pointer; } tr.js-editwork:active td { background: rgba(
 .rep-done span { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-c); font-weight: 800; }
 .rep-done b { color: #fff; font-size: 14px; }
 .rep-src { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-c); font-weight: 800; }
+/* Inspections that need action */
+.insp-bad { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(6,16,28,.5); border: 1px solid var(--line); }
+.insp-shot { max-width: 160px; border-radius: 10px; margin-top: 8px; display: block; }
+.insp-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
