@@ -445,7 +445,7 @@ function bizBar() {
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
     fleet: [["#trucks-book", "Bookings", bookingsWaiting().length, "Loads"], ["#trucks-jobs", "Loads", 0, "Loads"], ["#trucks-new", "New load", 0, "Loads"], 
-      ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-inspect", "Inspections", (DATA.inspections || []).filter(inspNeedsAction).length, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Repairs", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
+      ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-inspect", "Inspections", (DATA.inspections || []).filter(inspNeedsAction).length, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Shop", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
       ["#trucks-docs", "Docs", docsWaiting("trucking"), "Papers"], ["#trucks-trash", "Trash", 0, "Papers"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-docs", "Docs", docsWaiting("passion")]],
@@ -1000,7 +1000,7 @@ function viewInspectReport() {
         return `<div class="insp-bad">
           <div class="row"><div>${partArea(k) ? `<span class="area-tag">${esc(partArea(k))}</span> ` : ""}<b>${esc(partName(k))}</b> · ${badge(r.items[k])}</div>${fixed ? `<span class="badge green">Repaired</span>` : closed ? `<span class="badge">No repair</span>` : `<span class="badge red">To fix</span>`}</div>
           ${r.photos && r.photos[k] ? `<img src="${r.photos[k]}" alt="" class="insp-shot" />` : ""}
-          ${fixed ? `<p class="muted" style="margin:6px 0 0">${fmtDay(i.repair.date)} · ${esc(i.repair.garage || "")} · ${ugx(i.repair.costUgx || 0)}</p>` : closed ? "" : i ? `${repairForm(i, "Mark repaired")}<div class="insp-acts"><button type="button" class="btn btn-ghost btn-sm js-norepair" data-id="${esc(i.id)}">No repair needed</button><a class="btn btn-ghost btn-sm" href="#trucks-issues">Open in Repairs</a></div>` : `<button type="button" class="btn btn-primary btn-sm js-torepair" data-insp="${esc(r.id)}" data-part="${esc(k)}" data-truck="${esc(r.truckId)}" data-title="${esc(partName(k) + (r.items[k] === "fail" ? " · Not OK" : " · Needs attention"))}" data-sev="${r.items[k] === "fail" ? "urgent" : "normal"}" style="margin-top:8px">Add to Repairs</button>`}
+          ${fixed ? `<p class="muted" style="margin:6px 0 0">${fmtDay(i.repair.date)} · ${esc(i.repair.garage || "")} · ${ugx(i.repair.costUgx || 0)}</p>` : closed ? "" : i ? `${repairForm(i, "Mark repaired")}<div class="insp-acts"><button type="button" class="btn btn-ghost btn-sm js-norepair" data-id="${esc(i.id)}">No repair needed</button><a class="btn btn-ghost btn-sm" href="#trucks-issues">Open in Shop</a></div>` : `<button type="button" class="btn btn-primary btn-sm js-torepair" data-insp="${esc(r.id)}" data-part="${esc(k)}" data-truck="${esc(r.truckId)}" data-title="${esc(partName(k) + (r.items[k] === "fail" ? " · Not OK" : " · Needs attention"))}" data-sev="${r.items[k] === "fail" ? "urgent" : "normal"}" style="margin-top:8px">Add to Shop</button>`}
         </div>`; }).join("") : `<p class="muted" style="margin-top:8px">All parts OK</p>`}
       ${r.note ? `<p class="muted" style="margin-top:8px">${esc(r.note)}</p>` : ""}${r.voice ? `<audio class="voice-play" controls src="${r.voice}" style="width:100%;margin-top:8px"></audio>` : ""}
       ${!bad.length && need ? `<button type="button" class="btn btn-primary wide js-reviewed" data-id="${esc(r.id)}" style="margin-top:10px">Reviewed</button>` : ""}
@@ -1704,19 +1704,88 @@ function mediaBlock(issue) {
   `;
 }
 
+const faultKey = (t) => String(t || "").replace(/ · (Not OK|Needs attention)$/, "").replace(/^tyre /i, "").trim().toLowerCase();
+// earlier parts bought for the same fault or a part with the same name
+function pastParts(i) {
+  const k = faultKey(i.title); if (!k) return [];
+  return (DATA.parts || []).filter((p) => p.issueId !== i.id && (faultKey(p.fault) === k || String(p.name).toLowerCase().includes(k) || k.includes(String(p.name).toLowerCase())));
+}
+function partRow(v) {
+  v = v || {};
+  return `<div class="part-row">
+    <div class="grid g2">
+      <label class="lbl">Part<input class="field" data-p="name" list="partNames" placeholder="e.g. Brake pads" value="${esc(v.name || "")}" /></label>
+      <label class="lbl">Supplier<input class="field" data-p="supplier" list="partSups" placeholder="Shop / dealer" value="${esc(v.supplier || "")}" /></label>
+      <label class="lbl">Supplier phone<input class="field" data-p="phone" inputmode="tel" placeholder="Optional" value="${esc(v.phone || "")}" /></label>
+      <div class="grid g2" style="gap:8px"><label class="lbl">Qty<input class="field js-pcalc" data-p="qty" inputmode="numeric" value="${esc(v.qty || 1)}" /></label><label class="lbl">Price each<input class="field js-pcalc" data-p="priceUgx" inputmode="numeric" placeholder="UGX" value="${v.priceUgx ? esc(v.priceUgx) : ""}" /></label></div>
+    </div>
+    <div class="part-foot"><label class="part-cam">📷 Photo (optional)<input type="file" accept="image/*" capture="environment" class="js-pphoto" hidden /></label><img class="part-thumb" alt="" hidden /><button type="button" class="btn btn-ghost btn-sm js-delpart">Remove</button></div>
+  </div>`;
+}
 function repairForm(i, label) {
+  const past = pastParts(i).slice(0, 3);
   return `<details class="settings" style="margin-top:10px"><summary>${label || "Mark repaired"}</summary>
         <form data-form="repair" data-id="${esc(i.id)}" style="margin-top:10px">
-          <div class="grid g2">
-            <label class="lbl">Repair cost (UGX)<input class="field js-src-amt" name="costUgx" inputmode="numeric" placeholder="0" /></label>
+          ${past.length ? `<div class="part-past"><p class="eyebrow">Fixed before</p>${past.map((p) => `<div class="part-past-row"><div><b>${esc(p.name)}</b><span>${fmtDay(p.date)} · ${esc((DATA.trucks.find((t) => t.id === p.truckId) || {}).plate || "")} · ${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${ugx(p.priceUgx || 0)}</span></div><button type="button" class="btn btn-ghost btn-sm js-reusepart" data-v="${esc(JSON.stringify({ name: p.name, supplier: p.supplier, phone: p.phone, priceUgx: p.priceUgx }))}">Use</button></div>`).join("")}</div>` : ""}
+          <p class="eyebrow" style="margin-top:4px">Parts</p>
+          <div class="js-parts"></div>
+          <button type="button" class="btn btn-ghost btn-sm js-addpart">＋ Add part</button>
+          <div class="grid g2" style="margin-top:10px">
+            <label class="lbl">Labour / garage (UGX)<input class="field js-pcalc" name="labourUgx" inputmode="numeric" placeholder="0" /></label>
             <label class="lbl">Garage / mechanic<input class="field" name="garage" placeholder="e.g. Kiboga Garage" /></label>
             ${dateField("date", "Date repaired")}
             <label class="lbl">Note<input class="field" name="note" placeholder="What was done" /></label>
           </div>
+          <input type="hidden" class="js-src-amt" name="costUgx" value="0" />
+          <p class="part-total">Total <b class="js-ptotal">UGX 0</b></p>
           ${advSource("trucking", { noPayee: true })}
           <button class="btn btn-primary wide" style="margin-top:10px">Save repair</button>
         </form>
       </details>`;
+}
+function bindPartForms() {
+  document.querySelectorAll('form[data-form="repair"]').forEach((form) => {
+    if (form.dataset.pb) return; form.dataset.pb = "1";
+    const box = form.querySelector(".js-parts"), amt = form.querySelector(".js-src-amt"), out = form.querySelector(".js-ptotal");
+    const n = (v) => Number(String(v || "").replace(/[^\d.]/g, "")) || 0;
+    const calc = () => {
+      let t = n((form.querySelector("[name=labourUgx]") || {}).value);
+      box.querySelectorAll(".part-row").forEach((r) => { t += Math.max(1, n(r.querySelector('[data-p="qty"]').value) || 1) * n(r.querySelector('[data-p="priceUgx"]').value); });
+      amt.value = t; out.textContent = ugx(t); amt.dispatchEvent(new Event("input"));
+    };
+    const add = (v) => {
+      box.insertAdjacentHTML("beforeend", partRow(v)); const r = box.lastElementChild;
+      r.querySelectorAll(".js-pcalc").forEach((x) => x.addEventListener("input", calc));
+      r.querySelector(".js-delpart").onclick = () => { r.remove(); calc(); };
+      const f = r.querySelector(".js-pphoto"), th = r.querySelector(".part-thumb");
+      f.onchange = async () => { const file = f.files[0]; r._photo = file ? await compressPhoto(file) : ""; th.hidden = !r._photo; if (r._photo) th.src = r._photo; };
+      calc();
+    };
+    form.querySelector(".js-addpart").onclick = () => add();
+    form.querySelectorAll(".js-reusepart").forEach((b) => { b.onclick = () => { box.querySelectorAll(".part-row").forEach((r) => { if (!r.querySelector('[data-p="name"]').value.trim()) r.remove(); }); try { add(JSON.parse(b.dataset.v)); } catch (e) { add(); } }; });
+    form.querySelector("[name=labourUgx]").addEventListener("input", calc);
+    add();
+  });
+}
+function readParts(form) {
+  return [...form.querySelectorAll(".part-row")].map((r) => { const o = { photo: r._photo || "" }; r.querySelectorAll("[data-p]").forEach((x) => { o[x.dataset.p] = x.value.trim(); }); return o; }).filter((o) => o.name);
+}
+function viewParts() {
+  const all = DATA.parts || [], q = (sessionStorage.getItem("partQ") || "").toLowerCase();
+  const groups = {};
+  all.forEach((p) => { const k = String(p.name).trim().toLowerCase(); (groups[k] = groups[k] || []).push(p); });
+  const keys = Object.keys(groups).filter((k) => !q || k.includes(q) || groups[k].some((p) => String(p.supplier || "").toLowerCase().includes(q) || faultKey(p.fault).includes(q)))
+    .sort((a, b) => String(groups[b][0].date).localeCompare(String(groups[a][0].date)));
+  const plate = (id) => (DATA.trucks.find((t) => t.id === id) || {}).plate || "";
+  const spend = all.reduce((t, p) => t + (p.totalUgx || 0), 0);
+  return `
+    <div class="grid g2" style="margin-top:12px"><div class="card kpi steel"><span class="eyebrow">Parts fixed</span><b>${all.length}</b></div><div class="card kpi steel"><span class="eyebrow">Parts cost</span><b>${ugx(spend)}</b></div></div>
+    <input class="field js-partq" type="search" placeholder="Search part, supplier or fault" value="${esc(sessionStorage.getItem("partQ") || "")}" style="margin-top:12px" />
+    <div class="list" style="margin-top:12px">${keys.map((k) => { const l = groups[k], last = l[0], trucks = new Set(l.map((p) => p.truckId)).size, shot = l.find((p) => p.photo);
+      return `<details class="card item part-card">
+        <summary><div class="row"><div style="display:flex;gap:10px;align-items:center">${shot ? `<img class="part-ico" src="${shot.photo}" alt="" />` : `<div class="part-ico">🔧</div>`}<div><b>${esc(last.name)}</b><div class="muted">${esc(last.supplier || "No supplier")}${last.phone ? ` · <a href="tel:${esc(last.phone)}">${esc(last.phone)}</a>` : ""}</div></div></div><div style="text-align:right"><b>${ugx(last.priceUgx || 0)}</b><div class="muted">${l.length}× · ${trucks} truck${trucks > 1 ? "s" : ""}</div></div></div></summary>
+        ${l.map((p) => `<div class="part-hist"><div><b>${fmtDay(p.date)} · ${esc(plate(p.truckId))}</b><span>${esc(p.fault || "")}${p.garage ? " · " + esc(p.garage) : ""}</span><span>${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${p.qty || 1} × ${ugx(p.priceUgx || 0)}</span></div>${p.photo ? `<img src="${p.photo}" alt="" />` : ""}</div>`).join("")}
+      </details>`; }).join("") || `<div class="card item muted">${q ? "No match." : "Parts appear here when a repair is saved."}</div>`}</div>`;
 }
 // the repair item that belongs to one part of one inspection (or the open one it was merged into)
 function issueFor(r, part) {
@@ -1742,7 +1811,7 @@ function viewReports() {
       ${mediaBlock(i)}
       ${i.seenAgain ? `<p class="muted" style="margin-top:6px">Seen again on ${i.seenAgain} later inspection${i.seenAgain > 1 ? "s" : ""}${i.lastSeen ? " · last " + fmtDay(i.lastSeen) : ""}</p>` : ""}
       ${(i.replies || []).map((x) => `<p class="muted" style="margin-top:6px"><b>Next:</b> ${esc(x.text)}</p>`).join("")}
-      ${r ? `<div class="rep-done"><div><span>Repaired</span><b>${fmtDay(r.date)}</b></div><div><span>Garage</span><b>${esc(r.garage || "—")}</b></div><div><span>Cost</span><b>${ugx(r.costUgx || 0)}</b></div></div>${r.note ? `<p class="muted" style="margin-top:6px">${esc(r.note)}</p>` : ""}` : `
+      ${r ? `<div class="rep-done"><div><span>Repaired</span><b>${fmtDay(r.date)}</b></div><div><span>Garage</span><b>${esc(r.garage || "—")}</b></div><div><span>Cost</span><b>${ugx(r.costUgx || 0)}</b></div></div>${(r.partIds || []).length ? `<div class="part-lines">${(DATA.parts || []).filter((p) => r.partIds.includes(p.id)).map((p) => `<div><span>${esc(p.name)}${p.qty > 1 ? " × " + p.qty : ""} · ${esc(p.supplier || "—")}</span><b>${ugx(p.totalUgx || 0)}</b></div>`).join("")}${r.labourUgx ? `<div><span>Labour</span><b>${ugx(r.labourUgx)}</b></div>` : ""}</div>` : ""}${r.note ? `<p class="muted" style="margin-top:6px">${esc(r.note)}</p>` : ""}` : `
       ${repairForm(i)}
       <form data-form="reply-issue" data-id="${i.id}" style="margin-top:8px"><div class="grid g2"><input class="field" name="text" required placeholder="Next step for the driver" /><button class="btn btn-ghost">Send</button></div></form>`}
       ${i.source === "inspection" ? `<p class="rep-src">From inspection · ${fmtDay(i.date)}</p>` : i.source === "office" ? `<p class="rep-src">Added by the office</p>` : `<p class="rep-src">Reported by ${esc(i.by || "driver")}</p>`}
@@ -1751,7 +1820,7 @@ function viewReports() {
   return `
     <h1>Fleet</h1>
     ${fleetTabs("trucks-issues")}
-    <div class="grid g2" style="margin-top:12px"><div class="card kpi gold"><span class="eyebrow">To fix</span><b>${toFix.length}</b></div><div class="card kpi steel"><span class="eyebrow">Repairs cost</span><b>${ugx(spent)}</b></div></div>
+    <div class="grid g2" style="margin-top:12px"><div class="card kpi gold"><span class="eyebrow">To fix</span><b>${toFix.length}</b></div><div class="card kpi steel"><span class="eyebrow">Shop cost</span><b>${ugx(spent)}</b></div></div>
     <details class="card team-row" style="margin-top:12px">
       <summary><div class="avatar">＋</div><div style="flex:1"><b>Add a repair</b><div class="muted">Mechanical problem not from an inspection</div></div></summary>
       <form data-form="add-repair" style="margin-top:12px">
@@ -1764,8 +1833,10 @@ function viewReports() {
         <button class="btn btn-primary wide" style="margin-top:10px">Add to To fix</button>
       </form>
     </details>
-    <div class="seg seg-sm" style="margin-top:12px"><button type="button" class="seg-btn ${tab === "fix" ? "on" : ""}" data-reptab="fix">To fix${toFix.length ? " · " + toFix.length : ""}</button><button type="button" class="seg-btn ${tab === "done" ? "on" : ""}" data-reptab="done">Repaired${done.length ? " · " + done.length : ""}</button></div>
-    <div class="list" style="margin-top:12px">${(tab === "fix" ? toFix : done).map(card).join("") || `<div class="card item muted">${tab === "fix" ? "Nothing to fix." : "No repairs yet."}</div>`}</div>`;
+    <div class="seg seg-sm" style="margin-top:12px"><button type="button" class="seg-btn ${tab === "fix" ? "on" : ""}" data-reptab="fix">To fix${toFix.length ? " · " + toFix.length : ""}</button><button type="button" class="seg-btn ${tab === "done" ? "on" : ""}" data-reptab="done">Repaired${done.length ? " · " + done.length : ""}</button><button type="button" class="seg-btn ${tab === "parts" ? "on" : ""}" data-reptab="parts">Parts${(DATA.parts || []).length ? " · " + DATA.parts.length : ""}</button></div>
+    <datalist id="partNames">${[...new Set((DATA.parts || []).map((p) => p.name))].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>
+    <datalist id="partSups">${[...new Set((DATA.parts || []).map((p) => p.supplier).filter(Boolean))].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>
+    ${tab === "parts" ? viewParts() : `<div class="list" style="margin-top:12px">${(tab === "fix" ? toFix : done).map(card).join("") || `<div class="card item muted">${tab === "fix" ? "Nothing to fix." : "No repairs yet."}</div>`}</div>`}`;
 }
 
 function viewDrive(page, taskId) {
@@ -4434,6 +4505,8 @@ function bind() {
   document.querySelectorAll(".js-torepair").forEach((b) => { b.onclick = async () => { try { await act("report_issue", { truckId: b.dataset.truck, title: b.dataset.title, severity: b.dataset.sev, inspectionId: b.dataset.insp, part: b.dataset.part }); } catch (e) {} }; });
   document.querySelectorAll(".js-reviewed").forEach((b) => { b.onclick = async () => { try { await act("review_inspection", { id: b.dataset.id }); } catch (e) {} }; });
   document.querySelectorAll(".js-norepair").forEach((b) => { b.onclick = async () => { if (!confirm("Close this without a repair?")) return; try { await act("reply_issue", { id: b.dataset.id, text: "No repair needed", close: true }); } catch (e) {} }; });
+  bindPartForms();
+  document.querySelectorAll(".js-partq").forEach((x) => { x.oninput = () => { sessionStorage.setItem("partQ", x.value); const pos = x.selectionStart; route(); const y = document.querySelector(".js-partq"); if (y) { y.focus(); try { y.setSelectionRange(pos, pos); } catch (e) {} } }; });
   document.querySelectorAll("[data-reptab]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("repTab", b.dataset.reptab); route(); }; });
   document.querySelectorAll(".js-basis").forEach((g) => { const f = g.closest("form"); g.querySelectorAll("[data-v]").forEach((b) => { b.onclick = () => {
     g.querySelectorAll("[data-v]").forEach((x) => x.classList.toggle("on", x === b)); f.payBasis.value = b.dataset.v;
@@ -4786,7 +4859,7 @@ function bind() {
         try { await act("report_issue", { truckId: fd.truckId, title: fd.title, note: fd.note, severity: fd.urgent ? "urgent" : "normal" }); } catch (err) { return; }
         sessionStorage.setItem("repTab", "fix"); toast("Added to To fix");
       } else if (kind === "repair") {
-        try { await act("repair_issue", { ...fd, id: form.dataset.id }); } catch (err) { return; }
+        try { await act("repair_issue", { ...fd, id: form.dataset.id, parts: readParts(form) }); } catch (err) { return; }
         toast("Repair saved");
       } else if (kind === "reply-issue") {
         await act("reply_issue", { id: form.dataset.id, text: fd.text, close: fd.close === "1" || form.close === form.querySelector("[name=close]") && document.activeElement === form.querySelector("[name=close]") });

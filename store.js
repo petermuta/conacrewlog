@@ -119,7 +119,7 @@ function storeBook(db) {
 }
 const hasAdmin = (db) => !!(db && (db.users || []).some((u) => u.role === "admin"));
 function pruneFleet(db) {
-  ["users", "trucks", "drivers", "jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "contractors", "sellers", "mills", "caneBuys", "caneSales", "caneExpenses", "blocks", "farmWorks", "fruitSales", "cash", "payStubs", "notifications", "moneyRequests", "receivables", "harvests", "fieldLogs", "farmInputs", "docs", "bookings"].forEach((k) => {
+  ["users", "trucks", "drivers", "jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "contractors", "sellers", "mills", "caneBuys", "caneSales", "caneExpenses", "blocks", "farmWorks", "fruitSales", "cash", "payStubs", "notifications", "moneyRequests", "receivables", "harvests", "fieldLogs", "farmInputs", "docs", "bookings", "parts"].forEach((k) => {
     if (!db[k]) db[k] = [];
   });
   if (!db.blocks.length) {
@@ -371,6 +371,7 @@ function scopedDb(db, user) {
       trustedDevices: user.assistant ? [] : db.trustedDevices || [],
       docs: db.docs || [],
       bookings: db.bookings || [],
+      parts: db.parts || [],
       payInfo: db.payInfo || null,
       pricing: db.pricing || null,
       taxInfo: { ...TAX_START, ...(db.taxInfo || {}) },
@@ -2092,7 +2093,11 @@ function applyAction(db, user, body) {
     if (user.role !== "admin") throw new Error("Only the office can close a repair");
     const issue = (db.issues || []).find((i) => i.id === body.id);
     if (!issue) throw new Error("Not found");
-    const cost = Math.max(0, Math.round(Number(String(body.costUgx || "").replace(/[^\d.]/g, "")) || 0));
+    const num = (v) => Math.max(0, Math.round(Number(String(v == null ? "" : v).replace(/[^\d.]/g, "")) || 0));
+    let rows = body.parts; if (typeof rows === "string") { try { rows = JSON.parse(rows); } catch (e) { rows = []; } }
+    rows = (Array.isArray(rows) ? rows : []).map((x) => ({ name: String(x.name || "").trim(), supplier: String(x.supplier || "").trim(), phone: String(x.phone || "").trim(), qty: Math.max(1, num(x.qty) || 1), priceUgx: num(x.priceUgx), photo: x.photo || "" })).filter((x) => x.name);
+    const labour = num(body.labourUgx);
+    const cost = rows.length || labour ? rows.reduce((t, x) => t + x.qty * x.priceUgx, 0) + labour : num(body.costUgx);
     const date = dayOf(body), truck = db.trucks.find((t) => t.id === issue.truckId);
     const spend = { category: "workshop", payeeName: body.garage || "Workshop", method: body.method || "cash", note: "Repair · " + issue.title + (truck ? " · " + truck.plate : ""), date, truckId: issue.truckId };
     let fromAdv = 0, cashId = "";
@@ -2101,7 +2106,10 @@ function applyAction(db, user, body) {
       if (cost - fromAdv > 0) { const row = { id: uid("k"), date, direction: "out", amountUgx: cost - fromAdv, tag: "trucking", method: body.method || "cash", category: "workshop", note: spend.note, truckId: issue.truckId, payeeName: spend.payeeName, refId: issue.id }; db.cash.unshift(row); cashId = row.id; }
     }
     issue.status = "fixed";
-    issue.repair = { costUgx: cost, fromAdvanceUgx: fromAdv, cashId, garage: body.garage || "", note: body.note || "", date, by: user.name };
+    if (!db.parts) db.parts = [];
+    const fault = String(issue.title || "").replace(/ · (Not OK|Needs attention)$/, "");
+    const partIds = rows.map((x) => { const rec = { id: uid("pt"), ...x, totalUgx: x.qty * x.priceUgx, date, truckId: issue.truckId, issueId: issue.id, fault, garage: body.garage || "", by: user.name, createdAt: new Date().toISOString() }; if (!rec.photo) delete rec.photo; db.parts.unshift(rec); return rec.id; });
+    issue.repair = { costUgx: cost, fromAdvanceUgx: fromAdv, cashId, garage: body.garage || "", note: body.note || "", date, by: user.name, labourUgx: labour, partIds };
     if (issue.driverId) db.notifications.unshift({ id: uid("n"), toDriverId: issue.driverId, truckId: issue.truckId, type: "reply", title: "Repaired", body: issue.title.replace(/ · (Not OK|Needs attention)$/, "") + " is fixed", status: "unread", createdAt: new Date().toISOString() });
     return;
   }
