@@ -4584,7 +4584,7 @@ function bind() {
         for (const inp of files) {
           const id = inp.dataset.part;
           if (!need.includes(id)) continue;
-          if (!inp.files || !inp.files[0]) { alert("Add a photo for each WARNING or FAIL"); return; }
+          if (!inp.files || !inp.files[0]) continue; // photos are optional
           photos[id] = await new Promise((res, rej) => {
             compressPhoto(inp.files[0]).then(res, rej); // small photos keep the books light
           });
