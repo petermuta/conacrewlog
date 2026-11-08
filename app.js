@@ -998,7 +998,7 @@ function viewInspectReport() {
       <div class="row"><div><b>${fmtDay(r.date)} · ${esc(t?.plate || "")}</b><p class="muted">${esc(d?.name || r.by || "")} · ${(r.odometerKm || 0).toLocaleString()} km</p></div>${need ? `<span class="badge gold">Needs action</span>` : `<span class="badge green">Done</span>`}</div>
       ${bad.length ? bad.map((k) => { const i = issueFor(r, k), fixed = i && i.status === "fixed", closed = i && i.status === "closed";
         return `<div class="insp-bad">
-          <div class="row"><div>${partArea(k) ? `<span class="area-tag">${esc(partArea(k))}</span> ` : ""}<b>${esc(partName(k))}</b> · ${badge(r.items[k])}</div>${fixed ? `<span class="badge green">Repaired</span>` : closed ? `<span class="badge">No repair</span>` : `<span class="badge red">To fix</span>`}</div>
+          <div class="row"><div>${partArea(k) ? `<span class="area-tag">${esc(partArea(k))}</span> ` : ""}<b>${esc(partName(k))}</b> · ${badge(r.items[k])}</div>${fixed ? `<span class="badge green">Repaired</span>` : closed ? `<span class="badge">No repair</span>` : i ? `<span class="badge red">In Shop</span>` : `<span class="badge gold">Needs a decision</span>`}</div>
           ${r.photos && r.photos[k] ? `<img src="${r.photos[k]}" alt="" class="insp-shot" />` : ""}
           ${fixed ? `<p class="muted" style="margin:6px 0 0">${fmtDay(i.repair.date)} · ${esc(i.repair.garage || "")} · ${ugx(i.repair.costUgx || 0)}</p>` : closed ? "" : i ? `${repairForm(i, "Mark repaired")}<div class="insp-acts"><button type="button" class="btn btn-ghost btn-sm js-norepair" data-id="${esc(i.id)}">No repair needed</button><a class="btn btn-ghost btn-sm" href="#trucks-issues">Open in Shop</a></div>` : `<button type="button" class="btn btn-primary btn-sm js-torepair" data-insp="${esc(r.id)}" data-part="${esc(k)}" data-truck="${esc(r.truckId)}" data-title="${esc(partName(k) + (r.items[k] === "fail" ? " · Not OK" : " · Needs attention"))}" data-sev="${r.items[k] === "fail" ? "urgent" : "normal"}" style="margin-top:8px">Add to Shop</button>`}
         </div>`; }).join("") : `<p class="muted" style="margin-top:8px">All parts OK</p>`}
@@ -1710,14 +1710,43 @@ function pastParts(i) {
   const k = faultKey(i.title); if (!k) return [];
   return (DATA.parts || []).filter((p) => p.issueId !== i.id && (faultKey(p.fault) === k || String(p.name).toLowerCase().includes(k) || k.includes(String(p.name).toLowerCase())));
 }
+const PART_USE = [
+  ["brake chamber", "Turns air pressure into the push that applies the brakes."], ["slack adjuster", "Keeps the brake shoes the right distance from the drum."], ["brake pad", "Grips to slow and stop the wheel."], ["brake lining", "Grips the drum to slow and stop the wheel."], ["brake shoe", "Presses on the drum to slow and stop the wheel."], ["brake drum", "Turns with the wheel; the shoes press on it to stop."], ["brake valve", "Controls air going to the brakes when the pedal is pressed."], ["brake line", "Carries compressed air to the brakes."], ["air hose", "Carries compressed air to brakes and controls."], ["air compressor", "Makes the compressed air for brakes."], ["air dryer", "Takes water out of the brake air so valves don't rust or freeze."], ["air tank", "Stores compressed air for the brakes."],
+  ["clutch plate", "Connects the engine to the gearbox to move off and change gears."], ["clutch disc", "Connects the engine to the gearbox to move off and change gears."], ["pressure plate", "Clamps the clutch plate so engine power reaches the gearbox."], ["release bearing", "Lets the clutch disengage when the pedal is pressed."], ["clutch booster", "Uses air to make the clutch pedal light."], ["clutch master", "Sends fluid pressure from the pedal to work the clutch."], ["gearbox", "Changes gears so the engine can pull at any speed."], ["gear lever", "Selects gears in the gearbox."],
+  ["propeller shaft", "Carries power from the gearbox to the rear axles."], ["prop shaft", "Carries power from the gearbox to the rear axles."], ["cardan", "Carries power from the gearbox to the rear axles."], ["universal joint", "Lets the propeller shaft turn while the axle moves up and down."], ["u-joint", "Lets the propeller shaft turn while the axle moves up and down."], ["differential", "Splits power to the wheels and lets them turn at different speeds."], ["half shaft", "Carries power from the differential to the wheel."], ["axle", "Holds the wheels and carries the load."], ["wheel bearing", "Lets the wheel spin smoothly on the axle."], ["hub seal", "Keeps oil in and dirt out of the wheel hub."], ["oil seal", "Stops oil leaking out around a turning shaft."], ["wheel stud", "Holds the wheel onto the hub."],
+  ["tyre", "Grips the road and carries the load."], ["tube", "Holds the air inside the tyre."], ["rim", "The wheel the tyre sits on."],
+  ["leaf spring", "Carries the load and absorbs road bumps."], ["spring", "Carries the load and absorbs road bumps."], ["shock absorber", "Stops the truck bouncing after bumps."], ["centre bolt", "Holds the leaf spring pack together."], ["u-bolt", "Clamps the springs to the axle."], ["torque rod", "Keeps the rear axles lined up under power and braking."], ["bush", "Rubber cushion that stops metal parts knocking."],
+  ["king pin", "Pivot that lets the front wheels turn for steering."], ["tie rod", "Links the two front wheels so they steer together."], ["drag link", "Links the steering box to the front wheels."], ["ball joint", "Flexible joint in the steering linkage."], ["steering box", "Turns the steering wheel into wheel movement."], ["power steering pump", "Pumps oil to make steering light."],
+  ["radiator", "Cools the engine coolant."], ["water pump", "Pushes coolant through the engine and radiator."], ["thermostat", "Keeps the engine at the right temperature."], ["fan belt", "Drives the fan, water pump and alternator."], ["belt", "Drives engine accessories like the fan and alternator."], ["fan clutch", "Turns the cooling fan on when the engine gets hot."], ["coolant hose", "Carries coolant between engine and radiator."],
+  ["alternator", "Charges the batteries while the engine runs."], ["starter", "Turns the engine over to start it."], ["battery", "Stores power to start the truck and run lights."], ["fuse", "Protects the wiring from overload."], ["relay", "Electric switch for lights, horn and starter."], ["wiring", "Carries power to lights and electrics."], ["headlight", "Lights the road at night."], ["bulb", "Gives light for lamps and indicators."], ["indicator", "Signals turns to other road users."], ["horn", "Warns other road users."], ["wiper", "Clears rain from the windscreen."], ["mirror", "Lets the driver see behind and beside the truck."],
+  ["injector", "Sprays fuel into the engine cylinders."], ["injection pump", "Pressurises fuel and times it to the injectors."], ["fuel pump", "Moves diesel from the tank to the engine."], ["fuel filter", "Cleans dirt and water out of the diesel."], ["oil filter", "Cleans the engine oil."], ["air filter", "Stops dust getting into the engine."], ["turbo", "Pushes extra air into the engine for more power."], ["piston", "Moves in the cylinder to turn the crankshaft."], ["gasket", "Seals between engine parts so nothing leaks."], ["head gasket", "Seals the cylinder head to the engine block."], ["engine mount", "Holds the engine in place and absorbs vibration."], ["exhaust", "Carries engine fumes away."], ["silencer", "Quietens the exhaust."], ["engine oil", "Lubricates and cools the engine."], ["gear oil", "Lubricates the gearbox and axles."],
+  ["hydraulic pump", "Makes oil pressure to lift the tipper body."], ["tipping cylinder", "Lifts the tipper body to offload."], ["hydraulic cylinder", "Lifts the tipper body to offload."], ["hydraulic hose", "Carries oil to lift the tipper."], ["pto", "Takes power from the gearbox to drive the tipper pump."], ["tailgate", "Back door of the tipper body; holds the load in."], ["body hinge", "Pivot the tipper body lifts on."],
+];
+function partUse(name) {
+  const n = String(name || "").toLowerCase().trim(); if (!n) return "";
+  const past = (DATA.parts || []).find((p) => String(p.name).toLowerCase().trim() === n && p.purpose); if (past) return past.purpose;
+  let best = ""; PART_USE.forEach(([k, v]) => { if (n.includes(k) && k.length > best.length) best = k; });
+  return best ? PART_USE.find((x) => x[0] === best)[1] : "";
+}
 function partRow(v) {
   v = v || {};
   return `<div class="part-row">
     <div class="grid g2">
-      <label class="lbl">Part<input class="field" data-p="name" list="partNames" placeholder="e.g. Brake pads" value="${esc(v.name || "")}" /></label>
+      <label class="lbl">Part<input class="field js-pname" data-p="name" list="partNames" placeholder="e.g. Brake chamber" value="${esc(v.name || "")}" /></label>
+      <label class="lbl">What it does<input class="field js-puse" data-p="purpose" placeholder="Fills itself for common parts" value="${esc(v.purpose || "")}" /></label>
+    </div>
+    <p class="part-sub">Bought from</p>
+    <div class="grid g2">
       <label class="lbl">Supplier<input class="field" data-p="supplier" list="partSups" placeholder="Shop / dealer" value="${esc(v.supplier || "")}" /></label>
       <label class="lbl">Supplier phone<input class="field" data-p="phone" inputmode="tel" placeholder="Optional" value="${esc(v.phone || "")}" /></label>
-      <div class="grid g2" style="gap:8px"><label class="lbl">Qty<input class="field js-pcalc" data-p="qty" inputmode="numeric" value="${esc(v.qty || 1)}" /></label><label class="lbl">Price each<input class="field js-pcalc" data-p="priceUgx" inputmode="numeric" placeholder="UGX" value="${v.priceUgx ? esc(v.priceUgx) : ""}" /></label></div>
+      <label class="lbl">Qty<input class="field js-pcalc" data-p="qty" inputmode="numeric" value="${esc(v.qty || 1)}" /></label>
+      <label class="lbl">Price each (UGX)<input class="field js-pcalc" data-p="priceUgx" inputmode="numeric" placeholder="0" value="${v.priceUgx ? esc(v.priceUgx) : ""}" /></label>
+    </div>
+    <p class="part-sub">Fixed by</p>
+    <div class="grid g2">
+      <label class="lbl">Mechanic / garage<input class="field" data-p="fixedBy" list="partFixers" placeholder="Name" value="${esc(v.fixedBy || "")}" /></label>
+      <label class="lbl">Mechanic phone<input class="field" data-p="fixerPhone" inputmode="tel" placeholder="Optional" value="${esc(v.fixerPhone || "")}" /></label>
+      <label class="lbl">Charged (UGX)<input class="field js-pcalc" data-p="chargeUgx" inputmode="numeric" placeholder="0" value="${v.chargeUgx ? esc(v.chargeUgx) : ""}" /></label>
     </div>
     <div class="part-foot"><label class="part-cam">📷 Photo (optional)<input type="file" accept="image/*" capture="environment" class="js-pphoto" hidden /></label><img class="part-thumb" alt="" hidden /><button type="button" class="btn btn-ghost btn-sm js-delpart">Remove</button></div>
   </div>`;
@@ -1726,14 +1755,12 @@ function repairForm(i, label) {
   const past = pastParts(i).slice(0, 3);
   return `<details class="settings" style="margin-top:10px"><summary>${label || "Mark repaired"}</summary>
         <form data-form="repair" data-id="${esc(i.id)}" style="margin-top:10px">
-          ${past.length ? `<div class="part-past"><p class="eyebrow">Fixed before</p>${past.map((p) => `<div class="part-past-row"><div><b>${esc(p.name)}</b><span>${fmtDay(p.date)} · ${esc((DATA.trucks.find((t) => t.id === p.truckId) || {}).plate || "")} · ${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${ugx(p.priceUgx || 0)}</span></div><button type="button" class="btn btn-ghost btn-sm js-reusepart" data-v="${esc(JSON.stringify({ name: p.name, supplier: p.supplier, phone: p.phone, priceUgx: p.priceUgx }))}">Use</button></div>`).join("")}</div>` : ""}
+          ${past.length ? `<div class="part-past"><p class="eyebrow">Fixed before</p>${past.map((p) => `<div class="part-past-row"><div><b>${esc(p.name)}</b><span>${fmtDay(p.date)} · ${esc((DATA.trucks.find((t) => t.id === p.truckId) || {}).plate || "")}</span><span>Bought: ${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${ugx(p.priceUgx || 0)}</span>${p.fixedBy || p.chargeUgx ? `<span>Fixed by: ${esc(p.fixedBy || "—")}${p.fixerPhone ? " · " + esc(p.fixerPhone) : ""} · ${ugx(p.chargeUgx || 0)}</span>` : ""}</div><button type="button" class="btn btn-ghost btn-sm js-reusepart" data-v="${esc(JSON.stringify({ name: p.name, purpose: p.purpose, supplier: p.supplier, phone: p.phone, priceUgx: p.priceUgx, fixedBy: p.fixedBy, fixerPhone: p.fixerPhone, chargeUgx: p.chargeUgx }))}">Use</button></div>`).join("")}</div>` : ""}
           <p class="eyebrow" style="margin-top:4px">Parts</p>
           <div class="js-parts"></div>
           <button type="button" class="btn btn-ghost btn-sm js-addpart">＋ Add part</button>
           <div class="grid g2" style="margin-top:10px">
-            <label class="lbl">Labour / garage (UGX)<input class="field js-pcalc" name="labourUgx" inputmode="numeric" placeholder="0" /></label>
-            <label class="lbl">Garage / mechanic<input class="field" name="garage" placeholder="e.g. Kiboga Garage" /></label>
-            ${dateField("date", "Date repaired")}
+            ${dateField("date", "Date fixed")}
             <label class="lbl">Note<input class="field" name="note" placeholder="What was done" /></label>
           </div>
           <input type="hidden" class="js-src-amt" name="costUgx" value="0" />
@@ -1749,21 +1776,23 @@ function bindPartForms() {
     const box = form.querySelector(".js-parts"), amt = form.querySelector(".js-src-amt"), out = form.querySelector(".js-ptotal");
     const n = (v) => Number(String(v || "").replace(/[^\d.]/g, "")) || 0;
     const calc = () => {
-      let t = n((form.querySelector("[name=labourUgx]") || {}).value);
-      box.querySelectorAll(".part-row").forEach((r) => { t += Math.max(1, n(r.querySelector('[data-p="qty"]').value) || 1) * n(r.querySelector('[data-p="priceUgx"]').value); });
+      let t = 0;
+      box.querySelectorAll(".part-row").forEach((r) => { t += Math.max(1, n(r.querySelector('[data-p="qty"]').value) || 1) * n(r.querySelector('[data-p="priceUgx"]').value) + n(r.querySelector('[data-p="chargeUgx"]').value); });
       amt.value = t; out.textContent = ugx(t); amt.dispatchEvent(new Event("input"));
     };
     const add = (v) => {
       box.insertAdjacentHTML("beforeend", partRow(v)); const r = box.lastElementChild;
       r.querySelectorAll(".js-pcalc").forEach((x) => x.addEventListener("input", calc));
       r.querySelector(".js-delpart").onclick = () => { r.remove(); calc(); };
+      const nm = r.querySelector(".js-pname"), use = r.querySelector(".js-puse");
+      nm.addEventListener("change", () => { if (!use.value.trim() || use.dataset.auto) { const u = partUse(nm.value); if (u) { use.value = u; use.dataset.auto = "1"; } } });
+      use.addEventListener("input", () => { delete use.dataset.auto; });
       const f = r.querySelector(".js-pphoto"), th = r.querySelector(".part-thumb");
       f.onchange = async () => { const file = f.files[0]; r._photo = file ? await compressPhoto(file) : ""; th.hidden = !r._photo; if (r._photo) th.src = r._photo; };
       calc();
     };
     form.querySelector(".js-addpart").onclick = () => add();
     form.querySelectorAll(".js-reusepart").forEach((b) => { b.onclick = () => { box.querySelectorAll(".part-row").forEach((r) => { if (!r.querySelector('[data-p="name"]').value.trim()) r.remove(); }); try { add(JSON.parse(b.dataset.v)); } catch (e) { add(); } }; });
-    form.querySelector("[name=labourUgx]").addEventListener("input", calc);
     add();
   });
 }
@@ -1774,17 +1803,17 @@ function viewParts() {
   const all = DATA.parts || [], q = (sessionStorage.getItem("partQ") || "").toLowerCase();
   const groups = {};
   all.forEach((p) => { const k = String(p.name).trim().toLowerCase(); (groups[k] = groups[k] || []).push(p); });
-  const keys = Object.keys(groups).filter((k) => !q || k.includes(q) || groups[k].some((p) => String(p.supplier || "").toLowerCase().includes(q) || faultKey(p.fault).includes(q)))
+  const keys = Object.keys(groups).filter((k) => !q || k.includes(q) || groups[k].some((p) => [p.supplier, p.fixedBy, p.purpose].some((x) => String(x || "").toLowerCase().includes(q)) || faultKey(p.fault).includes(q)))
     .sort((a, b) => String(groups[b][0].date).localeCompare(String(groups[a][0].date)));
   const plate = (id) => (DATA.trucks.find((t) => t.id === id) || {}).plate || "";
-  const spend = all.reduce((t, p) => t + (p.totalUgx || 0), 0);
+  const spend = all.reduce((t, p) => t + (p.qty || 1) * (p.priceUgx || 0), 0), labour = all.reduce((t, p) => t + (p.chargeUgx || 0), 0);
   return `
-    <div class="grid g2" style="margin-top:12px"><div class="card kpi steel"><span class="eyebrow">Parts fixed</span><b>${all.length}</b></div><div class="card kpi steel"><span class="eyebrow">Parts cost</span><b>${ugx(spend)}</b></div></div>
-    <input class="field js-partq" type="search" placeholder="Search part, supplier or fault" value="${esc(sessionStorage.getItem("partQ") || "")}" style="margin-top:12px" />
+    <div class="grid g2" style="margin-top:12px"><div class="card kpi steel"><span class="eyebrow">Parts bought</span><b>${ugx(spend)}</b></div><div class="card kpi steel"><span class="eyebrow">Mechanics paid</span><b>${ugx(labour)}</b></div></div>
+    <input class="field js-partq" type="search" placeholder="Search part, supplier, mechanic or fault" value="${esc(sessionStorage.getItem("partQ") || "")}" style="margin-top:12px" />
     <div class="list" style="margin-top:12px">${keys.map((k) => { const l = groups[k], last = l[0], trucks = new Set(l.map((p) => p.truckId)).size, shot = l.find((p) => p.photo);
       return `<details class="card item part-card">
-        <summary><div class="row"><div style="display:flex;gap:10px;align-items:center">${shot ? `<img class="part-ico" src="${shot.photo}" alt="" />` : `<div class="part-ico">🔧</div>`}<div><b>${esc(last.name)}</b><div class="muted">${esc(last.supplier || "No supplier")}${last.phone ? ` · <a href="tel:${esc(last.phone)}">${esc(last.phone)}</a>` : ""}</div></div></div><div style="text-align:right"><b>${ugx(last.priceUgx || 0)}</b><div class="muted">${l.length}× · ${trucks} truck${trucks > 1 ? "s" : ""}</div></div></div></summary>
-        ${l.map((p) => `<div class="part-hist"><div><b>${fmtDay(p.date)} · ${esc(plate(p.truckId))}</b><span>${esc(p.fault || "")}${p.garage ? " · " + esc(p.garage) : ""}</span><span>${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${p.qty || 1} × ${ugx(p.priceUgx || 0)}</span></div>${p.photo ? `<img src="${p.photo}" alt="" />` : ""}</div>`).join("")}
+        <summary><div class="row"><div style="display:flex;gap:10px;align-items:center">${shot ? `<img class="part-ico" src="${shot.photo}" alt="" />` : `<div class="part-ico">🔧</div>`}<div><b>${esc(last.name)}</b>${last.purpose || partUse(last.name) ? `<div class="part-use">${esc(last.purpose || partUse(last.name))}</div>` : ""}<div class="muted">${esc(last.supplier || "No supplier")}${last.phone ? ` · <a href="tel:${esc(last.phone)}">${esc(last.phone)}</a>` : ""}</div></div></div><div style="text-align:right"><b>${ugx(last.priceUgx || 0)}</b><div class="muted">${l.length}× · ${trucks} truck${trucks > 1 ? "s" : ""}</div></div></div></summary>
+        ${l.map((p) => `<div class="part-hist"><div><b>${fmtDay(p.date)} · ${esc(plate(p.truckId))}</b><span>${esc(p.fault || "")}${p.garage ? " · " + esc(p.garage) : ""}</span><span>Bought: ${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${p.qty || 1} × ${ugx(p.priceUgx || 0)}</span>${p.fixedBy || p.chargeUgx ? `<span>Fixed by: ${esc(p.fixedBy || "—")}${p.fixerPhone ? ` · <a href="tel:${esc(p.fixerPhone)}">${esc(p.fixerPhone)}</a>` : ""} · ${ugx(p.chargeUgx || 0)}</span>` : ""}<span>Total ${ugx(p.totalUgx || 0)}</span></div>${p.photo ? `<img src="${p.photo}" alt="" />` : ""}</div>`).join("")}
       </details>`; }).join("") || `<div class="card item muted">${q ? "No match." : "Parts appear here when a repair is saved."}</div>`}</div>`;
 }
 // the repair item that belongs to one part of one inspection (or the open one it was merged into)
@@ -1811,8 +1840,9 @@ function viewReports() {
       ${mediaBlock(i)}
       ${i.seenAgain ? `<p class="muted" style="margin-top:6px">Seen again on ${i.seenAgain} later inspection${i.seenAgain > 1 ? "s" : ""}${i.lastSeen ? " · last " + fmtDay(i.lastSeen) : ""}</p>` : ""}
       ${(i.replies || []).map((x) => `<p class="muted" style="margin-top:6px"><b>Next:</b> ${esc(x.text)}</p>`).join("")}
-      ${r ? `<div class="rep-done"><div><span>Repaired</span><b>${fmtDay(r.date)}</b></div><div><span>Garage</span><b>${esc(r.garage || "—")}</b></div><div><span>Cost</span><b>${ugx(r.costUgx || 0)}</b></div></div>${(r.partIds || []).length ? `<div class="part-lines">${(DATA.parts || []).filter((p) => r.partIds.includes(p.id)).map((p) => `<div><span>${esc(p.name)}${p.qty > 1 ? " × " + p.qty : ""} · ${esc(p.supplier || "—")}</span><b>${ugx(p.totalUgx || 0)}</b></div>`).join("")}${r.labourUgx ? `<div><span>Labour</span><b>${ugx(r.labourUgx)}</b></div>` : ""}</div>` : ""}${r.note ? `<p class="muted" style="margin-top:6px">${esc(r.note)}</p>` : ""}` : `
+      ${r ? `<div class="rep-done"><div><span>Repaired</span><b>${fmtDay(r.date)}</b></div><div><span>Fixed by</span><b>${esc(r.garage || "—")}</b></div><div><span>Cost</span><b>${ugx(r.costUgx || 0)}</b></div></div>${(r.partIds || []).length ? `<div class="part-lines">${(DATA.parts || []).filter((p) => r.partIds.includes(p.id)).map((p) => `<div><span>${esc(p.name)}${p.qty > 1 ? " × " + p.qty : ""} · ${esc(p.supplier || "—")}${p.fixedBy ? " · fixed by " + esc(p.fixedBy) : ""}</span><b>${ugx(p.totalUgx || 0)}</b></div>`).join("")}${r.labourUgx ? `<div><span>Labour</span><b>${ugx(r.labourUgx)}</b></div>` : ""}</div>` : ""}${r.note ? `<p class="muted" style="margin-top:6px">${esc(r.note)}</p>` : ""}` : `
       ${repairForm(i)}
+      ${i.inspectionId ? `<button type="button" class="btn btn-ghost btn-sm js-unshop" data-id="${esc(i.id)}" style="margin-top:8px">↩ Back to inspection</button>` : ""}
       <form data-form="reply-issue" data-id="${i.id}" style="margin-top:8px"><div class="grid g2"><input class="field" name="text" required placeholder="Next step for the driver" /><button class="btn btn-ghost">Send</button></div></form>`}
       ${i.source === "inspection" ? `<p class="rep-src">From inspection · ${fmtDay(i.date)}</p>` : i.source === "office" ? `<p class="rep-src">Added by the office</p>` : `<p class="rep-src">Reported by ${esc(i.by || "driver")}</p>`}
     </div>`;
@@ -1835,6 +1865,7 @@ function viewReports() {
     </details>
     <div class="seg seg-sm" style="margin-top:12px"><button type="button" class="seg-btn ${tab === "fix" ? "on" : ""}" data-reptab="fix">To fix${toFix.length ? " · " + toFix.length : ""}</button><button type="button" class="seg-btn ${tab === "done" ? "on" : ""}" data-reptab="done">Repaired${done.length ? " · " + done.length : ""}</button><button type="button" class="seg-btn ${tab === "parts" ? "on" : ""}" data-reptab="parts">Parts${(DATA.parts || []).length ? " · " + DATA.parts.length : ""}</button></div>
     <datalist id="partNames">${[...new Set((DATA.parts || []).map((p) => p.name))].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>
+    <datalist id="partFixers">${[...new Set((DATA.parts || []).map((p) => p.fixedBy).filter(Boolean))].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>
     <datalist id="partSups">${[...new Set((DATA.parts || []).map((p) => p.supplier).filter(Boolean))].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>
     ${tab === "parts" ? viewParts() : `<div class="list" style="margin-top:12px">${(tab === "fix" ? toFix : done).map(card).join("") || `<div class="card item muted">${tab === "fix" ? "Nothing to fix." : "No repairs yet."}</div>`}</div>`}`;
 }
@@ -4506,6 +4537,7 @@ function bind() {
   document.querySelectorAll(".js-reviewed").forEach((b) => { b.onclick = async () => { try { await act("review_inspection", { id: b.dataset.id }); } catch (e) {} }; });
   document.querySelectorAll(".js-norepair").forEach((b) => { b.onclick = async () => { if (!confirm("Close this without a repair?")) return; try { await act("reply_issue", { id: b.dataset.id, text: "No repair needed", close: true }); } catch (e) {} }; });
   bindPartForms();
+  document.querySelectorAll(".js-unshop").forEach((b) => { b.onclick = async () => { try { await act("unshop_issue", { id: b.dataset.id }); toast("Moved back to Inspections"); } catch (e) {} }; });
   document.querySelectorAll(".js-partq").forEach((x) => { x.oninput = () => { sessionStorage.setItem("partQ", x.value); const pos = x.selectionStart; route(); const y = document.querySelector(".js-partq"); if (y) { y.focus(); try { y.setSelectionRange(pos, pos); } catch (e) {} } }; });
   document.querySelectorAll("[data-reptab]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("repTab", b.dataset.reptab); route(); }; });
   document.querySelectorAll(".js-basis").forEach((g) => { const f = g.closest("form"); g.querySelectorAll("[data-v]").forEach((b) => { b.onclick = () => {

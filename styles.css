@@ -1321,3 +1321,5 @@ tr.js-editwork { cursor: pointer; } tr.js-editwork:active td { background: rgba(
 .part-lines span{color:var(--muted,#9aa)}
 .part-card summary .row{display:flex;flex-wrap:nowrap;justify-content:space-between;align-items:center;gap:10px}
 .part-card summary .row>div:last-child{flex:none}
+.part-sub{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#9aa);margin:10px 0 4px}
+.part-use{font-size:12px;color:#7fd3a0;margin:2px 0}
