@@ -1291,3 +1291,9 @@ tr.js-editwork { cursor: pointer; } tr.js-editwork:active td { background: rgba(
 .dl-two b { color: #fff; font-size: 16px; }
 .dl-weigh img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; }
 .dl-card a.btn.wide { display: block; width: 100%; text-align: center; box-sizing: border-box; }
+/* Repairs */
+.rep-done { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 10px; background: var(--line); border-radius: 12px; overflow: hidden; }
+.rep-done > div { background: rgba(6,16,28,.55); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.rep-done span { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-c); font-weight: 800; }
+.rep-done b { color: #fff; font-size: 14px; }
+.rep-src { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-c); font-weight: 800; }

@@ -450,7 +450,7 @@ function scopedDb(db, user) {
       dieselDefaultUgx: db.dieselDefaultUgx,
       inspections: (db.inspections || []).filter((x) => x.driverId === myId),
       fleetTasks: (db.fleetTasks || []).filter((t) => t.driverId === myId),
-      issues: (db.issues || []).filter((i) => i.driverId === myId),
+      issues: (db.issues || []).filter((i) => i.driverId === myId).map(({ repair, ...i }) => (repair ? { ...i, repair: { date: repair.date } } : i)),
       notifications: (db.notifications || []).filter((n) => n.toDriverId === myId && n.status !== "cleared"),
       disbursements: (db.disbursements || []).filter((x) => x.toDriverId === myId),
       moneyRequests: (db.moneyRequests || []).filter((r) => r.driverId === myId),
@@ -497,7 +497,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["repair_issue", "add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["add_trip", "undo_trip", "remove_trip", "end_trips", "log_spend", "read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["log_spend", "update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["update_farm_work", "delete_farm_work", "log_spend", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -1882,6 +1882,16 @@ function applyAction(db, user, body) {
       status: fails.length ? "fail" : warns.length ? "warn" : "pass",
     };
     db.inspections.unshift(rec);
+    // every part marked Needs attention / Not OK becomes something to fix (one open item per truck + part)
+    if (!db.issues) db.issues = [];
+    const names = body.partNames && typeof body.partNames === "object" ? body.partNames : {};
+    [...fails, ...warns].forEach((part) => {
+      const open = db.issues.find((i) => i.truckId === truckId && i.part === part && !["fixed", "closed"].includes(i.status));
+      if (open) { open.seenAgain = (open.seenAgain || 0) + 1; open.lastSeen = rec.date; if (items[part] === "fail") open.severity = "urgent"; return; }
+      db.issues.unshift({ id: uid("is"), truckId, driverId, part, title: (names[part] || part) + (items[part] === "fail" ? " · Not OK" : " · Needs attention"),
+        note: rec.note || "", severity: items[part] === "fail" ? "urgent" : "normal", status: "open", date: rec.date, by: user.name,
+        photos: rec.photos[part] ? [rec.photos[part]] : [], voice: rec.voice || "", voiceSec: Number(body.voiceSec) || 0, replies: [], source: "inspection", inspectionId: rec.id });
+    });
     if (!db.notifications) db.notifications = [];
     db.notifications.unshift({
       id: uid("n"),
@@ -2070,6 +2080,23 @@ function applyAction(db, user, body) {
     }
   }
 
+  if (action === "repair_issue") {
+    if (user.role !== "admin") throw new Error("Only the office can close a repair");
+    const issue = (db.issues || []).find((i) => i.id === body.id);
+    if (!issue) throw new Error("Not found");
+    const cost = Math.max(0, Math.round(Number(String(body.costUgx || "").replace(/[^\d.]/g, "")) || 0));
+    const date = dayOf(body), truck = db.trucks.find((t) => t.id === issue.truckId);
+    const spend = { category: "workshop", payeeName: body.garage || "Workshop", method: body.method || "cash", note: "Repair · " + issue.title + (truck ? " · " + truck.plate : ""), date, truckId: issue.truckId };
+    let fromAdv = 0, cashId = "";
+    if (cost > 0) {
+      if (body.source === "advance") fromAdv = drawAdvance(db, user, "trucking", cost, { useSpent: false, link: {}, spend }).fromAdvance;
+      if (cost - fromAdv > 0) { const row = { id: uid("k"), date, direction: "out", amountUgx: cost - fromAdv, tag: "trucking", method: body.method || "cash", category: "workshop", note: spend.note, truckId: issue.truckId, payeeName: spend.payeeName, refId: issue.id }; db.cash.unshift(row); cashId = row.id; }
+    }
+    issue.status = "fixed";
+    issue.repair = { costUgx: cost, fromAdvanceUgx: fromAdv, cashId, garage: body.garage || "", note: body.note || "", date, by: user.name };
+    if (issue.driverId) db.notifications.unshift({ id: uid("n"), toDriverId: issue.driverId, truckId: issue.truckId, type: "reply", title: "Repaired", body: issue.title.replace(/ · (Not OK|Needs attention)$/, "") + " is fixed", status: "unread", createdAt: new Date().toISOString() });
+    return;
+  }
   if (action === "reply_issue") {
     const issue = db.issues.find((i) => i.id === body.id);
     if (!issue) throw new Error("Report not found");

@@ -6,7 +6,7 @@ function ugx(n) {
 function tonnes(n) {
   return (n || 0).toLocaleString("en-UG", { maximumFractionDigits: 1 }) + " t";
 }
-const BADGE_TEXT = { pass: "OK", ok: "OK", warn: "Needs attention", warning: "Needs attention", fail: "Not OK", idle: "Ready", on_trip: "On a trip", workshop: "In workshop", parked: "Parked", "not paid": "Not paid", seller_paid: "Seller paid" };
+const BADGE_TEXT = { fixed: "Repaired", pass: "OK", ok: "OK", warn: "Needs attention", warning: "Needs attention", fail: "Not OK", idle: "Ready", on_trip: "On a trip", workshop: "In workshop", parked: "Parked", "not paid": "Not paid", seller_paid: "Seller paid" };
 function label(s) {
   return String(s || "").replace(/_/g, " ");
 }
@@ -445,7 +445,7 @@ function bizBar() {
   const biz = h.startsWith("#truck") ? "fleet" : h.startsWith("#cane") ? "cane" : h.startsWith("#passion") || h.startsWith("#field") ? "passion" : h.startsWith("#money") ? "money" : "home";
   const subs = {
     fleet: [["#trucks-book", "Bookings", bookingsWaiting().length, "Loads"], ["#trucks-jobs", "Loads", 0, "Loads"], ["#trucks-new", "New load", 0, "Loads"], 
-      ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-inspect", "Inspections", 0, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Issues", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
+      ["#trucks", "Trucks", 0, "Trucks"], ["#trucks-inspect", "Inspections", 0, "Trucks"], ["#trucks-work", "Tasks", work, "Trucks"], ["#trucks-issues", "Repairs", iss, "Trucks"], ["#trucks-drivers", "Drivers", 0, "Trucks"],
       ["#trucks-docs", "Docs", docsWaiting("trucking"), "Papers"], ["#trucks-trash", "Trash", 0, "Papers"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-docs", "Docs", docsWaiting("passion")]],
@@ -1699,24 +1699,41 @@ function mediaBlock(issue) {
 
 function viewReports() {
   const list = DATA.issues || [];
-  const incoming = list.filter((i) => i.status !== "closed");
+  const tab = sessionStorage.getItem("repTab") || "fix";
+  const toFix = list.filter((i) => !["fixed", "closed"].includes(i.status)).sort((a, b) => (b.severity === "urgent") - (a.severity === "urgent") || String(b.date).localeCompare(String(a.date)));
+  const done = list.filter((i) => ["fixed", "closed"].includes(i.status)).sort((a, b) => String((b.repair || {}).date || b.date).localeCompare(String((a.repair || {}).date || a.date)));
+  const spent = done.reduce((t, i) => t + ((i.repair || {}).costUgx || 0), 0);
+  const card = (i) => {
+    const t = DATA.trucks.find((x) => x.id === i.truckId), d = DATA.drivers.find((x) => x.id === i.driverId), r = i.repair;
+    return `<div class="card item rep-card ${i.status === "open" ? "flash" : ""}">
+      <div class="row"><div><p class="eyebrow">${fmtDay(i.date)} · ${esc(t?.plate || "")} · ${esc(d?.name || i.by || "")}</p><b>${esc(i.title)}</b></div><span>${r ? `<span class="badge green">Repaired</span>` : i.severity === "urgent" ? `<span class="badge red">Urgent</span>` : `<span class="badge gold">To fix</span>`}</span></div>
+      ${i.note ? `<p style="margin-top:8px">${esc(i.note)}</p>` : ""}
+      ${mediaBlock(i)}
+      ${i.seenAgain ? `<p class="muted" style="margin-top:6px">Seen again on ${i.seenAgain} later inspection${i.seenAgain > 1 ? "s" : ""}${i.lastSeen ? " · last " + fmtDay(i.lastSeen) : ""}</p>` : ""}
+      ${(i.replies || []).map((x) => `<p class="muted" style="margin-top:6px"><b>Next:</b> ${esc(x.text)}</p>`).join("")}
+      ${r ? `<div class="rep-done"><div><span>Repaired</span><b>${fmtDay(r.date)}</b></div><div><span>Garage</span><b>${esc(r.garage || "—")}</b></div><div><span>Cost</span><b>${ugx(r.costUgx || 0)}</b></div></div>${r.note ? `<p class="muted" style="margin-top:6px">${esc(r.note)}</p>` : ""}` : `
+      <details class="settings" style="margin-top:10px"><summary>Mark repaired</summary>
+        <form data-form="repair" data-id="${esc(i.id)}" style="margin-top:10px">
+          <div class="grid g2">
+            <label class="lbl">Repair cost (UGX)<input class="field js-src-amt" name="costUgx" inputmode="numeric" placeholder="0" /></label>
+            <label class="lbl">Garage / mechanic<input class="field" name="garage" placeholder="e.g. Kiboga Garage" /></label>
+            ${dateField("date", "Date repaired")}
+            <label class="lbl">Note<input class="field" name="note" placeholder="What was done" /></label>
+          </div>
+          ${advSource("trucking", { noPayee: true })}
+          <button class="btn btn-primary wide" style="margin-top:10px">Save repair</button>
+        </form>
+      </details>
+      <form data-form="reply-issue" data-id="${i.id}" style="margin-top:8px"><div class="grid g2"><input class="field" name="text" required placeholder="Next step for the driver" /><button class="btn btn-ghost">Send</button></div></form>`}
+      ${i.source === "inspection" ? `<p class="rep-src">From inspection · ${fmtDay(i.date)}</p>` : `<p class="rep-src">Reported by ${esc(i.by || "driver")}</p>`}
+    </div>`;
+  };
   return `
     <h1>Fleet</h1>
     ${fleetTabs("trucks-issues")}
-    <p class="muted" style="margin-top:10px">${incoming.length ? incoming.length + " to answer" : "All answered"}</p>
-    <div class="list" style="margin-top:14px">
-      ${list.length ? list.map((i) => {
-        const t = DATA.trucks.find((x) => x.id === i.truckId);
-        const d = DATA.drivers.find((x) => x.id === i.driverId);
-        return `<div class="card item ${i.status === "open" ? "flash" : ""}">
-          <div class="row"><div><p class="eyebrow">${i.date} · ${t?.plate || ""} · ${d?.name || i.by}</p><b>${i.title}</b></div>${badge(i.status)}${i.severity === "urgent" ? badge("urgent") : ""}</div>
-          ${i.note ? `<p style="margin-top:8px">${i.note}</p>` : ""}
-          ${mediaBlock(i)}
-          ${(i.replies || []).map((r) => `<p class="muted" style="margin-top:8px"><b>Next:</b> ${r.text}</p>`).join("")}
-          ${i.status !== "closed" ? `<form data-form="reply-issue" data-id="${i.id}" style="margin-top:10px"><input class="field" name="text" required placeholder="Next step" /><div class="grid g2" style="margin-top:8px"><button class="btn btn-primary">Send</button><button class="btn btn-ghost" name="close" value="1">Close</button></div></form>` : ""}
-        </div>`;
-      }).join("") : `<div class="card item">None</div>`}
-    </div>`;
+    <div class="grid g2" style="margin-top:12px"><div class="card kpi gold"><span class="eyebrow">To fix</span><b>${toFix.length}</b></div><div class="card kpi steel"><span class="eyebrow">Repairs cost</span><b>${ugx(spent)}</b></div></div>
+    <div class="seg seg-sm" style="margin-top:12px"><button type="button" class="seg-btn ${tab === "fix" ? "on" : ""}" data-reptab="fix">To fix${toFix.length ? " · " + toFix.length : ""}</button><button type="button" class="seg-btn ${tab === "done" ? "on" : ""}" data-reptab="done">Repaired${done.length ? " · " + done.length : ""}</button></div>
+    <div class="list" style="margin-top:12px">${(tab === "fix" ? toFix : done).map(card).join("") || `<div class="card item muted">${tab === "fix" ? "Nothing to fix." : "No repairs yet."}</div>`}</div>`;
 }
 
 function viewDrive(page, taskId) {
@@ -2562,7 +2579,7 @@ function viewHome() {
   if (replies) attn.push(["#trucks-work", "blue", `${replies} task repl${replies > 1 ? "ies" : "y"} to check`, "Fleet"]);
   [["trucking", "Fleet", "#trucks-docs"], ["sugarcane", "Cane", "#cane-docs"], ["passion", "Passion", "#passion-docs"]].forEach(([t, n, h]) => { const d = docsWaiting(t); if (d) attn.push([h, "blue", `${d} new document${d > 1 ? "s" : ""} from the team`, n]); });
   fuelAlerts().forEach(({ r, v }) => attn.push(["#trucks-profit", "red", `${r.t.plate} bought ${v.pct - 100}% more fuel than its loads need`, "Fleet"]));
-  if (issN) attn.push(["#trucks-issues", "red", `${issN} driver issue${issN > 1 ? "s" : ""} to answer`, "Fleet"]);
+  if (issN) attn.push(["#trucks-issues", "red", `${issN} repair${issN > 1 ? "s" : ""} to fix`, "Fleet"]);
   if (phones) attn.push(["#team", "gold", `${phones} new phone${phones > 1 ? "s" : ""} to approve`, "Team"]);
   const bkN = bookingsWaiting().length;
   if (bkN) attn.push(["#trucks-book", "gold", `${bkN} client booking${bkN > 1 ? "s" : ""} to answer`, "Fleet"]);
@@ -4381,6 +4398,7 @@ function bind() {
   document.querySelectorAll("[data-mproffleet]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("mprofFleet", b.dataset.mproffleet); route(); }; });
   bindSrcSplit(document);
   document.querySelectorAll(".js-editpay").forEach((b) => { b.onclick = () => openEditPay(b.dataset.id); });
+  document.querySelectorAll("[data-reptab]").forEach((b) => { b.onclick = () => { sessionStorage.setItem("repTab", b.dataset.reptab); route(); }; });
   document.querySelectorAll(".js-basis").forEach((g) => { const f = g.closest("form"); g.querySelectorAll("[data-v]").forEach((b) => { b.onclick = () => {
     g.querySelectorAll("[data-v]").forEach((x) => x.classList.toggle("on", x === b)); f.payBasis.value = b.dataset.v;
     const count = b.dataset.v === "count"; f.querySelector(".js-one").hidden = count; f.querySelector(".js-count").hidden = !count;
@@ -4590,7 +4608,7 @@ function bind() {
           });
         }
         const voice = need.length ? fd.voice || "" : "";
-        await act("submit_inspect", { truckId: DATA.truck?.id, odometerKm: fd.odometerKm, note: fd.note, items, photos, voice, voiceSec: fd.voiceSec });
+        await act("submit_inspect", { truckId: DATA.truck?.id, odometerKm: fd.odometerKm, note: fd.note, items, photos, voice, voiceSec: fd.voiceSec, partNames: Object.fromEntries(need.map((k) => [k, (k.startsWith("tyre_") ? "Tyre " + partName(k).toLowerCase() : partName(k))])) });
         window.__issueMedia = { photos: [], voice: "", sec: 0 };
         location.hash = "#drive-report";
       } else if (kind === "fuel") {
@@ -4728,6 +4746,9 @@ function bind() {
           voiceSec: media.sec,
         });
         window.__issueMedia = { photos: [], voice: "", sec: 0 };
+      } else if (kind === "repair") {
+        try { await act("repair_issue", { ...fd, id: form.dataset.id }); } catch (err) { return; }
+        toast("Repair saved");
       } else if (kind === "reply-issue") {
         await act("reply_issue", { id: form.dataset.id, text: fd.text, close: fd.close === "1" || form.close === form.querySelector("[name=close]") && document.activeElement === form.querySelector("[name=close]") });
       } else if (kind === "complete-task") {
