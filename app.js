@@ -817,10 +817,10 @@ function tripPanel(j, who) {
       <div class="trip-money">${who === "office" ? `<span>Client · ${ugx(rate)}/trip</span><b>${ugx(t.ok * rate)}</b><span>Driver · ${ugx(dRate)}/trip</span><b>${ugx(t.ok * dRate)}</b>` : `<span>My pay · ${ugx(dRate)}/trip</span><b>${ugx((t.ok - paidT) * dRate)}</b><span>${paidT ? paidT + " trips paid" : "waiting to be paid"}</span>`}</div></div>
     ${who === "driver" && !closed ? `<button type="button" class="btn btn-primary trip-plus js-addtrip" data-id="${esc(j.id)}">＋1 trip</button>
       <div class="trip-row"><button type="button" class="btn btn-ghost btn-sm js-undotrip" data-id="${esc(j.id)}">Undo last</button><button type="button" class="btn btn-ghost btn-sm js-misstrip" data-id="${esc(j.id)}">Forgot one?</button><button type="button" class="btn btn-ghost btn-sm js-endtrips" data-id="${esc(j.id)}">End day</button></div>` : ""}
-    ${who === "office" && !closed ? `<div class="trip-row"><button type="button" class="btn btn-ghost btn-sm js-addtrip" data-id="${esc(j.id)}">＋ Add a trip</button><button type="button" class="btn btn-ghost btn-sm js-endtrips" data-id="${esc(j.id)}">Close the day</button></div>` : ""}
+    ${who === "office" && !closed ? `<div class="trip-row"><button type="button" class="btn btn-ghost btn-sm js-addtrips" data-id="${esc(j.id)}">＋ Add trips</button><button type="button" class="btn btn-ghost btn-sm js-endtrips" data-id="${esc(j.id)}">Close the day</button></div>` : ""}
     ${waitList.length ? `<div class="trip-wait">${waitList.map((x) => `<div class="owe-line"><div class="owe-l"><b>Added later · ${time(x.at)}</b><span class="muted">${esc(x.by || "")} forgot to tap · ${fmtDay(x.at)}</span></div>${who === "office" ? `<div class="owe-r" style="flex-direction:row"><button type="button" class="btn btn-primary btn-sm js-oktrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}">Confirm</button><button type="button" class="btn btn-ghost btn-sm btn-remove js-rmtrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}">Remove</button></div>` : `<span class="badge gold">Waiting OK</span>`}</div>`).join("")}</div>` : ""}
     ${t.ok ? `<details class="settings" style="margin-top:8px"><summary>Trip times · ${t.ok}</summary><div class="trip-times">${t.list.filter((x) => x.ok).map((x, i) => `<span>${i + 1}. ${time(x.at)}${x.late ? "*" : ""}${who === "office" && !closed ? ` <a href="#" class="js-rmtrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}" aria-label="Remove">✕</a>` : ""}</span>`).join("")}</div></details>` : ""}
-    ${j.clientFuel ? `<p class="muted" style="margin:6px 0 0">Client gives the fuel</p>` : ""}
+    ${j.clientFuel ? `<p class="muted" style="margin:6px 0 0">Client gives the fuel${j.clientFuelUgx ? " · " + ugx(j.clientFuelUgx) : ""}${who === "office" ? ` · <a href="#" class="js-cfuel" data-id="${esc(j.id)}" data-v="${j.clientFuelUgx || ""}">${j.clientFuelUgx ? "Edit" : "Add amount"}</a>` : ""}</p>` : ""}
   </div>`;
 }
 function tripsOf(j) { const t = j.trips || []; return { all: t.length, ok: t.filter((x) => x.ok).length, wait: t.filter((x) => !x.ok).length, list: t }; }
@@ -1000,7 +1000,7 @@ function viewInspectReport() {
         return `<div class="insp-bad">
           <div class="row"><div>${partArea(k) ? `<span class="area-tag">${esc(partArea(k))}</span> ` : ""}<b>${esc(partName(k))}</b> · ${badge(r.items[k])}</div>${fixed ? `<span class="badge green">Repaired</span>` : closed ? `<span class="badge">No repair</span>` : i ? `<span class="badge red">In Shop</span>` : `<span class="badge gold">Needs a decision</span>`}</div>
           ${r.photos && r.photos[k] ? `<img src="${r.photos[k]}" alt="" class="insp-shot" />` : ""}
-          ${fixed ? `<p class="muted" style="margin:6px 0 0">${fmtDay(i.repair.date)} · ${esc(i.repair.garage || "")} · ${ugx(i.repair.costUgx || 0)}</p>` : closed ? "" : i ? `${repairForm(i, "Mark repaired")}<div class="insp-acts"><button type="button" class="btn btn-ghost btn-sm js-norepair" data-id="${esc(i.id)}">No repair needed</button><a class="btn btn-ghost btn-sm" href="#trucks-issues">Open in Shop</a></div>` : `<button type="button" class="btn btn-primary btn-sm js-torepair" data-insp="${esc(r.id)}" data-part="${esc(k)}" data-truck="${esc(r.truckId)}" data-title="${esc(partName(k) + (r.items[k] === "fail" ? " · Not OK" : " · Needs attention"))}" data-sev="${r.items[k] === "fail" ? "urgent" : "normal"}" style="margin-top:8px">Add to Shop</button>`}
+          ${fixed ? repairCost(i) : closed ? "" : i ? `${repairForm(i, "Mark repaired")}<div class="insp-acts"><button type="button" class="btn btn-ghost btn-sm js-norepair" data-id="${esc(i.id)}">No repair needed</button><a class="btn btn-ghost btn-sm" href="#trucks-issues">Open in Shop</a></div>` : `<button type="button" class="btn btn-primary btn-sm js-torepair" data-insp="${esc(r.id)}" data-part="${esc(k)}" data-truck="${esc(r.truckId)}" data-title="${esc(partName(k) + (r.items[k] === "fail" ? " · Not OK" : " · Needs attention"))}" data-sev="${r.items[k] === "fail" ? "urgent" : "normal"}" style="margin-top:8px">Add to Shop</button>`}
         </div>`; }).join("") : `<p class="muted" style="margin-top:8px">All parts OK</p>`}
       ${r.note ? `<p class="muted" style="margin-top:8px">${esc(r.note)}</p>` : ""}${r.voice ? `<audio class="voice-play" controls src="${r.voice}" style="width:100%;margin-top:8px"></audio>` : ""}
       ${!bad.length && need ? `<button type="button" class="btn btn-primary wide js-reviewed" data-id="${esc(r.id)}" style="margin-top:10px">Reviewed</button>` : ""}
@@ -1466,6 +1466,7 @@ function viewNewJob() {
         <label class="lbl">Client pays per trip (UGX)<input class="field" name="ratePerTrip" inputmode="numeric" placeholder="e.g. 60000" /></label>
         <label class="lbl">Driver gets per trip (UGX)<input class="field" name="driverPerTrip" inputmode="numeric" placeholder="e.g. 10000" /></label>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" name="clientFuel" value="1" checked /> Client gives the fuel</label>
+        <label class="lbl" style="grid-column:1/-1">Fuel the client gave (UGX)<input class="field" name="clientFuelUgx" inputmode="numeric" placeholder="Optional · for the record" /></label>
       </div>
       <p class="form-step">Material</p>
       <div class="seg seg-sm js-matby" role="group" aria-label="Material paid by"><button type="button" class="seg-btn on" data-v="client">Client's material</button><button type="button" class="seg-btn" data-v="us">Conacrew buys it</button></div>
@@ -1742,6 +1743,7 @@ function partRow(v) {
       <label class="lbl">Qty<input class="field js-pcalc" data-p="qty" inputmode="numeric" value="${esc(v.qty || 1)}" /></label>
       <label class="lbl">Price each (UGX)<input class="field js-pcalc" data-p="priceUgx" inputmode="numeric" placeholder="0" value="${v.priceUgx ? esc(v.priceUgx) : ""}" /></label>
     </div>
+    <p class="part-line js-pline"></p>
     <p class="part-sub">Fixed by</p>
     <div class="grid g2">
       <label class="lbl">Mechanic / garage<input class="field" data-p="fixedBy" list="partFixers" placeholder="Name" value="${esc(v.fixedBy || "")}" /></label>
@@ -1777,7 +1779,7 @@ function bindPartForms() {
     const n = (v) => Number(String(v || "").replace(/[^\d.]/g, "")) || 0;
     const calc = () => {
       let t = 0;
-      box.querySelectorAll(".part-row").forEach((r) => { t += Math.max(1, n(r.querySelector('[data-p="qty"]').value) || 1) * n(r.querySelector('[data-p="priceUgx"]').value) + n(r.querySelector('[data-p="chargeUgx"]').value); });
+      box.querySelectorAll(".part-row").forEach((r) => { const q = Math.max(1, n(r.querySelector('[data-p="qty"]').value) || 1), pr = n(r.querySelector('[data-p="priceUgx"]').value); t += q * pr + n(r.querySelector('[data-p="chargeUgx"]').value); r.querySelector(".js-pline").textContent = pr ? (q > 1 ? `${q} × ${ugx(pr)} = ${ugx(q * pr)}` : `Part ${ugx(pr)}`) : ""; });
       amt.value = t; out.textContent = ugx(t); amt.dispatchEvent(new Event("input"));
     };
     const add = (v) => {
@@ -1798,6 +1800,26 @@ function bindPartForms() {
 }
 function readParts(form) {
   return [...form.querySelectorAll(".part-row")].map((r) => { const o = { photo: r._photo || "" }; r.querySelectorAll("[data-p]").forEach((x) => { o[x.dataset.p] = x.value.trim(); }); return o; }).filter((o) => o.name);
+}
+// what a repair cost: parts + fixing = total, then each part
+function repairCost(i) {
+  const r = i.repair || {}, ps = (DATA.parts || []).filter((p) => (r.partIds || []).includes(p.id));
+  const partsUgx = ps.reduce((t, p) => t + (p.qty || 1) * (p.priceUgx || 0), 0), fixUgx = ps.reduce((t, p) => t + (p.chargeUgx || 0), 0) + (r.labourUgx || 0);
+  const split = ps.length || r.labourUgx;
+  return `<div class="rep-cost">
+    <div class="rep-cost-top"><span>Repaired ${fmtDay(r.date)}${r.garage ? " · " + esc(r.garage) : ""}</span></div>
+    <div class="rep-cost-sum">${split ? `<div><span>Parts</span><b>${ugx(partsUgx)}</b></div><div><span>Fixing</span><b>${ugx(fixUgx)}</b></div>` : ""}<div class="tot"><span>Total cost</span><b>${ugx(r.costUgx || 0)}</b></div></div>
+    ${ps.map((p) => `<div class="rep-cost-part"><b>${esc(p.name)}${(p.qty || 1) > 1 ? " × " + p.qty : ""}</b>
+      <div><span>Part${p.supplier ? " · " + esc(p.supplier) : ""}</span><b>${ugx((p.qty || 1) * (p.priceUgx || 0))}</b></div>
+      <div><span>Fixing${p.fixedBy ? " · " + esc(p.fixedBy) : ""}</span><b>${ugx(p.chargeUgx || 0)}</b></div></div>`).join("")}
+    ${r.labourUgx ? `<div class="rep-cost-part"><div><span>Labour</span><b>${ugx(r.labourUgx)}</b></div></div>` : ""}
+  </div>`;
+}
+let partsTidied = false;
+function tidyPartsOnce() {
+  if (partsTidied || !DATA || DATA.role !== "admin") return; partsTidied = true;
+  const keep = new Set(); (DATA.issues || []).forEach((i) => ((i.repair || {}).partIds || []).forEach((x) => keep.add(x)));
+  if ((DATA.parts || []).some((p) => !keep.has(p.id))) act("tidy_parts", {}).catch(() => {});
 }
 function viewParts() {
   const all = DATA.parts || [], q = (sessionStorage.getItem("partQ") || "").toLowerCase();
@@ -1827,6 +1849,7 @@ function inspNeedsAction(r) {
   return bad.some((k) => { const i = issueFor(r, k); return !i || !["fixed", "closed"].includes(i.status); });
 }
 function viewReports() {
+  setTimeout(tidyPartsOnce, 0);
   const list = DATA.issues || [];
   const tab = sessionStorage.getItem("repTab") || "fix";
   const toFix = list.filter((i) => !["fixed", "closed"].includes(i.status)).sort((a, b) => (b.severity === "urgent") - (a.severity === "urgent") || String(b.date).localeCompare(String(a.date)));
@@ -1840,7 +1863,7 @@ function viewReports() {
       ${mediaBlock(i)}
       ${i.seenAgain ? `<p class="muted" style="margin-top:6px">Seen again on ${i.seenAgain} later inspection${i.seenAgain > 1 ? "s" : ""}${i.lastSeen ? " · last " + fmtDay(i.lastSeen) : ""}</p>` : ""}
       ${(i.replies || []).map((x) => `<p class="muted" style="margin-top:6px"><b>Next:</b> ${esc(x.text)}</p>`).join("")}
-      ${r ? `<div class="rep-done"><div><span>Repaired</span><b>${fmtDay(r.date)}</b></div><div><span>Fixed by</span><b>${esc(r.garage || "—")}</b></div><div><span>Cost</span><b>${ugx(r.costUgx || 0)}</b></div></div>${(r.partIds || []).length ? `<div class="part-lines">${(DATA.parts || []).filter((p) => r.partIds.includes(p.id)).map((p) => `<div><span>${esc(p.name)}${p.qty > 1 ? " × " + p.qty : ""} · ${esc(p.supplier || "—")}${p.fixedBy ? " · fixed by " + esc(p.fixedBy) : ""}</span><b>${ugx(p.totalUgx || 0)}</b></div>`).join("")}${r.labourUgx ? `<div><span>Labour</span><b>${ugx(r.labourUgx)}</b></div>` : ""}</div>` : ""}${r.note ? `<p class="muted" style="margin-top:6px">${esc(r.note)}</p>` : ""}` : `
+      ${r ? repairCost(i) + `${r.note ? `<p class="muted" style="margin-top:6px">${esc(r.note)}</p>` : ""}` : `
       ${repairForm(i)}
       ${i.inspectionId ? `<button type="button" class="btn btn-ghost btn-sm js-unshop" data-id="${esc(i.id)}" style="margin-top:8px">↩ Back to inspection</button>` : ""}
       <form data-form="reply-issue" data-id="${i.id}" style="margin-top:8px"><div class="grid g2"><input class="field" name="text" required placeholder="Next step for the driver" /><button class="btn btn-ghost">Send</button></div></form>`}
@@ -4549,6 +4572,12 @@ function bind() {
     const pos = await new Promise((r) => { if (!navigator.geolocation) return r(null); navigator.geolocation.getCurrentPosition((p) => r(p.coords), () => r(null), { enableHighAccuracy: true, timeout: 4000, maximumAge: 60000 }); });
     try { await act("add_trip", { id: b.dataset.id, lat: pos ? pos.latitude : "", lng: pos ? pos.longitude : "" }); if (navigator.vibrate) navigator.vibrate(60); toast("Trip saved"); } catch (e) { b.disabled = false; b.textContent = "＋1 trip"; }
   }; });
+  document.querySelectorAll(".js-addtrips").forEach((b) => { b.onclick = () => { const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16); openSheet({ title: "Add trips", sub: "Trips done that weren't tapped",
+    body: `<div class="grid g2"><label class="lbl">How many trips<input class="field" name="count" inputmode="numeric" required value="1" /></label><label class="lbl">When<input class="field" type="datetime-local" name="at" required value="${now}" max="${now}" /></label></div>`,
+    submit: "Add trips", onSubmit: async (fd) => { await act("add_trip", { id: b.dataset.id, count: fd.count, at: fd.at }); toast((Number(fd.count) || 1) + " trip" + (Number(fd.count) > 1 ? "s" : "") + " added"); } }); }; });
+  document.querySelectorAll(".js-cfuel").forEach((a) => { a.onclick = (e) => { e.preventDefault(); openSheet({ title: "Fuel the client gave", sub: "For the record · not counted as income or cost",
+    body: `<label class="lbl">Amount (UGX)<input class="field" name="clientFuelUgx" inputmode="numeric" value="${esc(a.dataset.v)}" /></label>`,
+    submit: "Save", onSubmit: (fd) => act("set_client_fuel", { id: a.dataset.id, clientFuelUgx: fd.clientFuelUgx }) }); }; });
   document.querySelectorAll(".js-undotrip").forEach((b) => { b.onclick = async () => { if (!confirm("Remove your last trip?")) return; try { await act("undo_trip", { id: b.dataset.id }); toast("Last trip removed"); } catch (e) {} }; });
   document.querySelectorAll(".js-endtrips").forEach((b) => { b.onclick = async () => { if (!confirm("Close today's trips? No more trips can be added by the driver.")) return; try { await act("end_trips", { id: b.dataset.id }); } catch (e) {} }; });
   document.querySelectorAll(".js-oktrip").forEach((b) => { b.onclick = async () => { try { await act("approve_trip", { id: b.dataset.id, tripId: b.dataset.trip }); } catch (e) {} }; });
@@ -4891,7 +4920,8 @@ function bind() {
         try { await act("report_issue", { truckId: fd.truckId, title: fd.title, note: fd.note, severity: fd.urgent ? "urgent" : "normal" }); } catch (err) { return; }
         sessionStorage.setItem("repTab", "fix"); toast("Added to To fix");
       } else if (kind === "repair") {
-        try { await act("repair_issue", { ...fd, id: form.dataset.id, parts: readParts(form) }); } catch (err) { return; }
+        if (form.dataset.busy) return; form.dataset.busy = "1"; const sb = form.querySelector("button.btn-primary"); if (sb) { sb.disabled = true; sb.textContent = "Saving…"; }
+        try { await act("repair_issue", { ...fd, id: form.dataset.id, parts: readParts(form) }); } catch (err) { delete form.dataset.busy; if (sb) { sb.disabled = false; sb.textContent = "Save repair"; } return; }
         toast("Repair saved");
       } else if (kind === "reply-issue") {
         await act("reply_issue", { id: form.dataset.id, text: fd.text, close: fd.close === "1" || form.close === form.querySelector("[name=close]") && document.activeElement === form.querySelector("[name=close]") });

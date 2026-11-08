@@ -498,7 +498,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["review_inspection", "repair_issue", "unshop_issue", "add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["review_inspection", "repair_issue", "unshop_issue", "tidy_parts", "set_client_fuel", "add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["add_trip", "undo_trip", "remove_trip", "end_trips", "log_spend", "read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["log_spend", "update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["update_farm_work", "delete_farm_work", "log_spend", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -948,7 +948,7 @@ function applyAction(db, user, body) {
       rateUgx: body.payBasis === "count" ? 0 : Number(body.rateUgx) || 0,
       payBasis: body.payBasis === "tonne" ? "tonne" : body.payBasis === "count" ? "count" : "trip",
       payPerTonne: Number(body.payPerTonne) || 0,
-      ...(body.payBasis === "count" ? { ratePerTrip: Math.max(0, Number(String(body.ratePerTrip || "").replace(/[^\d.]/g, "")) || 0), driverPerTrip: Math.max(0, Number(String(body.driverPerTrip || "").replace(/[^\d.]/g, "")) || 0), clientFuel: body.clientFuel !== "0", trips: [] } : {}),
+      ...(body.payBasis === "count" ? { ratePerTrip: Math.max(0, Number(String(body.ratePerTrip || "").replace(/[^\d.]/g, "")) || 0), driverPerTrip: Math.max(0, Number(String(body.driverPerTrip || "").replace(/[^\d.]/g, "")) || 0), clientFuel: body.clientFuel !== "0", clientFuelUgx: Math.max(0, Number(String(body.clientFuelUgx || "").replace(/[^\d.]/g, "")) || 0), trips: [] } : {}),
       driverId,
       truckId,
       status: "booked",
@@ -1433,7 +1433,8 @@ function applyAction(db, user, body) {
       if (["delivered", "invoiced", "paid"].includes(job.status) && user.role === "driver") throw new Error("This load's day is closed");
       const late = !!body.at && user.role === "driver"; // a trip he forgot to tap: the office confirms it
       const at = body.at ? new Date(body.at).toISOString() : new Date().toISOString();
-      job.trips.push({ id: uid("tr"), at, lat: Number(body.lat) || null, lng: Number(body.lng) || null, by: user.name, late, ok: !late });
+      const n = user.role === "admin" ? Math.min(100, Math.max(1, Math.round(Number(body.count) || 1))) : 1; // office can enter a whole day at once
+      for (let k = 0; k < n; k++) job.trips.push({ id: uid("tr"), at: n > 1 ? new Date(new Date(at).getTime() + k * 60000).toISOString() : at, lat: Number(body.lat) || null, lng: Number(body.lng) || null, by: user.name, late, ok: !late, ...(n > 1 ? { office: true } : {}) });
       job.trips.sort((a, b) => String(a.at).localeCompare(String(b.at)));
       if (job.status === "booked") job.status = "en_route";
     } else if (action === "undo_trip") {
@@ -2089,6 +2090,19 @@ function applyAction(db, user, body) {
     r.reviewedAt = new Date().toISOString(); r.reviewedBy = user.name;
     return;
   }
+  if (action === "tidy_parts") { // remove parts and cash rows left by a repair saved twice
+    const keep = new Set(), cashKeep = {};
+    (db.issues || []).forEach((i) => { if (i.repair) { (i.repair.partIds || []).forEach((x) => keep.add(x)); cashKeep[i.id] = i.repair.cashId || ""; } });
+    const before = (db.parts || []).length;
+    db.parts = (db.parts || []).filter((p) => keep.has(p.id));
+    db.cash = (db.cash || []).filter((c) => !(c.category === "workshop" && c.refId && c.refId in cashKeep && c.id !== cashKeep[c.refId]));
+    return { removed: before - db.parts.length };
+  }
+  if (action === "set_client_fuel") {
+    const job = db.jobs.find((j) => j.id === body.id); if (!job) throw new Error("Load not found");
+    job.clientFuelUgx = Math.max(0, Math.round(Number(String(body.clientFuelUgx || "").replace(/[^\d.]/g, "")) || 0));
+    return;
+  }
   if (action === "unshop_issue") {
     const issue = (db.issues || []).find((i) => i.id === body.id);
     if (!issue || !issue.inspectionId) throw new Error("Not from an inspection");
@@ -2101,6 +2115,7 @@ function applyAction(db, user, body) {
     if (user.role !== "admin") throw new Error("Only the office can close a repair");
     const issue = (db.issues || []).find((i) => i.id === body.id);
     if (!issue) throw new Error("Not found");
+    if (issue.status === "fixed" && issue.repair) throw new Error("Already saved");
     const num = (v) => Math.max(0, Math.round(Number(String(v == null ? "" : v).replace(/[^\d.]/g, "")) || 0));
     let rows = body.parts; if (typeof rows === "string") { try { rows = JSON.parse(rows); } catch (e) { rows = []; } }
     const txt = (v) => String(v || "").trim();
