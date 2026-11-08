@@ -3345,7 +3345,7 @@ function bindSrcSplit(root) {
   root.querySelectorAll("select.js-src").forEach((sel) => {
     const form = sel.closest("form"), amt = form && form.querySelector(".js-src-amt"), out = sel.closest("label").nextElementSibling;
     const calc = () => { if (!out || !out.classList.contains("js-src-split")) return; const opt = sel.selectedOptions[0], left = Number(opt && opt.dataset.left) || 0, a = Number(sel.dataset.need) || Number(String(amt ? amt.value : "").replace(/[^\d.]/g, "")) || 0;
-      out.textContent = !sel.value || !a ? "" : a <= left ? `${ugx(left - a)} advance left after this` : `${ugx(left)} from the advance · ${ugx(a - left)} cash on hand`; };
+      out.textContent = !sel.value || !a || (sel.name === "paidBy" && !left) ? (sel.name === "paidBy" && sel.value === "client" ? "No cost to Conacrew" : sel.name === "paidBy" && sel.value === "office" ? "Recorded as office money" : "") : a <= left ? `${ugx(left - a)} advance left after this` : `${ugx(left)} from the advance · ${ugx(a - left)} own cash`; };
     if (amt) amt.addEventListener("input", calc); sel.addEventListener("change", calc); calc();
   });
 }
@@ -3957,7 +3957,7 @@ function driverFuelView() {
     <form class="card item" data-form="fuel" style="margin-top:14px">
       <div class="grid g3">
         <label class="lbl">Litres<input class="field" name="litres" required inputmode="decimal" placeholder="0" /></label>
-        <label class="lbl">Amount (UGX)<input class="field js-src-amt" name="amountUgx" required inputmode="numeric" placeholder="0" /></label>
+        <label class="lbl">Amount (UGX)<input class="field js-src-amt" name="amountUgx" inputmode="numeric" placeholder="0" /></label>
         <label class="lbl">Odometer (km)<input class="field" name="odometerKm" inputmode="numeric" placeholder="Optional" /></label>
       </div>
       <div class="grid g2" style="margin-top:10px">${dateField("date", "Date")}</div>
@@ -3967,10 +3967,14 @@ function driverFuelView() {
       </div>
       ${efrisFields()}
       <div class="thumbs use-preview"></div>
-      ${advSource("trucking", { noPayee: true })}
+      ${(() => { const avail = advAvailable("trucking", false); return `<label class="lbl" style="margin-top:10px">Paid by<select class="field js-src" name="paidBy">
+        <option value="cash" data-left="${avail}" selected>Cash on hand${avail > 0 ? " · " + ugx(avail) + " advance" : ""}</option>
+        <option value="office" data-left="0">Office</option>
+        <option value="client" data-left="0">Client</option>
+      </select></label><p class="muted js-src-split" style="margin:6px 0 0"></p>`; })()}
       <button class="btn btn-primary wide" style="margin-top:12px">Save fuel</button>
     </form>
-    ${logs.length ? `<p class="eyebrow" style="margin-top:16px">Recent fuel</p><div class="card" style="padding:4px 14px;margin-top:8px">${logs.map((l) => `<div class="pay-line"><div><b>${l.litres || 0} L · ${esc(l.station || "Station")}</b><div class="muted">${fmtDay(l.date)}${l.odometerKm ? " · " + Number(l.odometerKm).toLocaleString() + " km" : ""}${l.floatId ? " · from advance" : l.notFromAdvance ? " · not from an advance" : ""}</div></div><b class="amt">${ugx(l.amountUgx || 0)}</b></div>`).join("")}</div>` : ""}`;
+    ${logs.length ? `<p class="eyebrow" style="margin-top:16px">Recent fuel</p><div class="card" style="padding:4px 14px;margin-top:8px">${logs.map((l) => `<div class="pay-line"><div><b>${l.litres || 0} L · ${esc(l.station || "Station")}</b><div class="muted">${fmtDay(l.date)}${l.odometerKm ? " · " + Number(l.odometerKm).toLocaleString() + " km" : ""}${l.paidBy === "client" ? " · client fuel" : l.paidBy === "office" ? " · office paid" : l.floatId ? " · from advance" : l.notFromAdvance ? " · cash on hand" : ""}</div></div><b class="amt">${l.paidBy === "client" ? "Client" : ugx(l.amountUgx || 0)}</b></div>`).join("")}</div>` : ""}`;
 }
 
 // ───────────── Admin payroll ─────────────

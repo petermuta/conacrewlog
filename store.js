@@ -1255,6 +1255,20 @@ function applyAction(db, user, body) {
     }
   }
 
+  // driver fuel: Paid by cash on hand (advance first, then his own cash), office, or client
+  if (action === "log_fuel" && user.role === "driver" && body.paidBy) {
+    if (body.paidBy === "cash") { body.source = advanceAvailable(db, user, "trucking", false) > 0 ? "advance" : ""; }
+    else {
+      if (body.paidBy === "office" && !(Number(body.amountUgx) > 0)) throw new Error("Enter the amount");
+      if (!(Number(body.litres) > 0)) throw new Error("Enter the litres");
+      const truck = db.trucks.find((t) => t.id === body.truckId);
+      const log = { id: uid("f"), truckId: body.truckId, driverId: user.driverId, litres: Number(body.litres) || 0, amountUgx: Number(body.amountUgx) || 0, odometerKm: Number(body.odometerKm) || 0, station: body.station || "", date: dayOf(body), photo: body.photo || "", paidBy: body.paidBy, ...efrisFrom(body) };
+      db.fuelLogs.unshift(log);
+      if (truck && log.odometerKm > truck.odometerKm) truck.odometerKm = log.odometerKm;
+      if (body.paidBy === "office") db.cash.unshift({ id: uid("k"), date: log.date, direction: "out", amountUgx: log.amountUgx, tag: "trucking", method: "office", category: "diesel", note: "Fuel " + (truck?.plate || "") + " · office paid", refId: log.id, truckId: log.truckId, payeeName: log.station || "Fuel station", ...efrisFrom(body) });
+      return;
+    }
+  }
   if (action === "log_fuel" && user.role === "driver" && body.source === "advance") {
     const amount = Number(body.amountUgx) || 0;
     if (amount <= 0) throw new Error("Enter the amount");
@@ -1268,6 +1282,7 @@ function applyAction(db, user, body) {
     if (!fl) throw new Error("Advance not found");
     addFloatUse(db, fl, { ...body, category: "diesel", payeeName: body.station || "Fuel station" }, user);
   } else if (action === "log_fuel") {
+    if (user.role === "driver" && !(Number(body.amountUgx) > 0)) throw new Error("Enter the amount");
     const driverId = user.role === "driver" ? user.driverId : body.driverId;
     const log = {
       id: uid("f"),
@@ -1285,7 +1300,7 @@ function applyAction(db, user, body) {
     const truck = db.trucks.find((t) => t.id === log.truckId);
     if (truck && log.odometerKm > truck.odometerKm) truck.odometerKm = log.odometerKm;
     if (user.role === "driver") {
-      log.notFromAdvance = true; // driver used money that didn't come through an advance: flag it, don't count it twice
+      log.notFromAdvance = true; log.paidBy = "cash"; // driver used money that didn't come through an advance: flag it, don't count it twice
     } else {
       db.cash.unshift({ id: uid("k"), date: log.date, direction: "out", amountUgx: log.amountUgx, tag: "trucking", method: body.method || "cash", category: "diesel", note: "Fuel " + (truck?.plate || log.truckId), refId: log.id, truckId: log.truckId, payeeName: log.station, ...efrisFrom(body) });
     }
