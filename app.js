@@ -800,7 +800,7 @@ function jobCard(j, paidView) {
     ${j.scaleTicket || j.invoice ? `<div class="thumbs">${j.scaleTicket ? `<img src="${j.scaleTicket}" alt="Scale ticket" />` : ""}${j.invoice ? `<img src="${j.invoice}" alt="Invoice" />` : ""}</div>` : ""}
     ${paidView ? "" : `<div class="lf-trip">${tripControls(j)}</div>`}
     ${bk && !paidView ? `<div class="bk-actions"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay flash" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>` : ""}
-    ${j.payBasis === "count" ? tripPanel(j, "office") : ""}
+    ${j.payBasis === "count" ? tripPanel(j, "office") : DATA.me.role === "admin" && !paidView && !isPaid(j) ? `<button type="button" class="btn btn-ghost btn-sm js-pertrip" data-id="${esc(j.id)}" style="margin-top:8px">Change to paid per trip</button>` : ""}
     ${paidView ? "" : `<div class="lf-actions">${DATA.me.role === "admin" ? "" : `<button type="button" class="btn btn-primary js-paid" data-id="${j.id}">Client paid</button>`}<button type="button" class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></div>`}`;
   return foldCard(head, body, due ? "flash" : "");
 }
@@ -817,7 +817,7 @@ function tripPanel(j, who) {
       <div class="trip-money">${who === "office" ? `<span>Client · ${ugx(rate)}/trip</span><b>${ugx(t.ok * rate)}</b><span>Driver · ${ugx(dRate)}/trip</span><b>${ugx(t.ok * dRate)}</b>` : `<span>My pay · ${ugx(dRate)}/trip</span><b>${ugx((t.ok - paidT) * dRate)}</b><span>${paidT ? paidT + " trips paid" : "waiting to be paid"}</span>`}</div></div>
     ${who === "driver" && !closed ? `<button type="button" class="btn btn-primary trip-plus js-addtrip" data-id="${esc(j.id)}">＋1 trip</button>
       <div class="trip-row"><button type="button" class="btn btn-ghost btn-sm js-undotrip" data-id="${esc(j.id)}">Undo last</button><button type="button" class="btn btn-ghost btn-sm js-misstrip" data-id="${esc(j.id)}">Forgot one?</button><button type="button" class="btn btn-ghost btn-sm js-endtrips" data-id="${esc(j.id)}">End day</button></div>` : ""}
-    ${who === "office" && !closed ? `<div class="trip-row"><button type="button" class="btn btn-ghost btn-sm js-addtrips" data-id="${esc(j.id)}">＋ Add trips</button><button type="button" class="btn btn-ghost btn-sm js-endtrips" data-id="${esc(j.id)}">Close the day</button></div>` : ""}
+    ${who === "office" && !isPaid(j) ? `<div class="trip-row"><button type="button" class="btn btn-primary btn-sm js-addtrips" data-id="${esc(j.id)}">＋ Add trips</button>${closed ? "" : `<button type="button" class="btn btn-ghost btn-sm js-endtrips" data-id="${esc(j.id)}">Close the day</button>`}</div>` : ""}
     ${waitList.length ? `<div class="trip-wait">${waitList.map((x) => `<div class="owe-line"><div class="owe-l"><b>Added later · ${time(x.at)}</b><span class="muted">${esc(x.by || "")} forgot to tap · ${fmtDay(x.at)}</span></div>${who === "office" ? `<div class="owe-r" style="flex-direction:row"><button type="button" class="btn btn-primary btn-sm js-oktrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}">Confirm</button><button type="button" class="btn btn-ghost btn-sm btn-remove js-rmtrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}">Remove</button></div>` : `<span class="badge gold">Waiting OK</span>`}</div>`).join("")}</div>` : ""}
     ${t.ok ? `<details class="settings" style="margin-top:8px"><summary>Trip times · ${t.ok}</summary><div class="trip-times">${t.list.filter((x) => x.ok).map((x, i) => `<span>${i + 1}. ${time(x.at)}${x.late ? "*" : ""}${who === "office" && !closed ? ` <a href="#" class="js-rmtrip" data-id="${esc(j.id)}" data-trip="${esc(x.id)}" aria-label="Remove">✕</a>` : ""}</span>`).join("")}</div></details>` : ""}
     ${j.clientFuel ? `<p class="muted" style="margin:6px 0 0">Client gives the fuel${j.clientFuelUgx ? " · " + ugx(j.clientFuelUgx) : ""}${who === "office" ? ` · <a href="#" class="js-cfuel" data-id="${esc(j.id)}" data-v="${j.clientFuelUgx || ""}">${j.clientFuelUgx ? "Edit" : "Add amount"}</a>` : ""}</p>` : ""}
@@ -1456,7 +1456,7 @@ function viewNewJob() {
         <label class="lbl">Driver<select class="field js-nl-driver" name="driverId">${liveDrivers().map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></label>
       </div>
       <p class="form-step">Price and fuel</p>
-      <div class="seg seg-sm js-basis" role="group" aria-label="Client pays"><button type="button" class="seg-btn on" data-v="trip">One load</button><button type="button" class="seg-btn" data-v="count">Per trip · many a day</button></div>
+      <div class="seg seg-sm js-basis" role="group" aria-label="Client pays"><button type="button" class="seg-btn on" data-v="trip">One load · one price</button><button type="button" class="seg-btn" data-v="count">Paid per trip</button></div>
       <input type="hidden" name="payBasis" value="trip" />
       <div class="grid g2 js-one" style="margin-top:10px">
         <label class="lbl">Distance (km)<input class="field js-km" name="km" inputmode="decimal" placeholder="One way" /></label>
@@ -1465,6 +1465,7 @@ function viewNewJob() {
       <div class="grid g2 js-count" hidden style="margin-top:10px">
         <label class="lbl">Client pays per trip (UGX)<input class="field" name="ratePerTrip" inputmode="numeric" placeholder="e.g. 60000" /></label>
         <label class="lbl">Driver gets per trip (UGX)<input class="field" name="driverPerTrip" inputmode="numeric" placeholder="e.g. 10000" /></label>
+        <label class="lbl" style="grid-column:1/-1">Trips already done<input class="field" name="tripsDone" inputmode="numeric" placeholder="0 · leave empty if the driver will tap" /></label>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" name="clientFuel" value="1" checked /> Client gives the fuel</label>
         <label class="lbl" style="grid-column:1/-1">Fuel the client gave (UGX)<input class="field" name="clientFuelUgx" inputmode="numeric" placeholder="Optional · for the record" /></label>
       </div>
@@ -4575,6 +4576,11 @@ function bind() {
   document.querySelectorAll(".js-addtrips").forEach((b) => { b.onclick = () => { const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16); openSheet({ title: "Add trips", sub: "Trips done that weren't tapped",
     body: `<div class="grid g2"><label class="lbl">How many trips<input class="field" name="count" inputmode="numeric" required value="1" /></label><label class="lbl">When<input class="field" type="datetime-local" name="at" required value="${now}" max="${now}" /></label></div>`,
     submit: "Add trips", onSubmit: async (fd) => { await act("add_trip", { id: b.dataset.id, count: fd.count, at: fd.at }); toast((Number(fd.count) || 1) + " trip" + (Number(fd.count) > 1 ? "s" : "") + " added"); } }); }; });
+  document.querySelectorAll(".js-pertrip").forEach((b) => { b.onclick = () => { const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16); openSheet({ title: "Paid per trip", sub: "Client pays for each trip",
+    body: `<div class="grid g2"><label class="lbl">Client pays per trip (UGX)<input class="field" name="ratePerTrip" inputmode="numeric" required /></label><label class="lbl">Driver gets per trip (UGX)<input class="field" name="driverPerTrip" inputmode="numeric" /></label><label class="lbl">Trips done<input class="field" name="tripsDone" inputmode="numeric" value="0" /></label><label class="lbl">When<input class="field" type="datetime-local" name="at" value="${now}" max="${now}" /></label></div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" name="clientFuel" value="1" checked /> Client gives the fuel</label>
+      <label class="lbl" style="margin-top:10px">Fuel the client gave (UGX)<input class="field" name="clientFuelUgx" inputmode="numeric" placeholder="Optional" /></label>`,
+    submit: "Save", onSubmit: (fd) => act("make_per_trip", { id: b.dataset.id, ...fd }) }); }; });
   document.querySelectorAll(".js-cfuel").forEach((a) => { a.onclick = (e) => { e.preventDefault(); openSheet({ title: "Fuel the client gave", sub: "For the record · not counted as income or cost",
     body: `<label class="lbl">Amount (UGX)<input class="field" name="clientFuelUgx" inputmode="numeric" value="${esc(a.dataset.v)}" /></label>`,
     submit: "Save", onSubmit: (fd) => act("set_client_fuel", { id: a.dataset.id, clientFuelUgx: fd.clientFuelUgx }) }); }; });
