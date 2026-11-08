@@ -1730,8 +1730,12 @@ function partUse(name) {
   let best = ""; PART_USE.forEach(([k, v]) => { if (n.includes(k) && k.length > best.length) best = k; });
   return best ? PART_USE.find((x) => x[0] === best)[1] : "";
 }
+const partCost = (p) => (p.partUgx != null ? Number(p.partUgx) || 0 : (p.qty || 1) * (p.priceUgx || 0));
 function partRow(v) {
   v = v || {};
+  // saved parts open as the total paid; "Use" from an old part brings its price each
+  const mode = v.priceMode || (v.partUgx != null || v.id ? "total" : (v.qty || 1) > 1 ? "each" : "total");
+  const pv = mode === "total" && v.id ? partCost(v) : v.priceUgx;
   return `<div class="part-row" data-pid="${esc(v.id || "")}">
     <div class="grid g2">
       <label class="lbl">Part<input class="field js-pname" data-p="name" list="partNames" placeholder="e.g. Brake chamber" value="${esc(v.name || "")}" /></label>
@@ -1742,7 +1746,7 @@ function partRow(v) {
       <label class="lbl">Supplier<input class="field" data-p="supplier" list="partSups" placeholder="Shop / dealer" value="${esc(v.supplier || "")}" /></label>
       <label class="lbl">Supplier phone<input class="field" data-p="phone" inputmode="tel" placeholder="Optional" value="${esc(v.phone || "")}" /></label>
       <label class="lbl">Qty<input class="field js-pcalc" data-p="qty" inputmode="numeric" value="${esc(v.qty || 1)}" /></label>
-      <label class="lbl">Price each (UGX)<input class="field js-pcalc" data-p="priceUgx" inputmode="numeric" placeholder="0" value="${v.priceUgx ? esc(v.priceUgx) : ""}" /></label>
+      <label class="lbl">Price (UGX)<div class="price-pair"><input class="field js-pcalc" data-p="priceUgx" inputmode="numeric" placeholder="0" value="${pv ? esc(pv) : ""}" /><select class="field js-pcalc" data-p="priceMode"><option value="total" ${mode === "total" ? "selected" : ""}>Total</option><option value="each" ${mode === "each" ? "selected" : ""}>Each</option></select></div></label>
     </div>
     <p class="part-line js-pline"></p>
     <p class="part-sub">Fixed by</p>
@@ -1758,7 +1762,7 @@ function repairForm(i, label) {
   const past = pastParts(i).slice(0, 3);
   return `<details class="settings" style="margin-top:10px"><summary>${label || "Mark repaired"}</summary>
         <form data-form="repair" data-id="${esc(i.id)}" style="margin-top:10px">
-          ${past.length ? `<div class="part-past"><p class="eyebrow">Fixed before</p>${past.map((p) => `<div class="part-past-row"><div><b>${esc(p.name)}</b><span>${fmtDay(p.date)} · ${esc((DATA.trucks.find((t) => t.id === p.truckId) || {}).plate || "")}</span><span>Bought: ${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${ugx(p.priceUgx || 0)}</span>${p.fixedBy || p.chargeUgx ? `<span>Fixed by: ${esc(p.fixedBy || "—")}${p.fixerPhone ? " · " + esc(p.fixerPhone) : ""} · ${ugx(p.chargeUgx || 0)}</span>` : ""}</div><button type="button" class="btn btn-ghost btn-sm js-reusepart" data-v="${esc(JSON.stringify({ name: p.name, purpose: p.purpose, supplier: p.supplier, phone: p.phone, priceUgx: p.priceUgx, fixedBy: p.fixedBy, fixerPhone: p.fixerPhone, chargeUgx: p.chargeUgx }))}">Use</button></div>`).join("")}</div>` : ""}
+          ${past.length ? `<div class="part-past"><p class="eyebrow">Fixed before</p>${past.map((p) => `<div class="part-past-row"><div><b>${esc(p.name)}</b><span>${fmtDay(p.date)} · ${esc((DATA.trucks.find((t) => t.id === p.truckId) || {}).plate || "")}</span><span>Bought: ${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${(p.qty || 1) > 1 ? p.qty + " for " + ugx(partCost(p)) : ugx(partCost(p))}</span>${p.fixedBy || p.chargeUgx ? `<span>Fixed by: ${esc(p.fixedBy || "—")}${p.fixerPhone ? " · " + esc(p.fixerPhone) : ""} · ${ugx(p.chargeUgx || 0)}</span>` : ""}</div><button type="button" class="btn btn-ghost btn-sm js-reusepart" data-v="${esc(JSON.stringify({ name: p.name, purpose: p.purpose, supplier: p.supplier, phone: p.phone, priceUgx: Math.round(partCost(p) / (p.qty || 1)), priceMode: "each", fixedBy: p.fixedBy, fixerPhone: p.fixerPhone, chargeUgx: p.chargeUgx }))}">Use</button></div>`).join("")}</div>` : ""}
           <p class="eyebrow" style="margin-top:4px">Parts</p>
           <div class="js-parts"></div>
           <button type="button" class="btn btn-ghost btn-sm js-addpart">＋ Add part</button>
@@ -1780,7 +1784,7 @@ function bindPartForms() {
     const n = (v) => Number(String(v || "").replace(/[^\d.]/g, "")) || 0;
     const calc = () => {
       let t = 0;
-      box.querySelectorAll(".part-row").forEach((r) => { const q = Math.max(1, n(r.querySelector('[data-p="qty"]').value) || 1), pr = n(r.querySelector('[data-p="priceUgx"]').value); t += q * pr + n(r.querySelector('[data-p="chargeUgx"]').value); r.querySelector(".js-pline").textContent = pr ? (q > 1 ? `${q} × ${ugx(pr)} = ${ugx(q * pr)}` : `Part ${ugx(pr)}`) : ""; });
+      box.querySelectorAll(".part-row").forEach((r) => { const q = Math.max(1, n(r.querySelector('[data-p="qty"]').value) || 1), pr = n(r.querySelector('[data-p="priceUgx"]').value), each = r.querySelector('[data-p="priceMode"]').value === "each", tot = each ? q * pr : pr; t += tot + n(r.querySelector('[data-p="chargeUgx"]').value); r.querySelector(".js-pline").textContent = !pr ? "" : q === 1 ? `Part ${ugx(tot)}` : each ? `${q} × ${ugx(pr)} = ${ugx(tot)}` : `${q} for ${ugx(tot)} · about ${ugx(Math.round(tot / q))} each`; });
       amt.value = t; out.textContent = ugx(t); amt.dispatchEvent(new Event("input"));
     };
     const add = (v) => {
@@ -1824,13 +1828,13 @@ function repairEditForm(i) {
 // what a repair cost: parts + fixing = total, then each part
 function repairCost(i) {
   const r = i.repair || {}, ps = (DATA.parts || []).filter((p) => (r.partIds || []).includes(p.id));
-  const partsUgx = ps.reduce((t, p) => t + (p.qty || 1) * (p.priceUgx || 0), 0), fixUgx = ps.reduce((t, p) => t + (p.chargeUgx || 0), 0) + (r.labourUgx || 0);
+  const partsUgx = ps.reduce((t, p) => t + partCost(p), 0), fixUgx = ps.reduce((t, p) => t + (p.chargeUgx || 0), 0) + (r.labourUgx || 0);
   const split = ps.length || r.labourUgx;
   return `<div class="rep-cost">
     <div class="rep-cost-top"><span>Repaired ${fmtDay(r.date)}${r.garage ? " · " + esc(r.garage) : ""}</span></div>
     <div class="rep-cost-sum">${split ? `<div><span>Parts</span><b>${ugx(partsUgx)}</b></div><div><span>Fixing</span><b>${ugx(fixUgx)}</b></div>` : ""}<div class="tot"><span>Total cost</span><b>${ugx(r.costUgx || 0)}</b></div></div>
     ${ps.map((p) => `<div class="rep-cost-part"><b>${esc(p.name)}${(p.qty || 1) > 1 ? " × " + p.qty : ""}</b>
-      <div><span>Part${p.supplier ? " · " + esc(p.supplier) : ""}</span><b>${ugx((p.qty || 1) * (p.priceUgx || 0))}</b></div>
+      <div><span>Part${p.supplier ? " · " + esc(p.supplier) : ""}</span><b>${ugx(partCost(p))}</b></div>
       <div><span>Fixing${p.fixedBy ? " · " + esc(p.fixedBy) : ""}</span><b>${ugx(p.chargeUgx || 0)}</b></div></div>`).join("")}
     ${r.labourUgx ? `<div class="rep-cost-part"><div><span>Labour</span><b>${ugx(r.labourUgx)}</b></div></div>` : ""}
     ${r.editedAt ? `<p class="muted" style="margin:6px 0 0;font-size:11px">Edited ${fmtDay(r.editedAt)} · ${esc(r.editedBy || "")}</p>` : ""}
@@ -1850,14 +1854,14 @@ function viewParts() {
   const keys = Object.keys(groups).filter((k) => !q || k.includes(q) || groups[k].some((p) => [p.supplier, p.fixedBy, p.purpose].some((x) => String(x || "").toLowerCase().includes(q)) || faultKey(p.fault).includes(q)))
     .sort((a, b) => String(groups[b][0].date).localeCompare(String(groups[a][0].date)));
   const plate = (id) => (DATA.trucks.find((t) => t.id === id) || {}).plate || "";
-  const spend = all.reduce((t, p) => t + (p.qty || 1) * (p.priceUgx || 0), 0), labour = all.reduce((t, p) => t + (p.chargeUgx || 0), 0);
+  const spend = all.reduce((t, p) => t + partCost(p), 0), labour = all.reduce((t, p) => t + (p.chargeUgx || 0), 0);
   return `
     <div class="grid g2" style="margin-top:12px"><div class="card kpi steel"><span class="eyebrow">Parts bought</span><b>${ugx(spend)}</b></div><div class="card kpi steel"><span class="eyebrow">Mechanics paid</span><b>${ugx(labour)}</b></div></div>
     <input class="field js-partq" type="search" placeholder="Search part, supplier, mechanic or fault" value="${esc(sessionStorage.getItem("partQ") || "")}" style="margin-top:12px" />
     <div class="list" style="margin-top:12px">${keys.map((k) => { const l = groups[k], last = l[0], trucks = new Set(l.map((p) => p.truckId)).size, shot = l.find((p) => p.photo);
       return `<details class="card item part-card">
-        <summary><div class="row"><div style="display:flex;gap:10px;align-items:center">${shot ? `<img class="part-ico" src="${shot.photo}" alt="" />` : `<div class="part-ico">🔧</div>`}<div><b>${esc(last.name)}</b>${last.purpose || partUse(last.name) ? `<div class="part-use">${esc(last.purpose || partUse(last.name))}</div>` : ""}<div class="muted">${esc(last.supplier || "No supplier")}${last.phone ? ` · <a href="tel:${esc(last.phone)}">${esc(last.phone)}</a>` : ""}</div></div></div><div style="text-align:right"><b>${ugx(last.priceUgx || 0)}</b><div class="muted">${l.length}× · ${trucks} truck${trucks > 1 ? "s" : ""}</div></div></div></summary>
-        ${l.map((p) => `<div class="part-hist"><div><b>${fmtDay(p.date)} · ${esc(plate(p.truckId))}</b><span>${esc(p.fault || "")}${p.garage ? " · " + esc(p.garage) : ""}</span><span>Bought: ${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${p.qty || 1} × ${ugx(p.priceUgx || 0)}</span>${p.fixedBy || p.chargeUgx ? `<span>Fixed by: ${esc(p.fixedBy || "—")}${p.fixerPhone ? ` · <a href="tel:${esc(p.fixerPhone)}">${esc(p.fixerPhone)}</a>` : ""} · ${ugx(p.chargeUgx || 0)}</span>` : ""}<span>Total ${ugx(p.totalUgx || 0)}</span></div>${p.photo ? `<img src="${p.photo}" alt="" />` : ""}</div>`).join("")}
+        <summary><div class="row"><div style="display:flex;gap:10px;align-items:center">${shot ? `<img class="part-ico" src="${shot.photo}" alt="" />` : `<div class="part-ico">🔧</div>`}<div><b>${esc(last.name)}</b>${last.purpose || partUse(last.name) ? `<div class="part-use">${esc(last.purpose || partUse(last.name))}</div>` : ""}<div class="muted">${esc(last.supplier || "No supplier")}${last.phone ? ` · <a href="tel:${esc(last.phone)}">${esc(last.phone)}</a>` : ""}</div></div></div><div style="text-align:right"><b>${ugx(Math.round(partCost(last) / (last.qty || 1)))}</b><div class="muted" style="font-size:11px">each</div><div class="muted">${l.length}× · ${trucks} truck${trucks > 1 ? "s" : ""}</div></div></div></summary>
+        ${l.map((p) => `<div class="part-hist"><div><b>${fmtDay(p.date)} · ${esc(plate(p.truckId))}</b><span>${esc(p.fault || "")}${p.garage ? " · " + esc(p.garage) : ""}</span><span>Bought: ${esc(p.supplier || "—")}${p.phone ? " · " + esc(p.phone) : ""} · ${(p.qty || 1) > 1 ? (p.qty + " for " + ugx(partCost(p))) : ugx(partCost(p))}</span>${p.fixedBy || p.chargeUgx ? `<span>Fixed by: ${esc(p.fixedBy || "—")}${p.fixerPhone ? ` · <a href="tel:${esc(p.fixerPhone)}">${esc(p.fixerPhone)}</a>` : ""} · ${ugx(p.chargeUgx || 0)}</span>` : ""}<span>Total ${ugx(p.totalUgx || 0)}</span></div>${p.photo ? `<img src="${p.photo}" alt="" />` : ""}</div>`).join("")}
       </details>`; }).join("") || `<div class="card item muted">${q ? "No match." : "Parts appear here when a repair is saved."}</div>`}</div>`;
 }
 // the repair item that belongs to one part of one inspection (or the open one it was merged into)

@@ -654,7 +654,13 @@ function addFloatUse(db, fl, body, user) {
 function parseRepairParts(body) {
   const num = (v) => Math.max(0, Math.round(Number(String(v == null ? "" : v).replace(/[^\d.]/g, "")) || 0)), txt = (v) => String(v || "").trim();
   let rows = body.parts; if (typeof rows === "string") { try { rows = JSON.parse(rows); } catch (e) { rows = []; } }
-  return (Array.isArray(rows) ? rows : []).map((x) => ({ pid: txt(x.pid), name: txt(x.name), purpose: txt(x.purpose), supplier: txt(x.supplier), phone: txt(x.phone), qty: Math.max(1, num(x.qty) || 1), priceUgx: num(x.priceUgx), fixedBy: txt(x.fixedBy), fixerPhone: txt(x.fixerPhone), chargeUgx: num(x.chargeUgx), photo: x.photo || "" })).filter((x) => x.name);
+  return (Array.isArray(rows) ? rows : []).map((x) => ({ pid: txt(x.pid), name: txt(x.name), purpose: txt(x.purpose), supplier: txt(x.supplier), phone: txt(x.phone), qty: Math.max(1, num(x.qty) || 1), priceUgx: num(x.priceUgx), priceMode: x.priceMode === "each" ? "each" : "total", fixedBy: txt(x.fixedBy), fixerPhone: txt(x.fixerPhone), chargeUgx: num(x.chargeUgx), photo: x.photo || "" })).filter((x) => x.name).map(partMoney);
+}
+// "total" = what was paid for all of them (prices can differ); "each" = one price times qty
+function partMoney(x) {
+  const partUgx = x.priceMode === "each" ? x.qty * x.priceUgx : x.priceUgx;
+  const { priceMode, ...v } = x;
+  return { ...v, partUgx, priceUgx: Math.round(partUgx / x.qty), totalUgx: partUgx + x.chargeUgx };
 }
 function applyAction(db, user, body) {
   const action = body.action;
@@ -2106,14 +2112,14 @@ function applyAction(db, user, body) {
     const r = issue.repair, rows = parseRepairParts(body), truck = db.trucks.find((t) => t.id === issue.truckId);
     if (!rows.length) throw new Error("Add at least one part or job");
     const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || "") ? body.date : r.date;
-    const cost = rows.reduce((t, x) => t + x.qty * x.priceUgx + x.chargeUgx, 0);
+    const cost = rows.reduce((t, x) => t + x.totalUgx, 0);
     const garage = [...new Set(rows.map((x) => x.fixedBy).filter(Boolean))].join(", ");
     const fault = String(issue.title || "").replace(/ · (Not OK|Needs attention)$/, "");
     if (!db.parts) db.parts = [];
     const old = new Map(db.parts.filter((p) => (r.partIds || []).includes(p.id)).map((p) => [p.id, p]));
     const ids = rows.map((x) => {
       const prev = x.pid && old.get(x.pid); const { pid, ...v } = x;
-      const rec = { ...(prev || { id: uid("pt"), truckId: issue.truckId, issueId: issue.id, by: user.name, createdAt: new Date().toISOString() }), ...v, photo: v.photo || (prev && prev.photo) || "", totalUgx: v.qty * v.priceUgx + v.chargeUgx, date, fault, garage: v.fixedBy || garage, editedBy: user.name };
+      const rec = { ...(prev || { id: uid("pt"), truckId: issue.truckId, issueId: issue.id, by: user.name, createdAt: new Date().toISOString() }), ...v, photo: v.photo || (prev && prev.photo) || "", date, fault, garage: v.fixedBy || garage, editedBy: user.name };
       if (!rec.photo) delete rec.photo;
       if (prev) db.parts[db.parts.indexOf(prev)] = rec; else db.parts.unshift(rec);
       old.delete(rec.id); return rec.id;
@@ -2170,9 +2176,9 @@ function applyAction(db, user, body) {
     const num = (v) => Math.max(0, Math.round(Number(String(v == null ? "" : v).replace(/[^\d.]/g, "")) || 0));
     let rows = body.parts; if (typeof rows === "string") { try { rows = JSON.parse(rows); } catch (e) { rows = []; } }
     const txt = (v) => String(v || "").trim();
-    rows = (Array.isArray(rows) ? rows : []).map((x) => ({ name: txt(x.name), purpose: txt(x.purpose), supplier: txt(x.supplier), phone: txt(x.phone), qty: Math.max(1, num(x.qty) || 1), priceUgx: num(x.priceUgx), fixedBy: txt(x.fixedBy), fixerPhone: txt(x.fixerPhone), chargeUgx: num(x.chargeUgx), photo: x.photo || "" })).filter((x) => x.name);
+    rows = parseRepairParts({ parts: rows }).map(({ pid, ...x }) => x);
     const labour = num(body.labourUgx);
-    const cost = rows.length || labour ? rows.reduce((t, x) => t + x.qty * x.priceUgx + x.chargeUgx, 0) + labour : num(body.costUgx);
+    const cost = rows.length || labour ? rows.reduce((t, x) => t + x.totalUgx, 0) + labour : num(body.costUgx);
     if (!body.garage && rows.length) body.garage = [...new Set(rows.map((x) => x.fixedBy).filter(Boolean))].join(", ");
     const date = dayOf(body), truck = db.trucks.find((t) => t.id === issue.truckId);
     const spend = { category: "workshop", payeeName: body.garage || "Workshop", method: body.method || "cash", note: "Repair · " + issue.title + (truck ? " · " + truck.plate : ""), date, truckId: issue.truckId };
@@ -2184,7 +2190,7 @@ function applyAction(db, user, body) {
     issue.status = "fixed";
     if (!db.parts) db.parts = [];
     const fault = String(issue.title || "").replace(/ · (Not OK|Needs attention)$/, "");
-    const partIds = rows.map((x) => { const rec = { id: uid("pt"), ...x, totalUgx: x.qty * x.priceUgx + x.chargeUgx, date, truckId: issue.truckId, issueId: issue.id, fault, garage: body.garage || "", by: user.name, createdAt: new Date().toISOString() }; if (!rec.photo) delete rec.photo; db.parts.unshift(rec); return rec.id; });
+    const partIds = rows.map((x) => { const rec = { id: uid("pt"), ...x, date, truckId: issue.truckId, issueId: issue.id, fault, garage: body.garage || "", by: user.name, createdAt: new Date().toISOString() }; if (!rec.photo) delete rec.photo; db.parts.unshift(rec); return rec.id; });
     issue.repair = { costUgx: cost, fromAdvanceUgx: fromAdv, cashId, garage: body.garage || "", note: body.note || "", date, by: user.name, labourUgx: labour, partIds };
     // no driver notice: the office tells the driver another way
     return;
