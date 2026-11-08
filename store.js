@@ -498,7 +498,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["review_inspection", "repair_issue", "unshop_issue", "tidy_parts", "set_client_fuel", "make_per_trip", "add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["review_inspection", "repair_issue", "unshop_issue", "tidy_parts", "set_client_fuel", "make_per_trip", "edit_repair", "add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["add_trip", "undo_trip", "remove_trip", "end_trips", "log_spend", "read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["log_spend", "update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["update_farm_work", "delete_farm_work", "log_spend", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -651,6 +651,11 @@ function addFloatUse(db, fl, body, user) {
   return use;
 }
 
+function parseRepairParts(body) {
+  const num = (v) => Math.max(0, Math.round(Number(String(v == null ? "" : v).replace(/[^\d.]/g, "")) || 0)), txt = (v) => String(v || "").trim();
+  let rows = body.parts; if (typeof rows === "string") { try { rows = JSON.parse(rows); } catch (e) { rows = []; } }
+  return (Array.isArray(rows) ? rows : []).map((x) => ({ pid: txt(x.pid), name: txt(x.name), purpose: txt(x.purpose), supplier: txt(x.supplier), phone: txt(x.phone), qty: Math.max(1, num(x.qty) || 1), priceUgx: num(x.priceUgx), fixedBy: txt(x.fixedBy), fixerPhone: txt(x.fixerPhone), chargeUgx: num(x.chargeUgx), photo: x.photo || "" })).filter((x) => x.name);
+}
 function applyAction(db, user, body) {
   const action = body.action;
   if (!roleAllowedAction(user.role, action)) throw new Error("No access");
@@ -2093,6 +2098,36 @@ function applyAction(db, user, body) {
     const r = (db.inspections || []).find((x) => x.id === body.id);
     if (!r) throw new Error("Not found");
     r.reviewedAt = new Date().toISOString(); r.reviewedBy = user.name;
+    return;
+  }
+  if (action === "edit_repair") {
+    const issue = (db.issues || []).find((i) => i.id === body.id);
+    if (!issue || !issue.repair) throw new Error("Repair not found");
+    const r = issue.repair, rows = parseRepairParts(body), truck = db.trucks.find((t) => t.id === issue.truckId);
+    if (!rows.length) throw new Error("Add at least one part or job");
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || "") ? body.date : r.date;
+    const cost = rows.reduce((t, x) => t + x.qty * x.priceUgx + x.chargeUgx, 0);
+    const garage = [...new Set(rows.map((x) => x.fixedBy).filter(Boolean))].join(", ");
+    const fault = String(issue.title || "").replace(/ · (Not OK|Needs attention)$/, "");
+    if (!db.parts) db.parts = [];
+    const old = new Map(db.parts.filter((p) => (r.partIds || []).includes(p.id)).map((p) => [p.id, p]));
+    const ids = rows.map((x) => {
+      const prev = x.pid && old.get(x.pid); const { pid, ...v } = x;
+      const rec = { ...(prev || { id: uid("pt"), truckId: issue.truckId, issueId: issue.id, by: user.name, createdAt: new Date().toISOString() }), ...v, photo: v.photo || (prev && prev.photo) || "", totalUgx: v.qty * v.priceUgx + v.chargeUgx, date, fault, garage: v.fixedBy || garage, editedBy: user.name };
+      if (!rec.photo) delete rec.photo;
+      if (prev) db.parts[db.parts.indexOf(prev)] = rec; else db.parts.unshift(rec);
+      old.delete(rec.id); return rec.id;
+    });
+    db.parts = db.parts.filter((p) => !old.has(p.id)); // parts taken off the repair
+    // money: the advance part stays, the rest is the cash row
+    const fromAdv = Math.min(r.fromAdvanceUgx || 0, cost), rest = cost - fromAdv;
+    let row = r.cashId && (db.cash || []).find((c) => c.id === r.cashId);
+    const note = "Repair · " + issue.title + (truck ? " · " + truck.plate : "");
+    if (rest > 0) {
+      if (row) Object.assign(row, { amountUgx: rest, date, payeeName: garage || row.payeeName, note });
+      else { row = { id: uid("k"), date, direction: "out", amountUgx: rest, tag: "trucking", method: "cash", category: "workshop", note, truckId: issue.truckId, payeeName: garage || "Workshop", refId: issue.id }; db.cash.unshift(row); }
+    } else if (row) { db.cash = db.cash.filter((c) => c !== row); row = null; }
+    Object.assign(r, { costUgx: cost, cashId: row ? row.id : "", garage, note: String(body.note || "").trim(), date, partIds: ids, labourUgx: 0, editedBy: user.name, editedAt: todayStr() });
     return;
   }
   if (action === "tidy_parts") { // remove parts and cash rows left by a repair saved twice

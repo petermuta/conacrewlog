@@ -801,7 +801,7 @@ function jobCard(j, paidView) {
     ${paidView ? "" : `<div class="lf-trip">${tripControls(j)}</div>`}
     ${bk && !paidView ? `<div class="bk-actions"><a class="btn btn-whatsapp btn-sm" href="${bookingWhatsApp(bk)}" target="_blank" rel="noopener">WhatsApp client</a>${due ? `<button type="button" class="btn btn-primary btn-sm js-bkpay flash" data-id="${esc(bk.id)}" data-kind="balance">Balance ${ugx(bk.payment.balance)} received</button>` : ""}</div>` : ""}
     ${j.payBasis === "count" ? tripPanel(j, "office") : DATA.me.role === "admin" && !paidView && !isPaid(j) ? `<button type="button" class="btn btn-ghost btn-sm js-pertrip" data-id="${esc(j.id)}" style="margin-top:8px">Change to paid per trip</button>` : ""}
-    ${paidView ? "" : `<div class="lf-actions">${DATA.me.role === "admin" ? "" : `<button type="button" class="btn btn-primary js-paid" data-id="${j.id}">Client paid</button>`}<button type="button" class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></div>`}`;
+    ${paidView ? "" : `<div class="lf-actions">${isPaid(j) ? "" : `<button type="button" class="btn btn-primary js-paid" data-id="${j.id}">${got ? "Record more payment" : "Client paid"}</button>`}<button type="button" class="btn btn-ghost" data-act="trash_job" data-id="${j.id}">Trash</button></div>`}`;
   return foldCard(head, body, due ? "flash" : "");
 }
 // ───────────── Load profit (admin + Admin II) ─────────────
@@ -1732,7 +1732,7 @@ function partUse(name) {
 }
 function partRow(v) {
   v = v || {};
-  return `<div class="part-row">
+  return `<div class="part-row" data-pid="${esc(v.id || "")}">
     <div class="grid g2">
       <label class="lbl">Part<input class="field js-pname" data-p="name" list="partNames" placeholder="e.g. Brake chamber" value="${esc(v.name || "")}" /></label>
       <label class="lbl">What it does<input class="field js-puse" data-p="purpose" placeholder="Fills itself for common parts" value="${esc(v.purpose || "")}" /></label>
@@ -1774,7 +1774,7 @@ function repairForm(i, label) {
       </details>`;
 }
 function bindPartForms() {
-  document.querySelectorAll('form[data-form="repair"]').forEach((form) => {
+  document.querySelectorAll('form[data-form="repair"], form[data-form="repair-edit"]').forEach((form) => {
     if (form.dataset.pb) return; form.dataset.pb = "1";
     const box = form.querySelector(".js-parts"), amt = form.querySelector(".js-src-amt"), out = form.querySelector(".js-ptotal");
     const n = (v) => Number(String(v || "").replace(/[^\d.]/g, "")) || 0;
@@ -1792,15 +1792,34 @@ function bindPartForms() {
       use.addEventListener("input", () => { delete use.dataset.auto; });
       const f = r.querySelector(".js-pphoto"), th = r.querySelector(".part-thumb");
       f.onchange = async () => { const file = f.files[0]; r._photo = file ? await compressPhoto(file) : ""; th.hidden = !r._photo; if (r._photo) th.src = r._photo; };
+      if (v && v.photo) { th.src = v.photo; th.hidden = false; }
       calc();
     };
     form.querySelector(".js-addpart").onclick = () => add();
     form.querySelectorAll(".js-reusepart").forEach((b) => { b.onclick = () => { box.querySelectorAll(".part-row").forEach((r) => { if (!r.querySelector('[data-p="name"]').value.trim()) r.remove(); }); try { add(JSON.parse(b.dataset.v)); } catch (e) { add(); } }; });
-    add();
+    const pids = (form.dataset.pids || "").split(",").filter(Boolean), have = (DATA.parts || []).filter((p) => pids.includes(p.id));
+    if (have.length) have.forEach((p) => add(p)); else add();
   });
 }
 function readParts(form) {
-  return [...form.querySelectorAll(".part-row")].map((r) => { const o = { photo: r._photo || "" }; r.querySelectorAll("[data-p]").forEach((x) => { o[x.dataset.p] = x.value.trim(); }); return o; }).filter((o) => o.name);
+  return [...form.querySelectorAll(".part-row")].map((r) => { const o = { photo: r._photo || "", pid: r.dataset.pid || "" }; r.querySelectorAll("[data-p]").forEach((x) => { o[x.dataset.p] = x.value.trim(); }); return o; }).filter((o) => o.name);
+}
+function repairEditForm(i) {
+  const r = i.repair || {}, today = r.date || todayYmd();
+  const legacy = !(r.partIds || []).length && (r.costUgx || r.garage);
+  return `<details class="settings" style="margin-top:8px"><summary>Edit repair</summary>
+    <form data-form="repair-edit" data-id="${esc(i.id)}" data-pids="${esc((r.partIds || []).join(","))}" style="margin-top:10px">
+      ${legacy ? `<p class="muted">Saved before parts were added (${ugx(r.costUgx || 0)}). Enter it as parts and fixing.</p>` : ""}
+      <div class="js-parts"></div>
+      <button type="button" class="btn btn-ghost btn-sm js-addpart">＋ Add part</button>
+      <div class="grid g2" style="margin-top:10px">
+        <label class="lbl">Date fixed<input class="field" type="date" name="date" value="${esc(today)}" /></label>
+        <label class="lbl">Note<input class="field" name="note" value="${esc(r.note || "")}" /></label>
+      </div>
+      <input type="hidden" class="js-src-amt" value="0" />
+      <p class="part-total">Total <b class="js-ptotal">UGX 0</b></p>
+      <button class="btn btn-primary wide" style="margin-top:10px">Save changes</button>
+    </form></details>`;
 }
 // what a repair cost: parts + fixing = total, then each part
 function repairCost(i) {
@@ -1814,6 +1833,8 @@ function repairCost(i) {
       <div><span>Part${p.supplier ? " · " + esc(p.supplier) : ""}</span><b>${ugx((p.qty || 1) * (p.priceUgx || 0))}</b></div>
       <div><span>Fixing${p.fixedBy ? " · " + esc(p.fixedBy) : ""}</span><b>${ugx(p.chargeUgx || 0)}</b></div></div>`).join("")}
     ${r.labourUgx ? `<div class="rep-cost-part"><div><span>Labour</span><b>${ugx(r.labourUgx)}</b></div></div>` : ""}
+    ${r.editedAt ? `<p class="muted" style="margin:6px 0 0;font-size:11px">Edited ${fmtDay(r.editedAt)} · ${esc(r.editedBy || "")}</p>` : ""}
+    ${DATA.me.role === "admin" ? repairEditForm(i) : ""}
   </div>`;
 }
 let partsTidied = false;
@@ -4929,6 +4950,9 @@ function bind() {
         if (form.dataset.busy) return; form.dataset.busy = "1"; const sb = form.querySelector("button.btn-primary"); if (sb) { sb.disabled = true; sb.textContent = "Saving…"; }
         try { await act("repair_issue", { ...fd, id: form.dataset.id, parts: readParts(form) }); } catch (err) { delete form.dataset.busy; if (sb) { sb.disabled = false; sb.textContent = "Save repair"; } return; }
         toast("Repair saved");
+      } else if (kind === "repair-edit") {
+        try { await act("edit_repair", { ...fd, id: form.dataset.id, parts: readParts(form) }); } catch (err) { return; }
+        toast("Repair updated");
       } else if (kind === "reply-issue") {
         await act("reply_issue", { id: form.dataset.id, text: fd.text, close: fd.close === "1" || form.close === form.querySelector("[name=close]") && document.activeElement === form.querySelector("[name=close]") });
       } else if (kind === "complete-task") {
