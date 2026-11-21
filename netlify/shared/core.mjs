@@ -644,6 +644,16 @@ export async function handleSync(kv, { method, token, body, ip, geo }) {
 const HOURS_START = { from: 0, to: 0 }; // Uganda time; from = to means all day, every day
 async function trackHours(kv) { try { const g = await kv.get("live/hours"); return g ? { ...HOURS_START, ...JSON.parse(g.text) } : { ...HOURS_START }; } catch (e) { return { ...HOURS_START }; } }
 function inHours(h, at) { if (h.from === h.to) return true; const hr = new Date((at || Date.now()) + 3 * 3600000).getUTCHours(); return h.from <= h.to ? hr >= h.from && hr < h.to : hr >= h.from || hr < h.to; }
+// a phone that is open but can't send its spot says why (location blocked, no signal)
+async function savePersonStatus(kv, user, b) {
+  const got = await kv.get("live/people");
+  const all = got ? JSON.parse(got.text) : {};
+  const prev = all[user.id] || {};
+  const status = ["denied", "nosignal", "open"].includes(b.status) ? b.status : "open";
+  all[user.id] = { ...prev, userId: user.id, name: user.name || "", role: user.role, assistant: !!user.assistant, status, statusAt: now(), app: b.app === "android" ? "android" : "web" };
+  await kv.set("live/people", JSON.stringify(all), {});
+  return { ok: true };
+}
 async function savePerson(kv, user, b) {
   const h = await trackHours(kv);
   if (!inHours(h)) return { off: true };
@@ -652,7 +662,7 @@ async function savePerson(kv, user, b) {
   const prev = all[user.id] || {};
   const at = now();
   const p = { userId: user.id, name: user.name || "", role: user.role, assistant: !!user.assistant, lat: Number(b.lat), lng: Number(b.lng), accuracy: Number(b.accuracy) || 0, speed: Number(b.speed) || 0, at, app: b.app === "android" ? "android" : "web" };
-  all[user.id] = { ...p, trail: (prev.trail || []).concat([{ lat: p.lat, lng: p.lng, at }]).slice(-40) };
+  all[user.id] = { ...p, status: "ok", statusAt: at, trail: (prev.trail || []).concat([{ lat: p.lat, lng: p.lng, at }]).slice(-40) };
   await kv.set("live/people", JSON.stringify(all), {});
   return { ok: true };
 }
@@ -674,7 +684,7 @@ export async function handleLive(kv, { method, token, body, query }) {
   }
   if (method === "POST" && body && body.kind === "person") {
     if (isMainAdmin(who.user)) return { status: 200, body: { ok: true, skip: true } };
-    if (body.lat == null || body.lng == null) return { status: 400, body: { error: "missing" } };
+    if (body.lat == null || body.lng == null) return body.status ? { status: 200, body: await savePersonStatus(kv, who.user, body) } : { status: 400, body: { error: "missing" } };
     return { status: 200, body: await savePerson(kv, who.user, body) };
   }
   const got = await kv.get("live");

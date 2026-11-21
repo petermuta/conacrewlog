@@ -221,7 +221,7 @@ async function boot() {
   if (DATA.me.role !== "admin" && !hash().startsWith(defaultHash())) location.hash = defaultHash();
   route();
   if (DATA.me.role === "driver" && !DATA.viewingAs) startLiveWatch(); // never send the admin's location as a truck's
-  if (!DATA.viewingAs && (["cane_manager", "passion_manager"].includes(DATA.me.role) || (DATA.me.role === "admin" && DATA.me.assistant))) startPersonWatch();
+  if (!DATA.viewingAs && (["cane_manager", "passion_manager"].includes(DATA.me.role) || (DATA.me.role === "admin" && DATA.me.assistant) || (DATA.me.role === "driver" && !(DATA.truck && native() && plugin("BackgroundGeolocation"))))) startPersonWatch();
 }
 document.addEventListener("click", (e) => {
   const a = e.target.closest && e.target.closest("a[href^='#']");
@@ -5194,6 +5194,12 @@ function sendPersonPing(c) {
   PERSON.last = here; PERSON.sentAt = t;
   fetch("/.netlify/functions/live", { method: "POST", keepalive: true, headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ kind: "person", lat: here.lat, lng: here.lng, accuracy: Math.round(c.accuracy || 0), speed: c.speed > 0 ? c.speed : 0, app: native() ? "android" : "web" }) }).catch(() => {});
 }
+const PSTAT = {};
+function personStatus(status) {
+  if (!DATA || DATA.viewingAs || (DATA.me.role === "admin" && !DATA.me.assistant)) return;
+  if (PSTAT[status] && Date.now() - PSTAT[status] < 10 * 60000) return; PSTAT[status] = Date.now();
+  fetch("/.netlify/functions/live", { method: "POST", keepalive: true, headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ kind: "person", status, app: native() ? "android" : "web" }) }).catch(() => {});
+}
 function startPersonWatch() {
   const BG = plugin("BackgroundGeolocation");
   if (BG) {
@@ -5205,8 +5211,10 @@ function startPersonWatch() {
   // Start straight away: iPhone home-screen apps often report "prompt" even after location was allowed,
   // so waiting for "granted" meant some phones never sent anything after sign-in.
   const opts = { enableHighAccuracy: false, maximumAge: 60000, timeout: 30000 };
-  PERSON.watch = navigator.geolocation.watchPosition((pos) => sendPersonPing(pos.coords), () => {}, opts);
-  const now = (force) => navigator.geolocation.getCurrentPosition((pos) => { if (force) PERSON.sentAt = 0; sendPersonPing(pos.coords); }, () => {}, opts);
+  const fail = (err) => personStatus(err && err.code === 1 ? "denied" : "nosignal");
+  personStatus("open");
+  PERSON.watch = navigator.geolocation.watchPosition((pos) => sendPersonPing(pos.coords), fail, opts);
+  const now = (force) => navigator.geolocation.getCurrentPosition((pos) => { if (force) PERSON.sentAt = 0; sendPersonPing(pos.coords); }, fail, opts);
   now(true);
   // a fresh spot every time the app comes back to the screen, and every 3 minutes while it is open
   document.addEventListener("visibilitychange", () => { if (!document.hidden) now(true); });
@@ -5241,22 +5249,9 @@ function startLiveWatch(ask) {
       updateLiveStatus();
     }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 60000 });
   };
-  if (ask) { begin(); return; } // tapping the button shows the phone's "Allow location?" popup
-  if (navigator.permissions && navigator.permissions.query) {
-    navigator.permissions.query({ name: "geolocation" }).then((p) => {
-      if (p.state === "granted") begin();
-      else { LIVE.status = p.state === "denied" ? "denied" : "off"; updateLiveStatus(); }
-      p.onchange = () => { if (p.state === "granted") begin(); };
-    }).catch(() => { tryRemembered(); });
-  } else {
-    tryRemembered();
-  }
-  function tryRemembered() {
-    // Older iPhones can't check permission first; restart if the driver turned it on before.
-    let on = false;
-    try { on = localStorage.getItem("conacrew-live-on") === "1"; } catch (e) {}
-    if (on) begin(); else updateLiveStatus();
-  }
+  // Start straight after sign-in. iPhone home-screen apps report "prompt" even after location was
+  // allowed, so waiting for "granted" left drivers' phones silent until they tapped the button.
+  begin();
 }
 
 // When the driver comes back to the app, send a fresh position straight away.
@@ -5352,11 +5347,12 @@ async function drawTeamMap() {
   if (f && !f.dataset.set) { f.from.value = hrs.from; f.to.value = hrs.to; f.dataset.set = "1"; }
   const pings = data.people || {}, now = Date.now();
   const people = (DATA.users || []).filter((u) => u.active !== false && !u.removedAt && !(u.role === "admin" && !u.assistant));
-  const rows = people.map((u) => { const p = pings[u.id]; const age = p ? now - p.at : Infinity; return { u, p, tone: age < 15 * 60000 ? "green" : age < 12 * 3600000 ? "gold" : "red" }; })
+  const why = (r) => { const q = r || {}; if (!q.statusAt || (q.at && q.at >= q.statusAt - 60000 && q.status === "ok")) return ""; return q.status === "denied" ? ` · location blocked on their phone (${agoText(q.statusAt)})` : q.status === "nosignal" ? ` · no GPS signal (${agoText(q.statusAt)})` : q.status === "open" && !q.at ? ` · opened the app ${agoText(q.statusAt)}, waiting for location` : ""; };
+  const rows = people.map((u) => { const raw = pings[u.id], p = raw && raw.lat != null ? raw : null; const age = p ? now - p.at : Infinity; return { u, p, raw, tone: age < 15 * 60000 ? "green" : age < 12 * 3600000 ? "gold" : "red" }; })
     .sort((a, b) => (b.p ? b.p.at : 0) - (a.p ? a.p.at : 0));
   const hh = (h) => String(h).padStart(2, "0") + ":00";
   note.textContent = `${hrs.from === hrs.to ? "Tracking 24/7" : "Tracking " + hh(hrs.from) + "–" + hh(hrs.to)} · updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-  list.innerHTML = rows.map(({ u, p, tone }) => `<div class="card item tl-row"><span class="avatar sm">${esc((u.name || "?").charAt(0))}</span><span class="tl-who"><b>${esc(u.name)}</b><span class="muted">${ROLE_SHORT[u.role] || u.role} · ${p ? "seen " + agoText(p.at) + (p.app === "android" ? " · Android app" : now - p.at > 15 * 60000 ? " · updates when they open the app" : " · app open") : "no location yet"}</span></span>${p ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.lat},${p.lng}">Map</a><span class="badge ${tone}">${tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old"}</span>` : ""}</div>`).join("") || `<div class="card item muted">No team logins yet.</div>`;
+  list.innerHTML = rows.map(({ u, p, raw, tone }) => `<div class="card item tl-row"><span class="avatar sm">${esc((u.name || "?").charAt(0))}</span><span class="tl-who"><b>${esc(u.name)}</b><span class="muted">${ROLE_SHORT[u.role] || u.role} · ${p ? "seen " + agoText(p.at) + (p.app === "android" ? " · Android app" : now - p.at > 15 * 60000 ? " · updates when they open the app" : " · app open") : "no location yet"}${why(raw)}</span></span>${p ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.lat},${p.lng}">Map</a><span class="badge ${tone}">${tone === "green" ? "Live" : tone === "gold" ? "Earlier" : "Old"}</span>` : ""}</div>`).join("") || `<div class="card item muted">No team logins yet.</div>`;
   if (!window.L || !L.map) { box.style.display = "none"; return; }
   if (!box._map) { box._map = L.map(box).setView([0.3476, 32.5825], 7); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(box._map); box._layer = L.layerGroup().addTo(box._map); }
   box._layer.clearLayers();
