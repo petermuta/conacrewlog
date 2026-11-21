@@ -5200,6 +5200,15 @@ function personStatus(status) {
   if (PSTAT[status] && Date.now() - PSTAT[status] < 10 * 60000) return; PSTAT[status] = Date.now();
   fetch("/.netlify/functions/live", { method: "POST", keepalive: true, headers: { "content-type": "application/json", authorization: "Bearer " + Conacrew.token() }, body: JSON.stringify({ kind: "person", status, app: native() ? "android" : "web" }) }).catch(() => {});
 }
+// staff whose phone hasn't given location see only an "Allow" button; tapping it asks the phone again
+function personAllow(show) {
+  let b = document.getElementById("personAllow");
+  if (!show) { if (b) b.remove(); return; }
+  if (b) return;
+  b = document.createElement("button"); b.type = "button"; b.id = "personAllow"; b.className = "btn btn-primary person-allow"; b.textContent = "Allow";
+  b.onclick = () => navigator.geolocation.getCurrentPosition((pos) => { personAllow(false); PERSON.sentAt = 0; sendPersonPing(pos.coords); }, () => {}, { enableHighAccuracy: false, maximumAge: 0, timeout: 30000 });
+  document.body.appendChild(b);
+}
 function startPersonWatch() {
   const BG = plugin("BackgroundGeolocation");
   if (BG) {
@@ -5211,10 +5220,10 @@ function startPersonWatch() {
   // Start straight away: iPhone home-screen apps often report "prompt" even after location was allowed,
   // so waiting for "granted" meant some phones never sent anything after sign-in.
   const opts = { enableHighAccuracy: false, maximumAge: 60000, timeout: 30000 };
-  const fail = (err) => personStatus(err && err.code === 1 ? "denied" : "nosignal");
+  const fail = (err) => { personStatus(err && err.code === 1 ? "denied" : "nosignal"); if (err && err.code === 1) personAllow(true); };
   personStatus("open");
-  PERSON.watch = navigator.geolocation.watchPosition((pos) => sendPersonPing(pos.coords), fail, opts);
-  const now = (force) => navigator.geolocation.getCurrentPosition((pos) => { if (force) PERSON.sentAt = 0; sendPersonPing(pos.coords); }, fail, opts);
+  PERSON.watch = navigator.geolocation.watchPosition((pos) => { personAllow(false); sendPersonPing(pos.coords); }, fail, opts);
+  const now = (force) => navigator.geolocation.getCurrentPosition((pos) => { personAllow(false); if (force) PERSON.sentAt = 0; sendPersonPing(pos.coords); }, fail, opts);
   now(true);
   // a fresh spot every time the app comes back to the screen, and every 3 minutes while it is open
   document.addEventListener("visibilitychange", () => { if (!document.hidden) now(true); });
