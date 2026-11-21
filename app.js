@@ -5262,35 +5262,15 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// The team sees no GPS messages: only an "Allow" button when the phone still needs to give location.
 function updateLiveStatus() {
   const box = document.getElementById("liveStatus");
   if (!box || !DATA) return;
-  let awake = false;
-  try { awake = localStorage.getItem("conacrew-live-awake") === "1"; } catch (e) {}
-  let tone = "gold", title = "Live tracking is off", body = "", button = true;
-  if (!navigator.geolocation) { tone = "red"; title = "Location not available"; body = "This phone or browser can't share location."; button = false; }
-  else if (!DATA.truck) { tone = "blue"; title = "No truck assigned"; body = ""; button = false; }
-  else if (LIVE.status === "starting") { tone = "blue"; title = "Finding your location…"; body = ""; button = false; }
-  else if (LIVE.status === "nosignal") { tone = "gold"; title = "Waiting for GPS signal"; body = ""; button = false; }
-  else if (LIVE.status === "denied") {
-    tone = "red"; title = "Location is blocked";
-    body = "iPhone: Settings › Privacy & Security › Location Services › Safari Websites (or your browser) › While Using. Android: tap the lock icon next to the web address › Permissions › Location › Allow. Then tap Try again.";
-    button = true;
-  } else if (LIVE.status === "on") {
-    tone = "green"; title = "Live tracking on"; button = false;
-    body = LIVE.lastOk ? "Sent " + agoText(LIVE.lastOk) : LIVE.lastSent ? "Not reaching the office yet" : "Getting position…";
-  }
-  box.innerHTML = `
-    <div class="row"><div><b>${title}</b>${body ? `<p class="muted">${body}</p>` : ""}</div><span class="badge ${tone}">GPS</span></div>
-    ${button ? `<button type="button" class="btn btn-primary wide" id="liveOn" style="margin-top:10px">${LIVE.status === "denied" ? "Try again" : "Turn on live tracking"}</button>` : ""}
-    ${LIVE.status === "on" && "wakeLock" in navigator && !native() ? `<label class="muted" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="liveAwake" ${awake ? "checked" : ""}/> Keep screen on</label>` : ""}`;
+  const need = !!navigator.geolocation && !!DATA.truck && (LIVE.status === "denied" || LIVE.status === "off" || !LIVE.status);
+  box.hidden = !need;
+  box.innerHTML = need ? `<button type="button" class="btn btn-primary wide" id="liveOn">Allow</button>` : "";
   const on = document.getElementById("liveOn");
   if (on) on.onclick = () => startLiveWatch(true);
-  const aw = document.getElementById("liveAwake");
-  if (aw) aw.onchange = () => {
-    try { localStorage.setItem("conacrew-live-awake", aw.checked ? "1" : "0"); } catch (e) {}
-    if (aw.checked) keepScreenOn(); else if (LIVE.wake) { LIVE.wake.release().catch(() => {}); LIVE.wake = null; }
-  };
 }
 
 // Admin: Fleet page map + list of each truck's last known location.
