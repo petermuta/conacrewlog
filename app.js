@@ -157,33 +157,33 @@ const NAV = {
     ["#drive-tasks", "Tasks"],
     ["#drive-report", "Inspect"],
     ["#drive-fuel", "Fuel"],
-    ["#drive-money", "Advance"],
+    ["#drive-money", "Float"],
     ["#drive-docs", "Docs"],
   ],
   cane_manager: [
     ["#cane", "Board"],
     ["#cane-new", "New buy"],
     ["#cane-sell", "Sell"],
-    ["#cane-spend", "Advances"],
+    ["#cane-spend", "Float"],
     ["#cane-pay", "Pay"],
   ],
   passion_manager: [
     ["#passion", "Blocks"],
     ["#field", "Work"],
     ["#passion-sell", "Sell"],
-    ["#passion-spend", "Advances"],
+    ["#passion-spend", "Float"],
     ["#passion-pay", "Pay"],
   ],
 };
 const PAGES = {
   fleet: [["#trucks", "Trucks"], ["#trucks-jobs", "Loads"], ["#trucks-work", "Tasks"], ["#trucks-inspect", "Inspections"], ["#trucks-paid", "Paid loads"], ["#trucks-trash", "Trash"], ["#trucks-drivers", "Drivers"], ["#trucks-new", "New load"]],
-  cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Advances"]],
+  cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-spend", "Float"]],
   passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"]],
-  money: [["#money", "Overview"], ["#money-tx", "Transactions"], ["#money-owed", "Owed"], ["#money-adv", "Advances"], ["#money-pay", "Pay"], ["#money-profit", "Profit"], ["#money-tax", "Tax"]],
+  money: [["#money", "Overview"], ["#money-tx", "Entries"], ["#money-owed", "Owed"], ["#money-adv", "Float"], ["#money-pay", "Pay"], ["#money-profit", "Profit"], ["#money-capital", "Capital"], ["#money-tax", "Tax"]],
 };
 function setupNav() {}
 const ALLOWED = {
-  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-loadprofit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "money-tax", "money-owed", "money-profit", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs", "team-live"],
+  admin: ["home", "trucks", "trucks-book", "trucks-jobs", "trucks-paid", "trucks-work", "trucks-inspect", "trucks-new", "trucks-trash", "trucks-issues", "trucks-profit", "trucks-loadprofit", "cane-profit", "passion-profit", "trucks-drivers", "truck-id", "cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "passion", "field", "passion-sell", "money", "money-fleet", "money-cane", "money-passion", "money-spend", "money-tx", "money-adv", "money-pay", "money-tax", "money-capital", "money-owed", "money-profit", "team", "trucks-spend", "passion-spend", "trucks-docs", "cane-docs", "passion-docs", "team-live"],
   driver: ["drive", "drive-money", "drive-tasks", "drive-task", "drive-report", "drive-jobs", "drive-paid", "drive-pay", "drive-fuel", "drive-docs"],
   cane_manager: ["cane", "cane-new", "cane-id", "cane-sell", "cane-spend", "cane-docs", "cane-pay"],
   passion_manager: ["passion", "field", "passion-sell", "passion-spend", "passion-docs", "passion-pay"],
@@ -329,15 +329,16 @@ function route() {
     field: viewField,
     "passion-sell": viewPassionSell,
     "passion-pay": viewPassionPay,
-    money: () => viewMoney(""),
-    "money-tx": () => viewMoney("", "tx"),
+    money: () => { sessionStorage.removeItem("entriesBase"); ["mDir", "mClass", "mGroup", "mWho", "mNew"].forEach((k) => sessionStorage.removeItem(k)); return viewMoneyHome(); },
+    "money-tx": viewEntries,
+    "money-capital": viewCapital,
     "money-adv": viewAllAdvances,
     "money-tax": viewTax,
     "money-owed": viewOwed,
     "money-profit": viewProfitHub,
-    "money-fleet": () => viewMoney("trucking"),
-    "money-cane": () => viewMoney("sugarcane"),
-    "money-passion": () => viewMoney("passion"),
+    "money-fleet": () => viewMoneyHome("trucking"),
+    "money-cane": () => viewMoneyHome("sugarcane"),
+    "money-passion": () => viewMoneyHome("passion"),
     "money-spend": viewSpend,
     "money-pay": viewPayAdmin,
     "trucks-spend": viewFleetSpend,
@@ -403,6 +404,7 @@ function route() {
     "money-tx": "money",
     "money-adv": "money",
     "money-tax": "money",
+    "money-capital": "money",
     "money-owed": "money",
     "money-profit": "money",
     "money-pay": "money",
@@ -449,7 +451,7 @@ function bizBar() {
       ["#trucks-docs", "Docs", docsWaiting("trucking"), "Papers"], ["#trucks-trash", "Trash", 0, "Papers"]],
     cane: [["#cane", "Board"], ["#cane-new", "New buy"], ["#cane-sell", "Sell"], ["#cane-docs", "Docs", docsWaiting("sugarcane")]],
     passion: [["#passion", "Blocks"], ["#field", "Work"], ["#passion-sell", "Sell"], ["#passion-docs", "Docs", docsWaiting("passion")]],
-    money: [["#money", "Overview", reqAll], ["#money-tx", "Transactions"], ["#money-owed", "Owed", owedDue()], ["#money-adv", "Advances", reqAll + advUnconfirmed()], ["#money-pay", "Pay", pay], ["#money-profit", "Profit", fuelAlerts().length], ["#money-tax", "Tax", taxWaiting()]],
+    money: [["#money", "Overview", reqAll], ["#money-tx", "Entries"], ["#money-owed", "Owed", owedDue()], ["#money-adv", "Float", reqAll + advUnconfirmed()], ["#money-pay", "Pay", pay], ["#money-profit", "Profit", fuelAlerts().length], ["#money-capital", "Capital"], ["#money-tax", "Tax", taxWaiting()]],
     home: phones !== undefined && !DATA.me.assistant ? [["#home", "Today"], ["#team", "Team & logins", phones], ["#team-live", "Team live"]] : [],
   }[biz] || [];
   return `<nav class="admin-nav">
@@ -590,7 +592,7 @@ function fleetReport(from, to) {
     if ((c.tag || "") !== "trucking" || !inP(c.date)) return;
     const tid = c.truckId || jobT[c.jobId] || drvT[c.driverId] || "";
     if (c.direction === "in") { if (c.category === "load_income") at(tid).income += Number(c.amountUgx) || 0; return; }
-    if (["to_driver", "advance_return"].includes(c.category) || floatIds.has(c.refId)) return; // advances count when they're spent
+    if (["to_driver", "advance_return"].includes(c.category) || floatIds.has(c.refId)) return; // floats count when they're spent
     cost(at(tid), c.category, c.amountUgx);
   });
   (DATA.disbursements || []).filter((f) => (f.tag || "trucking") === "trucking").forEach((f) => (f.usages || []).forEach((u) => {
@@ -671,7 +673,7 @@ function viewTruckProfit() {
 `;
 }
 
-// ---- Cane and Passion profit: earned minus spent (advances count when they're spent) ----
+// ---- Cane and Passion profit: earned minus spent (floats count when they're spent) ----
 function viewBizProfit(tag) {
   const key = "profitPer." + tag, per = sessionStorage.getItem(key) || "month";
   const [from, to, title] = periodRange(per);
@@ -1772,6 +1774,7 @@ function repairForm(i, label) {
           </div>
           <input type="hidden" class="js-src-amt" name="costUgx" value="0" />
           <p class="part-total">Total <b class="js-ptotal">UGX 0</b></p>
+          <label class="check" style="margin-top:8px"><input type="checkbox" name="invest" value="1" /> Big job · adds value to the truck (investment)</label>
           ${advSource("trucking", { noPayee: true })}
           <button class="btn btn-primary wide" style="margin-top:10px">Save repair</button>
         </form>
@@ -1822,6 +1825,7 @@ function repairEditForm(i) {
       </div>
       <input type="hidden" class="js-src-amt" value="0" />
       <p class="part-total">Total <b class="js-ptotal">UGX 0</b></p>
+      <label class="check" style="margin-top:8px"><input type="checkbox" name="invest" value="1" ${r.invest ? "checked" : ""} /> Big job · adds value to the truck (investment)</label>
       <button class="btn btn-primary wide" style="margin-top:10px">Save changes</button>
     </form></details>`;
 }
@@ -1938,7 +1942,7 @@ function viewDrive(page, taskId) {
     ["#drive-report", "Inspect", "drive-report"],
     ["#drive-fuel", "Fuel", "drive-fuel"],
     ["#drive-docs", "Docs", "drive-docs"],
-    ["#drive-money", "Advance", "drive-money", toConfirm("trucking").length],
+    ["#drive-money", "Float", "drive-money", toConfirm("trucking").length],
   ], page);
 
   const desk = `
@@ -1960,7 +1964,7 @@ function viewDrive(page, taskId) {
       <a class="card item" href="#drive-paid"><b>Paid loads</b><p class="muted">${jobs.filter(isPaid).length} saved</p></a>
       <a class="card item" href="#drive-pay"><b>My pay</b><p class="muted">${ugx(paySums(DATA.payStubs).ytd)} YTD · ${owedTo("driver", { ...(DATA.driver || {}), id: DATA.me.driverId }, DATA.payStubs, DATA).waiting.length} waiting</p></a>
       <a class="card item" href="#drive-tasks"><b>Tasks</b><p class="muted">${tasks.length} open</p></a>
-      <a class="card item" href="#drive-money"><b>Advance</b><p class="muted">${pendingMoney} to confirm</p></a>
+      <a class="card item" href="#drive-money"><b>Float</b><p class="muted">${pendingMoney} to confirm</p></a>
       <a class="card item" href="#drive-docs"><b>Docs</b></a>
     </div>`;
 
@@ -2070,7 +2074,7 @@ function caneTabs(on) {
     ["#cane", "Buys", "cane"],
     ["#cane-new", "New", "cane-new"],
     ["#cane-sell", "Sell", "cane-sell"],
-    ["#cane-spend", "Advances", "cane-spend", toConfirm("sugarcane").length],
+    ["#cane-spend", "Float", "cane-spend", toConfirm("sugarcane").length],
     ["#cane-docs", "Docs", "cane-docs"],
     ["#cane-pay", "Pay", "cane-pay"],
   ], on);
@@ -2229,7 +2233,7 @@ function farmTabs(on) {
     ["#passion", "Blocks", "passion"],
     ["#field", "Work", "field"],
     ["#passion-sell", "Sell", "passion-sell"],
-    ["#passion-spend", "Advances", "passion-spend", toConfirm("passion").length],
+    ["#passion-spend", "Float", "passion-spend", toConfirm("passion").length],
     ["#passion-docs", "Docs", "passion-docs"],
     ["#passion-pay", "Pay", "passion-pay"],
   ], on);
@@ -2297,7 +2301,7 @@ function viewField() {
       ${kind === "harvest" ? `<div class="card kpi passion"><span class="eyebrow">Picked</span><b>${kg} kg</b></div>` : ""}
     </div>
     ${(() => { const free = (DATA.disbursements || []).filter((f) => f.tag === "passion").reduce((a, f) => a + (f.usages || []).reduce((b, u) => b + unassignedOf(u), 0), 0), onHand = (DATA.disbursements || []).filter((f) => f.tag === "passion" && f.status !== "closed" && f.status !== "sent").reduce((a, f) => a + advLeft(f).left, 0);
-      return `<div class="card item adv-hint"><span class="eyebrow">Advance available</span><b>${ugx(advAvailable("passion", true))}</b></div>`; })()}
+      return `<div class="card item adv-hint"><span class="eyebrow">Float available</span><b>${ugx(advAvailable("passion", true))}</b></div>`; })()}
     <form class="card item" data-form="farm-work" style="margin-top:14px">
       <p class="eyebrow">${meta[1]}</p>
       <input type="hidden" name="kind" value="${kind}" />
@@ -2317,7 +2321,7 @@ function viewField() {
       <table>
         <thead><tr><th>Date</th><th>Block</th><th>${kind === "harvest" ? "Kg" : meta[2]}</th><th>Cost</th></tr></thead>
         <tbody>
-          ${rows.map((w) => `<tr class="js-editwork" data-id="${esc(w.id)}" tabindex="0"><td>${fmtDay(w.date)}<div class="muted">Edit ›</div></td><td>${w.blockId}</td><td>${kind === "harvest" ? (w.kg || 0) + " kg" : (w.note || "—")}</td><td>${ugx(w.costUgx)}${w.costUgx ? `<div class="muted">${w.paidFrom === "mixed" ? "advance + cash" : w.paidFrom === "spent_advance" || w.paidFrom === "advance" || w.floatId ? "advance" : "cash on hand"}</div>` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No ${meta[1].toLowerCase()} yet</td></tr>`}
+          ${rows.map((w) => `<tr class="js-editwork" data-id="${esc(w.id)}" tabindex="0"><td>${fmtDay(w.date)}<div class="muted">Edit ›</div></td><td>${w.blockId}</td><td>${kind === "harvest" ? (w.kg || 0) + " kg" : (w.note || "—")}</td><td>${ugx(w.costUgx)}${w.costUgx ? `<div class="muted">${w.paidFrom === "mixed" ? "float + cash" : w.paidFrom === "spent_advance" || w.paidFrom === "advance" || w.floatId ? "advance" : "cash on hand"}</div>` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No ${meta[1].toLowerCase()} yet</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -2391,7 +2395,7 @@ function autoDocs(tag) {
   // receipts and papers already captured elsewhere in the app
   const out = [];
   (DATA.disbursements || []).filter((f) => (f.tag || "trucking") === tag).forEach((f) => (f.usages || []).forEach((u) => {
-    if (u.photo) out.push({ id: "au-" + u.id, auto: true, type: "receipt", title: catLabel(tag, u.category) + (u.payeeName ? " · " + u.payeeName : ""), date: u.date, amountUgx: u.amountUgx, party: u.payeeName, file: u.photo, source: "Advance spending" });
+    if (u.photo) out.push({ id: "au-" + u.id, auto: true, type: "receipt", title: catLabel(tag, u.category) + (u.payeeName ? " · " + u.payeeName : ""), date: u.date, amountUgx: u.amountUgx, party: u.payeeName, file: u.photo, source: "Float spending" });
   }));
   if (tag === "trucking") {
     (DATA.fuelLogs || []).forEach((l) => { if (l.photo) out.push({ id: "af-" + l.id, auto: true, type: "receipt", title: "Fuel · " + (l.station || "station"), date: l.date, amountUgx: l.amountUgx, party: l.station, file: l.photo, source: "Fuel log" }); });
@@ -2515,7 +2519,7 @@ function bindDocs() {
 }
 
 // ───────────── Money › Flow: one ledger for every shilling ─────────────
-const FLOW_TYPES = [["", "All"], ["income", "Income"], ["spending", "Spending"], ["advance", "Advances"], ["payroll", "Payroll"], ["return", "Returns"]];
+const FLOW_TYPES = [["", "All"], ["income", "Income"], ["spending", "Spending"], ["advance", "Floats"], ["payroll", "Payroll"], ["return", "Returns"]];
 function flowType(c, floats) {
   if (c.direction === "in") return c.category === "advance_return" ? "return" : "income";
   if (c.category === "employee_pay") return "payroll";
@@ -2534,14 +2538,14 @@ function periodRange(p) {
   if (p === "custom") { const f = sessionStorage.getItem("flowFrom") || today.slice(0, 8) + "01", to = sessionStorage.getItem("flowTo") || today; return [f, to, fmtDay(f) + " – " + fmtDay(to)]; }
   return ["0000-00-00", "9999-99-99", "All time"];
 }
-// what counts in Money in / Money out: income, spending (incl. what was spent from advances) and payroll.
-// Sending an advance, moving it to someone else, or getting leftover back only moves the company's own money.
+// what counts in Money in / Money out: income, spending (incl. what was spent from floats) and payroll.
+// Sending a float, moving it to someone else, or getting leftover back only moves the company's own money.
 function countsInTotals(c) { return c._type === "income" || c._type === "spending" || c._type === "payroll"; }
 function advanceSpendRows() {
   const out = [];
   (DATA.disbursements || []).forEach((f) => {
     const p = recipientOf(f), who = p ? p.name : "";
-    (f.usages || []).forEach((u) => out.push({ id: "use-" + u.id, date: u.date || f.date, direction: "out", amountUgx: Number(u.amountUgx) || 0, tag: f.tag || "trucking", category: u.category, note: u.note || "", payeeName: u.payeeName || "", payeePhone: u.payeePhone || "", bankName: u.bankName || "", bankAccount: u.bankAccount || "", reference: u.reference || "", method: u.method || "cash", truckId: f.truckId || "", driverId: f.toDriverId || "", userId: f.toUserId || "", fromAdvance: who, floatId: f.id, useId: u.id, efrisNo: u.efrisNo || "", supplierTin: u.supplierTin || "", _type: "spending" }));
+    (f.usages || []).forEach((u) => out.push({ id: "use-" + u.id, date: u.date || f.date, direction: "out", amountUgx: Number(u.amountUgx) || 0, tag: f.tag || "trucking", category: u.category, note: u.note || "", payeeName: u.payeeName || "", payeePhone: u.payeePhone || "", bankName: u.bankName || "", bankAccount: u.bankAccount || "", reference: u.reference || "", method: u.method || "cash", truckId: u.truckId || f.truckId || "", jobId: u.jobId || "", blockId: u.blockId || "", caneBuyId: u.caneBuyId || "", invest: !!u.invest, by: u.by || "", byId: u.byId || "", at: u.at || "", driverId: f.toDriverId || "", userId: f.toUserId || "", fromAdvance: who, floatId: f.id, useId: u.id, efrisNo: u.efrisNo || "", supplierTin: u.supplierTin || "", _type: "spending" }));
     if (f.movedFrom) { const src = (DATA.disbursements || []).find((x) => x.id === f.movedFrom); const sp = src ? recipientOf(src) : null; out.push({ id: "mv-" + f.id, date: f.date, direction: "out", amountUgx: Number(f.amountUgx) || 0, tag: f.tag || "trucking", category: "moved", note: "Leftover moved" + (sp ? " from " + sp.name : "") + (who ? " to " + who : ""), payeeName: who, method: "moved", floatId: f.id, _type: "advance" }); }
   });
   return out;
@@ -2553,6 +2557,240 @@ function flowRows(biz, type, period, q) {
     .filter((c) => (!biz || c.tag === biz || (biz === "overhead" && !["trucking", "sugarcane", "passion"].includes(c.tag))) && (!type || c._type === type) && String(c.date || "") >= from && String(c.date || "") <= to)
     .filter((c) => !q || [c.note, c.payeeName, c.reference, catLabel(c.tag, c.category), cashRef(c)].join(" ").toLowerCase().includes(q))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+function moneyOutThere(biz) {
+  // money held by people, owed to us, we owe
+  const holding = (DATA.disbursements || []).filter((f) => f.status !== "closed" && advLeft(f).left > 0 && (!biz || f.tag === biz)).map((f) => { const p = recipientOf(f); return { who: p ? p.name : "—", tag: f.tag, amt: advLeft(f).left, date: f.date }; });
+  const owedUs = [];
+  if (!biz || biz === "trucking") (DATA.jobs || []).filter((j) => (["delivered", "invoiced"].includes(j.status) || j.invoice) && !isPaid(j)).forEach((j) => { const c = (DATA.contractors || []).find((x) => x.id === j.contractorId); owedUs.push({ what: "Load " + (j.code || j.id), who: c ? c.name : "", amt: j.incomeUgx || j.rateUgx || 0, tag: "trucking", date: j.deliveredAt || j.invoicedAt || "" }); });
+  if (!biz || biz === "passion") (DATA.fruitSales || []).filter((s) => (s.amountUgx || 0) > (s.paidUgx || 0)).forEach((s) => owedUs.push({ what: "Fruit " + s.kg + " kg", who: s.buyer, amt: (s.amountUgx || 0) - (s.paidUgx || 0), tag: "passion", date: s.date }));
+  (DATA.receivables || []).filter((r) => r.status === "open" && (!biz || r.tag === biz)).forEach((r) => owedUs.push({ what: r.note || "Receivable", who: "", amt: r.amountUgx, tag: r.tag, date: r.date }));
+  const weOwe = [];
+  if (!biz || biz === "sugarcane") (DATA.caneBuys || []).filter((b) => !b.sellerPaid && b.buyPriceUgx).forEach((b) => { const s = (DATA.sellers || []).find((x) => x.id === b.sellerId); weOwe.push({ what: "Cane seller · " + (b.location || ""), who: s ? s.name : "", amt: b.buyPriceUgx, tag: "sugarcane", date: b.date || "" }); });
+  const payWait = [];
+  if (typeof owedTo === "function") {
+    const users = (DATA.users || []).filter((u) => u.active !== false);
+    [["driver", DATA.drivers || [], "trucking"], ["cane", users.filter((u) => u.role === "cane_manager"), "sugarcane"], ["passion", users.filter((u) => u.role === "passion_manager"), "passion"]].forEach(([k, ppl, t]) => {
+      if (biz && biz !== t) return;
+      ppl.forEach((p) => { const w = owedTo(k, p, DATA.payStubs, DATA).waiting; if (w.length) payWait.push({ what: "Pay · " + w.length + " waiting", who: p.name, amt: w.reduce((s, x) => s + (x.amount || 0), 0), tag: t }); });
+    });
+  }
+  (DATA.moneyRequests || []).filter((r) => (r.status === "open" || r.status === "partial") && (!biz || r.tag === biz)).forEach((r) => { const p = requesterOf(r); weOwe.push({ what: "Request · " + catLabel(r.tag, r.activity), who: p ? p.name : r.by, amt: reqLeft(r), tag: r.tag, date: r.date }); });
+  return { holding, owedUs, weOwe, payWait };
+}
+
+// ═════════════ Money: one place, plain words ═════════════
+// Every money-out line is one of: a job cost (earns money back directly), a running cost (keeps the business working)
+// or an investment (lasts for years). Worked out from what the line is for — nothing extra to type.
+const COST_CLASS = { job: ["Job cost", "Earns money back directly"], running: ["Running cost", "Keeps the business working"], invest: ["Investment", "Lasts for years · added to capital"] };
+function costClass(c) {
+  if (c.direction === "in") return "";
+  if (c.invest) return "invest";
+  const k = c.category || "";
+  if (k === "employee_pay") { const st = (DATA.payStubs || []).find((x) => x.id === c.refId); return st && st.kind === "extra" ? "running" : "job"; }
+  if (c.jobId || c.caneBuyId) return "job";
+  if (c.tag === "sugarcane" || c.tag === "passion") return "job";
+  if ([...FUND_FOR.sugarcane, ...FUND_FOR.passion].some(([x]) => x === k && x !== "other")) return "job";
+  if (c.tag === "trucking" && ["diesel", "fuel", "labour", "trip", "road", "toll", "food", "to_driver"].includes(k)) return "job";
+  return "running";
+}
+const OUT_GROUPS = [["fuel", "⛽ Fuel", ["diesel", "fuel"]], ["repairs", "🔧 Repairs & parts", ["workshop", "parts", "tyres"]], ["pay", "👷 Pay", ["employee_pay"]], ["canebuy", "🌾 Cane bought", ["buy"]], ["canework", "🪓 Cutting & loading", ["cut", "load"]], ["transport", "🚚 Transport", ["transport"]], ["passion", "🌱 Farm work & inputs", ["harvest", "prune", "spray", "weed", "fertilize", "inputs"]], ["papers", "📄 Papers, fees & road", ["papers", "road", "toll"]], ["trip", "🍽 Trip & labour", ["trip", "food", "labour"]]];
+function outGroup(c) { const g = OUT_GROUPS.find((x) => x[2].includes(c.category)); return g ? g[0] : "other"; }
+function inGroup(c) { return c.category === "other_income" ? "other" : c.tag === "sugarcane" ? "cane" : c.tag === "passion" ? "fruit" : c.tag === "trucking" ? "loads" : "other"; }
+const IN_GROUPS = [["loads", "🚚 Loads paid"], ["cane", "🌾 Cane sales"], ["fruit", "🍈 Fruit sales"], ["other", "➕ Other money in"]];
+const groupName = (dir, g) => (dir === "in" ? IN_GROUPS : OUT_GROUPS.concat([["other", "Other"]])).find((x) => x[0] === g)?.[1] || "Other";
+// what the line was for, in a few words
+function entryFor(c) {
+  const bits = [];
+  const j = c.jobId && (DATA.jobs || []).find((x) => x.id === c.jobId);
+  if (j) { const cl = (DATA.contractors || []).find((x) => x.id === j.contractorId); bits.push((cl ? cl.name : "Load " + (j.code || "")) + (j.material ? " · " + j.material : "")); }
+  const t = c.truckId && (DATA.trucks || []).find((x) => x.id === c.truckId); if (t) bits.push(t.plate);
+  if (c.blockId) bits.push("Block " + c.blockId);
+  const b = c.caneBuyId && (DATA.caneBuys || []).find((x) => x.id === c.caneBuyId); if (b) bits.push("Cane · " + (b.location || "buy"));
+  if (c.category === "employee_pay" && c.payeeName) bits.push(c.payeeName);
+  return bits.join(" · ");
+}
+function entryTitle(c) {
+  if (c.direction === "in") return c.category === "advance_return" ? "Float returned" : c.category === "other_income" ? (c.note || "Money in") : c.tag === "trucking" ? (c.note && /trip/i.test(c.note) ? c.note : "Client paid") : (c.note || "Money in");
+  if (c._type === "advance") return c.category === "moved" ? "Leftover moved" : "Float to " + (c.payeeName || "team");
+  if (c.category === "employee_pay") return "Pay · " + (c.payeeName || "");
+  const what = catLabel(c.tag, c.category) || "Spending";
+  const n = String(c.note || "").replace(/^(Repair|Employee pay) · /, "").trim();
+  if (!n || n.length > 48 || n.toLowerCase() === what.toLowerCase()) return what;
+  return n.toLowerCase().includes(what.toLowerCase().split(" ")[0]) ? n : what + " · " + n;
+}
+function entrySource(c) {
+  if (c.direction === "in") return c.category === "advance_return" ? "Back to company" : "Into: " + (METHOD_LABEL[c.method] || label(c.method || "cash"));
+  if (c._type === "advance") return "Company money → float";
+  if (c.fromAdvance) return "From " + c.fromAdvance + "'s float";
+  return "Company money · " + (METHOD_LABEL[c.method] || label(c.method || "cash"));
+}
+function moneyRows(period, biz) {
+  return flowRows(biz || "", "", period || "all", "");
+}
+function sumOf(rows, f) { return rows.filter(f).reduce((s, c) => s + (Number(c.amountUgx) || 0), 0); }
+function plOf(rows) {
+  const t = rows.filter(countsInTotals);
+  const inn = sumOf(t, (c) => c.direction === "in"), job = sumOf(t, (c) => c.direction === "out" && costClass(c) === "job"), run = sumOf(t, (c) => c.direction === "out" && costClass(c) === "running"), inv = sumOf(t, (c) => c.direction === "out" && costClass(c) === "invest");
+  return { inn, job, run, inv, made: inn - job, profit: inn - job - run, out: job + run + inv };
+}
+function capitalOf(biz) { return (DATA.capital || []).filter((c) => !biz || c.tag === biz).reduce((s, c) => s + (c.amountUgx || 0), 0); }
+const signed = (n) => (n < 0 ? "−" : "") + ugx(Math.abs(n));
+function bars(list, tone, dir) {
+  const max = Math.max(1, ...list.map((x) => x.amt));
+  return list.length ? list.map((x) => `<button type="button" class="mbar js-mgroup" data-dir="${dir}" data-g="${x.k}"><div class="mbar-r"><span>${esc(x.name)}</span><span><b>${ugx(x.amt)}</b> <small>· ${x.n}</small></span></div><div class="mbar-t"><i style="width:${Math.max(3, Math.round((x.amt / max) * 100))}%;background:${tone}"></i></div></button>`).join("") : `<p class="muted" style="margin:10px 0">Nothing yet.</p>`;
+}
+function moneySeenBase() { try { return localStorage.getItem("moneySeen") || ""; } catch (e) { return ""; } }
+function viewMoneyHome(tag) {
+  const period = sessionStorage.getItem("flowPeriod") || "month";
+  if (tag) sessionStorage.setItem("flowBiz", tag);
+  const biz = sessionStorage.getItem("flowBiz") || "";
+  const [, , plabel] = periodRange(period);
+  const rows = flowRows(biz, "", period, "");
+  const t = rows.filter(countsInTotals);
+  const pl = plOf(rows), all = plOf(flowRows(biz, "", "all", "")), cap = capitalOf(biz);
+  const roi = cap ? Math.round(((all.profit) / cap) * 100) : null;
+  const grp = (dir, fn, names) => { const m = {}; t.filter((c) => c.direction === dir).forEach((c) => { const k = fn(c); (m[k] = m[k] || { k, amt: 0, n: 0 }); m[k].amt += c.amountUgx || 0; m[k].n++; }); return Object.values(m).map((x) => ({ ...x, name: groupName(dir, x.k) })).sort((a, b) => b.amt - a.amt); };
+  // what others entered since you last looked
+  const base = moneySeenBase(), me = DATA.me.id;
+  const fresh = flowRows("", "", "all", "").filter((c) => c.at && c.byId && c.byId !== me && (!base || c.at > base));
+  const byWho = {}; fresh.forEach((c) => { byWho[c.by] = (byWho[c.by] || 0) + 1; });
+  const fin = sumOf(fresh.filter(countsInTotals), (c) => c.direction === "in"), fout = sumOf(fresh.filter(countsInTotals), (c) => c.direction === "out");
+  const who = Object.keys(byWho);
+  const o = moneyOutThere(biz), s2 = (a) => a.reduce((x, y) => x + (y.amt || 0), 0);
+  const isMain = DATA.me.role === "admin" && !DATA.me.assistant;
+  return `
+    <div class="row keep" style="align-items:center"><h1 class="no-sub" style="margin:0">Money</h1>
+      <select class="field js-flow mh-period" data-k="flowPeriod" aria-label="Period">${[["week", "This week"], ["month", "This month"], ["lastmonth", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["all", "All time"]].map(([k, l]) => `<option value="${k}" ${period === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+    <div class="seg seg-sm" style="margin-top:10px">${[["", "All"], ["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"], ["overhead", "Office"]].map(([k, l]) => `<button type="button" class="seg-btn ${biz === k ? "on" : ""}" data-flowbiz="${k}">${l}</button>`).join("")}</div>
+    ${fresh.length ? `<a class="mh-new" href="#money-tx" data-newonly="1"><div><b>${who.length === 1 ? esc(who[0]) + " added " + fresh.length + " entr" + (fresh.length === 1 ? "y" : "ies") : fresh.length + " new entries · " + who.map((w) => esc(w) + " " + byWho[w]).join(", ")}</b><small>Since you last looked${fout ? " · " + ugx(fout) + " out" : ""}${fin ? " · " + ugx(fin) + " in" : ""}</small></div><i>See ›</i></a>` : ""}
+    ${moneyNeedsYou()}
+    <div class="mh-k2">
+      <a class="mh-k" href="#money-tx" data-dirgo="in"><span>Money in</span><b class="pos">${ugx(pl.inn)}</b><em>›</em></a>
+      <a class="mh-k" href="#money-tx" data-dirgo="out"><span>Money out</span><b class="neg">${ugx(pl.out)}</b><em>›</em></a>
+    </div>
+    <div class="card mh-pl">
+      <div class="mh-plh"><b>Profit · ${esc(plabel.toLowerCase())}</b></div>
+      <div class="pl-line"><span>Money in</span><b>${ugx(pl.inn)}</b></div>
+      <button type="button" class="pl-line js-mclass" data-c="job"><span>− Job costs <small>fuel, material, cane, trip pay…</small></span><b class="neg">${ugx(pl.job)}</b></button>
+      <div class="pl-line pl-sub"><span>= Made on jobs</span><b class="${pl.made < 0 ? "neg" : "pos"}">${signed(pl.made)}</b></div>
+      <button type="button" class="pl-line js-mclass" data-c="running"><span>− Running costs <small>repairs, papers, monthly pay, office…</small></span><b class="neg">${ugx(pl.run)}</b></button>
+      <div class="pl-line pl-tot"><span>= ${pl.profit < 0 ? "Loss" : "Profit"}</span><b class="${pl.profit < 0 ? "neg" : "pos"}">${signed(pl.profit)}</b></div>
+      ${pl.inv ? `<button type="button" class="pl-line js-mclass" data-c="invest"><span>Investments <small>not in profit · added to capital</small></span><b class="gold-t">${ugx(pl.inv)}</b></button>` : ""}
+    </div>
+    ${isMain || DATA.me.role === "admin" ? `<a class="card mh-roi" href="#money-capital"><div><span class="eyebrow">Capital put in${biz ? " · " + esc(BIZ_LABEL[biz] || "") : ""}</span><b>${ugx(cap + all.inv)}</b></div><div style="text-align:right"><span class="eyebrow">Return so far</span><b class="${roi == null ? "" : roi < 0 ? "neg" : "pos"}">${roi == null ? "Add capital ›" : (roi < 0 ? "−" + Math.abs(roi) : roi) + "%"}</b></div></a>` : ""}
+    <div class="mh-sec"><b>Where it went</b><span>tap to see entries</span></div>
+    <div class="card mh-box">${bars(grp("out", outGroup), "var(--clay,#ff6b6b)", "out")}</div>
+    <div class="mh-sec"><b>Where it came from</b></div>
+    <div class="card mh-box">${bars(grp("in", inGroup), "var(--leaf,#3ddc84)", "in")}</div>
+    <div class="mh-sec"><b>Money still out there</b></div>
+    <div class="card mh-box">
+      <a class="mbar mbar-link" href="#money-adv"><div class="mbar-r"><span>With the team <small>(floats)</small></span><b class="gold-t">${ugx(s2(o.holding))}</b></div></a>
+      <a class="mbar mbar-link" href="#money-owed"><div class="mbar-r"><span>Clients owe us</span><b class="pos">${ugx(s2(o.owedUs))}</b></div></a>
+      <a class="mbar mbar-link" href="#money-pay"><div class="mbar-r"><span>We owe <small>(pay, sellers, requests)</small></span><b class="neg">${ugx(s2(o.weOwe) + s2(o.payWait))}</b></div></a>
+    </div>
+    <div class="grid g2" style="margin-top:12px">
+      <button type="button" class="btn btn-primary" id="moneyIn">＋ Money in</button>
+      <a class="btn btn-ghost" href="#money-tx">All entries ›</a>
+    </div>`;
+}
+function viewEntries() {
+  const period = sessionStorage.getItem("flowPeriod") || "month";
+  const biz = sessionStorage.getItem("flowBiz") || "";
+  const q = (sessionStorage.getItem("flowQ") || "").toLowerCase();
+  const dir = sessionStorage.getItem("mDir") || "", cls = sessionStorage.getItem("mClass") || "", grpK = sessionStorage.getItem("mGroup") || "", whoF = sessionStorage.getItem("mWho") || "", newOnly = sessionStorage.getItem("mNew") === "1";
+  // NEW marks: what others entered since you last opened this page
+  let base = sessionStorage.getItem("entriesBase");
+  if (base == null) { base = moneySeenBase(); sessionStorage.setItem("entriesBase", base); try { localStorage.setItem("moneySeen", new Date().toISOString()); } catch (e) {} }
+  const isNew = (c) => c.at && c.byId && c.byId !== DATA.me.id && (!base || c.at > base);
+  const [, , plabel] = periodRange(newOnly ? "all" : period);
+  let rows = flowRows(biz, "", newOnly ? "all" : period, q);
+  const people = [...new Set(rows.map((c) => c.by).filter(Boolean))];
+  rows = rows.filter((c) => (!dir || (dir === "move" ? !countsInTotals(c) : countsInTotals(c) && c.direction === dir)) && (!cls || (countsInTotals(c) && costClass(c) === cls)) && (!grpK || (countsInTotals(c) && (c.direction === "in" ? inGroup(c) : outGroup(c)) === grpK.split(":")[1] && c.direction === grpK.split(":")[0])) && (!whoF || c.by === whoF) && (!newOnly || isNew(c)));
+  const t = rows.filter(countsInTotals), inn = sumOf(t, (c) => c.direction === "in"), out = sumOf(t, (c) => c.direction === "out");
+  const days = []; let cur = null;
+  rows.slice(0, Number(sessionStorage.getItem("flowShow") || 150)).forEach((c) => { if (!cur || cur.d !== c.date) { cur = { d: c.date, rows: [], i: 0, o: 0 }; days.push(cur); } cur.rows.push(c); if (!countsInTotals(c)) return; if (c.direction === "in") cur.i += c.amountUgx || 0; else cur.o += c.amountUgx || 0; });
+  const chip = (k, v, l) => `<button type="button" class="chip-b ${sessionStorage.getItem(k) === v || (!sessionStorage.getItem(k) && !v) ? "on" : ""}" data-mk="${k}" data-mv="${esc(v)}">${esc(l)}</button>`;
+  const active = [grpK && ["mGroup", groupName(grpK.split(":")[0], grpK.split(":")[1])], cls && ["mClass", COST_CLASS[cls][0] + "s"], newOnly && ["mNew", "New since you looked"]].filter(Boolean);
+  const card = (c) => {
+    const amt = !countsInTotals(c) ? `<b class="ent-m gold-t">⇄ ${ugx(c.amountUgx)}</b>` : `<b class="ent-m ${c.direction === "in" ? "pos" : "neg"}">${c.direction === "in" ? "+" : "−"}${ugx(c.amountUgx)}</b>`;
+    const f = entryFor(c), cc = costClass(c), time = c.at ? new Date(c.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+    const tagTone = c.tag === "sugarcane" ? "t-cane" : c.tag === "passion" ? "t-passion" : "t-fleet";
+    const links = [c.jobId && `<a href="#trucks-jobs">Open the load ›</a>`, (c.refId && (DATA.issues || []).some((i) => i.id === c.refId)) && `<a href="#trucks-issues">Open the repair ›</a>`, c.floatId && `<a href="#money-adv">Open the float ›</a>`].filter(Boolean).join(" · ");
+    return `<details class="ent ${isNew(c) ? "fresh" : ""}">${isNew(c) ? `<span class="ent-new">NEW</span>` : ""}
+      <summary><div class="ent-a"><b>${esc(entryTitle(c))}</b>${amt}</div>
+        <div class="ent-l">${f ? `<span class="etag ${tagTone}">${esc(f)}</span>` : `<span class="etag ${tagTone}">${esc(BIZ_LABEL[c.tag] || "Office")}</span>`}<span class="etag ${c.fromAdvance ? "t-float" : ""}">${esc(entrySource(c))}</span></div>
+        <div class="ent-l">${c.payeeName && c.direction === "out" && c.category !== "employee_pay" ? "Paid to: " + esc(c.payeeName) + " · " : c.payeeName && c.direction === "in" && c.category === "other_income" ? "From: " + esc(c.payeeName) + " · " : ""}${c.by ? "By " + esc(c.by) : c.fromAdvance ? "On " + esc(c.fromAdvance) + "'s float" : "Older entry"}${time ? " · " + time : ""}</div>
+      </summary>
+      <div class="ent-d">
+        <div class="kv2"><span>What</span><b>${esc(catLabel(c.tag, c.category) || (c.direction === "in" ? "Money in" : "Spending"))}</b>
+        ${countsInTotals(c) && c.direction === "out" ? `<span>Type</span><b>${COST_CLASS[cc][0]} <small class="muted">· ${COST_CLASS[cc][1]}</small></b>` : ""}
+        ${!countsInTotals(c) ? `<span>Counts?</span><b>No · company money moving to or from the team</b>` : ""}
+        <span>Business</span><b>${esc(BIZ_LABEL[c.tag] || "Office")}</b>
+        ${f ? `<span>For</span><b>${esc(f)}</b>` : ""}
+        <span>${c.direction === "in" ? "Into" : "Paid from"}</span><b>${esc(entrySource(c).replace(/^Into: /, ""))}</b>
+        ${c.payeeName ? `<span>${c.direction === "in" ? "From" : "Paid to"}</span><b>${esc(c.payeeName)}${c.payeePhone ? " · " + esc(c.payeePhone) : ""}</b>` : ""}
+        ${c.reference ? `<span>Reference</span><b>${esc(c.reference)}</b>` : ""}
+        ${c.note ? `<span>Note</span><b>${esc(c.note)}</b>` : ""}
+        <span>Entered</span><b>${c.by ? esc(c.by) + " · " : ""}${fmtDay(c.date)}${time ? ", " + time : ""}</b></div>
+        ${links ? `<p class="ent-links">${links}</p>` : ""}
+        ${DATA.me.role === "admin" && countsInTotals(c) && c.direction === "out" && String(c.id).startsWith("k") ? `<label class="check" style="margin-top:8px"><input type="checkbox" class="js-invest" data-id="${esc(c.id)}" ${c.invest ? "checked" : ""}/> Investment (lasts for years, not this month's cost)</label>` : ""}
+      </div></details>`;
+  };
+  return `
+    <div class="row keep" style="align-items:center"><h1 style="margin:0">Entries</h1><button type="button" class="btn btn-ghost btn-sm" id="flowPdf">⬇ PDF</button></div>
+    <div class="flow-filters" style="margin-top:10px">
+      <select class="field js-flow" data-k="flowPeriod" aria-label="Period">${[["week", "This week"], ["month", "This month"], ["lastmonth", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["all", "All time"], ["custom", "Custom dates"]].map(([k, l]) => `<option value="${k}" ${period === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      ${period === "custom" ? `<input class="field js-flow" type="date" data-k="flowFrom" value="${sessionStorage.getItem("flowFrom") || ""}" /><input class="field js-flow" type="date" data-k="flowTo" value="${sessionStorage.getItem("flowTo") || ""}" />` : ""}
+      <input class="field js-flow" data-k="flowQ" placeholder="Search" value="${esc(sessionStorage.getItem("flowQ") || "")}" />
+    </div>
+    ${active.length ? `<div class="chips">${active.map(([k, l]) => `<button type="button" class="chip-b on js-mclear" data-mk="${k}">${esc(l)} ✕</button>`).join("")}</div>` : ""}
+    <div class="chips">${chip("mWho", "", "Everyone")}${people.map((p) => chip("mWho", p, p)).join("")}</div>
+    <div class="chips">${chip("mDir", "", "All")}${chip("mDir", "in", "In")}${chip("mDir", "out", "Out")}${chip("mDir", "move", "Float moves")}</div>
+    <div class="seg seg-sm" style="margin-top:8px">${[["", "All"], ["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"], ["overhead", "Office"]].map(([k, l]) => `<button type="button" class="seg-btn ${biz === k ? "on" : ""}" data-flowbiz="${k}">${l}</button>`).join("")}</div>
+    <div class="ent-sum"><span>${rows.length} entr${rows.length === 1 ? "y" : "ies"} · ${esc(plabel.toLowerCase())}</span><span>${inn ? `<b class="pos">+${ugx(inn)}</b>` : ""}${inn && out ? " · " : ""}${out ? `<b class="neg">−${ugx(out)}</b>` : ""}</span></div>
+    ${days.length ? days.map((d) => `<div class="day-head"><b>${fmtDay(d.d)}</b><span>${d.i ? `<span class="pos">+${ugx(d.i)}</span>` : ""}${d.i && d.o ? " · " : ""}${d.o ? `<span class="neg">−${ugx(d.o)}</span>` : ""}</span></div>${d.rows.map(card).join("")}`).join("") : `<div class="card item muted" style="margin-top:8px">Nothing here${newOnly ? " — you're up to date" : ""}.</div>`}
+    ${rows.length > Number(sessionStorage.getItem("flowShow") || 150) ? `<button type="button" class="btn btn-ghost wide" id="flowMore" style="margin-top:10px">Show more</button>` : ""}`;
+}
+function viewCapital() {
+  const list = (DATA.capital || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const rows = [["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"], ["overhead", "Office"]].map(([k, n]) => { const all = plOf(flowRows(k, "", "all", "")); const cap = capitalOf(k) + all.inv; return { k, n, cap, profit: all.profit, roi: cap ? Math.round((all.profit / cap) * 100) : null }; }).filter((x) => x.cap || x.profit);
+  const tot = rows.reduce((a, x) => ({ cap: a.cap + x.cap, profit: a.profit + x.profit }), { cap: 0, profit: 0 });
+  const isAdmin = DATA.me.role === "admin";
+  return `
+    <h1>Capital</h1>
+    <p class="muted" style="margin-top:4px">Money you put into each business. Return = profit so far ÷ capital.</p>
+    <div class="grid g2" style="margin-top:12px"><div class="card kpi steel"><span class="eyebrow">Capital put in</span><b>${ugx(tot.cap)}</b></div><div class="card kpi"><span class="eyebrow">Return so far</span><b class="${tot.profit < 0 ? "neg" : "pos"}">${tot.cap ? Math.round((tot.profit / tot.cap) * 100) + "%" : "—"}</b></div></div>
+    ${rows.length ? `<div class="card biz-table" style="margin-top:12px"><table><thead><tr><th>Business</th><th style="text-align:right">Put in</th><th style="text-align:right">Profit</th><th style="text-align:right">Return</th></tr></thead><tbody>${rows.map((x) => `<tr><td><b>${x.n}</b></td><td class="num">${Number(x.cap).toLocaleString("en-UG")}</td><td class="num ${x.profit < 0 ? "neg" : "pos"}">${x.profit < 0 ? "−" : ""}${Math.abs(x.profit).toLocaleString("en-UG")}</td><td class="num"><b class="${x.roi < 0 ? "neg" : ""}">${x.roi == null ? "—" : (x.roi < 0 ? "−" + Math.abs(x.roi) : x.roi) + "%"}</b></td></tr>`).join("")}</tbody></table></div>` : ""}
+    ${isAdmin ? `<details class="card team-row add" style="margin-top:12px" ${list.length ? "" : "open"}><summary><div class="avatar">＋</div><div style="flex:1"><b>Add capital</b><div class="muted">Money sent in, or a truck / equipment brought in</div></div></summary>
+      <form data-form="capital" style="margin-top:12px"><div class="grid g2">
+        <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" inputmode="numeric" required /></label>
+        <label class="lbl">Business<select class="field" name="tag"><option value="trucking">Fleet</option><option value="sugarcane">Cane</option><option value="passion">Passion</option><option value="overhead">Office / all</option></select></label>
+        <label class="lbl">What<select class="field" name="kind"><option value="cash">Money sent in</option><option value="asset">Truck / equipment brought in</option></select></label>
+        <label class="lbl">How<select class="field" name="method"><option value="bank">Bank transfer</option><option value="mobile_money">Mobile money</option><option value="cash">Cash</option><option value="other">Other</option></select></label>
+        ${dateField("date", "Date")}
+        <label class="lbl">Note<input class="field" name="note" placeholder="e.g. Sent from US for truck repairs" /></label>
+      </div><button class="btn btn-primary wide" style="margin-top:10px">Save capital</button></form></details>` : ""}
+    <div class="list" style="margin-top:12px">${list.map((c) => `<div class="card item"><div class="row keep" style="align-items:center"><div><b>${ugx(c.amountUgx)} · ${esc(BIZ_LABEL[c.tag] || "Office")}</b><div class="muted">${c.kind === "asset" ? "Truck / equipment" : esc(METHOD_LABEL[c.method] || label(c.method || ""))} · ${fmtDay(c.date)}${c.by ? " · " + esc(c.by) : ""}</div>${c.note ? `<div class="muted">${esc(c.note)}</div>` : ""}</div>${isAdmin ? `<button type="button" class="btn btn-ghost btn-sm js-delcap" data-id="${esc(c.id)}">Delete</button>` : ""}</div></div>`).join("") || `<div class="card item muted">No capital recorded yet. Add what you've put in so far — past dates are fine.</div>`}
+      ${rows.some((x) => x.cap) ? `<p class="muted" style="font-size:12px">Investments marked on spending (e.g. a big repair) are added to capital automatically.</p>` : ""}</div>`;
+}
+function bindMoney2() {
+  document.querySelectorAll("[data-mk]").forEach((b) => { b.onclick = () => { const k = b.dataset.mk; if (b.classList.contains("js-mclear") || !b.dataset.mv) sessionStorage.removeItem(k); else sessionStorage.setItem(k, b.dataset.mv); route(); }; });
+  document.querySelectorAll(".js-mgroup").forEach((b) => { b.onclick = () => { ["mDir", "mClass", "mWho", "mNew"].forEach((k) => sessionStorage.removeItem(k)); sessionStorage.setItem("mGroup", b.dataset.dir + ":" + b.dataset.g); location.hash = "#money-tx"; }; });
+  document.querySelectorAll(".js-mclass").forEach((b) => { b.onclick = () => { ["mDir", "mGroup", "mWho", "mNew"].forEach((k) => sessionStorage.removeItem(k)); sessionStorage.setItem("mClass", b.dataset.c); location.hash = "#money-tx"; }; });
+  document.querySelectorAll("[data-dirgo]").forEach((a) => { a.onclick = () => { ["mClass", "mGroup", "mWho", "mNew"].forEach((k) => sessionStorage.removeItem(k)); sessionStorage.setItem("mDir", a.dataset.dirgo); }; });
+  document.querySelectorAll("[data-newonly]").forEach((a) => { a.onclick = () => { ["mDir", "mClass", "mGroup", "mWho"].forEach((k) => sessionStorage.removeItem(k)); sessionStorage.setItem("mNew", "1"); sessionStorage.removeItem("entriesBase"); }; });
+  document.querySelectorAll(".js-invest").forEach((x) => { x.onchange = () => act("set_invest", { id: x.dataset.id, on: x.checked ? "1" : "" }).catch(() => {}); });
+  document.querySelectorAll(".js-delcap").forEach((b) => { b.onclick = async () => { if (!confirm("Delete this capital entry?")) return; try { await act("delete_capital", { id: b.dataset.id }); } catch (e) {} }; });
+  const mi = document.getElementById("moneyIn");
+  if (mi) mi.onclick = () => openSheet({ title: "Money in", sub: "Money that isn't a load, cane or fruit sale",
+    body: `<div class="grid g2"><label class="lbl" style="grid-column:1/-1">What is it for<input class="field" name="note" required placeholder="e.g. Truck hired for a day, scrap sold, refund" /></label>
+      <label class="lbl">Amount (UGX)<input class="field" name="amountUgx" inputmode="numeric" required /></label>
+      <label class="lbl">Business<select class="field" name="tag"><option value="trucking">Fleet</option><option value="sugarcane">Cane</option><option value="passion">Passion</option><option value="overhead">Office</option></select></label>
+      <label class="lbl">From whom<input class="field" name="from" placeholder="Optional" /></label>
+      <label class="lbl">How it came in<select class="field" name="method"><option value="cash">Cash</option><option value="mobile_money">Mobile money</option><option value="bank">Bank transfer</option></select></label>
+      ${dateField("date", "Date")}</div>`,
+    submit: "Save", onSubmit: async (fd) => { await act("add_income", fd); toast("Money in saved"); } });
 }
 function viewMoney(tag, mode) {
   const tx = mode === "tx";
@@ -2591,7 +2829,7 @@ function viewMoney(tag, mode) {
   // group by day
   const days = []; let cur = null;
   rows.slice(0, Number(sessionStorage.getItem("flowShow") || 150)).forEach((c) => { if (!cur || cur.d !== c.date) { cur = { d: c.date, rows: [], i: 0, o: 0 }; days.push(cur); } cur.rows.push(c); if (!countsInTotals(c)) return; if (c.direction === "in") cur.i += c.amountUgx || 0; else cur.o += c.amountUgx || 0; });
-  const typeChip = { income: ["green", "Income"], spending: ["red", "Spending"], advance: ["gold", "Advance"], payroll: ["purple", "Payroll"], return: ["blue", "Returned"] };
+  const typeChip = { income: ["green", "Income"], spending: ["red", "Spending"], advance: ["gold", "Float"], payroll: ["purple", "Payroll"], return: ["blue", "Returned"] };
   const sideList = (title, arr, tone) => `<div class="card side-card"><div class="row" style="align-items:center"><b>${title}</b><b class="${tone}">${ugx(sum(arr))}</b></div>${arr.length ? arr.slice(0, 6).map((x) => `<div class="side-line"><span>${esc(x.who || x.what)}<span class="muted"> · ${esc(x.who ? x.what : BIZ_LABEL[x.tag] || "")}</span></span><b>${x.amt ? ugx(x.amt) : "—"}</b></div>`).join("") + (arr.length > 6 ? `<p class="muted">+${arr.length - 6} more</p>` : "") : `<p class="muted">Nothing</p>`}</div>`;
   return `
     <h1>Money · ${tx ? "Transactions" : "Overview"}</h1>
@@ -2613,26 +2851,26 @@ function viewMoney(tag, mode) {
       ${bizRows.map((x) => `<tr class="js-bizrow" data-flowbiz="${x.k}"><td><b>${x.n}</b></td><td class="num pos">${Number(x.i).toLocaleString("en-UG")}</td><td class="num neg">${Number(x.o).toLocaleString("en-UG")}</td><td class="num ${x.net < 0 ? "neg" : "pos"}"><b>${x.net < 0 ? "−" : ""}${Math.abs(x.net).toLocaleString("en-UG")}</b></td></tr>`).join("")}
     </tbody></table></div>` : ""}
     <div class="side-grid">
-      ${sideList("Money with people", holding.map((h) => ({ who: h.who, what: "advance · " + (BIZ_LABEL[h.tag] || ""), amt: h.amt, tag: h.tag })), "gold-t")}
+      ${sideList("Money with people", holding.map((h) => ({ who: h.who, what: "float · " + (BIZ_LABEL[h.tag] || ""), amt: h.amt, tag: h.tag })), "gold-t")}
       ${sideList("Owed to us", owedUs, "pos")}
       ${sideList("We owe", weOwe.concat(payWait), "neg")}
     </div>
     <div class="grid g2" style="margin-top:12px">
       <a class="card item link-card" href="#money-tx"><b>Transactions</b><span class="muted">${rows.length} · ${esc(plabel.toLowerCase())}</span><span class="chev">›</span></a>
-      <a class="card item link-card" href="#money-adv"><b>Advances</b><span class="muted">${ugx(withTeam)} with the team</span><span class="chev">›</span></a>
+      <a class="card item link-card" href="#money-adv"><b>Floats</b><span class="muted">${ugx(withTeam)} with the team</span><span class="chev">›</span></a>
     </div>`}
     ${!tx ? "" : `<div class="row keep" style="margin-top:18px;align-items:center"><h2 style="margin:0">${rows.length} transaction${rows.length === 1 ? "" : "s"}</h2><button type="button" class="btn btn-ghost btn-sm" id="flowPdf">⬇ Export PDF</button></div>
     ${days.length ? days.map((d) => `<div class="day-head"><b>${fmtDay(d.d)}</b><span>${d.i ? `<span class="pos">+${ugx(d.i)}</span>` : ""}${d.i && d.o ? " · " : ""}${d.o ? `<span class="neg">−${ugx(d.o)}</span>` : ""}</span></div>
       <div class="card ledger">${d.rows.map((c) => { const ch = typeChip[c._type]; const who = c.payeeName || ""; const how = (METHOD_LABEL[c.method] || label(c.method || "")) + (c.payeePhone ? " " + c.payeePhone : c.bankAccount ? " · " + (c.bankName || "") + " " + c.bankAccount : "") + (c.reference ? " · Ref " + c.reference : ""); const link = cashRef(c); return `<details class="led-row"><summary>
         <span class="badge ${ch[0]}">${ch[1]}</span>
-        <span class="led-main"><b>${esc(c.direction === "in" ? (c.category === "advance_return" ? "Advance returned" : c.note || "Income") : c.category === "moved" ? "Leftover moved" : c._type === "advance" ? "Advance sent" : catLabel(c.tag, c.category) || "Spend")}${who && !(c.direction === "in" && String(c.note || "").includes(who)) ? " · " + esc(who) : ""}</b><span class="muted">${esc(BIZ_LABEL[c.tag] || c.tag || "Office")}${c.fromAdvance ? " · from " + esc(c.fromAdvance) + "'s advance" : ""}${link ? " · " + esc(link) : ""}</span></span>
+        <span class="led-main"><b>${esc(c.direction === "in" ? (c.category === "advance_return" ? "Float returned" : c.note || "Income") : c.category === "moved" ? "Leftover moved" : c._type === "advance" ? "Float sent" : catLabel(c.tag, c.category) || "Spend")}${who && !(c.direction === "in" && String(c.note || "").includes(who)) ? " · " + esc(who) : ""}</b><span class="muted">${esc(BIZ_LABEL[c.tag] || c.tag || "Office")}${c.fromAdvance ? " · from " + esc(c.fromAdvance) + "'s float" : ""}${link ? " · " + esc(link) : ""}</span></span>
         ${countsInTotals(c) ? `<b class="led-amt ${c.direction === "in" ? "pos" : "neg"}">${c.direction === "in" ? "+" : "−"}${ugx(c.amountUgx)}</b>` : `<b class="led-amt muted" title="Company money moving, not in the totals">⇄ ${ugx(c.amountUgx)}</b>`}
       </summary><div class="led-detail">
         ${c.note ? `<div><span class="muted">Note</span> ${esc(c.note)}</div>` : ""}
         <div><span class="muted">Method</span> ${esc(how || "—")}</div>
         ${c.by ? `<div><span class="muted">Recorded by</span> ${esc(c.by)}</div>` : ""}
         ${!countsInTotals(c) ? `<div class="muted">Not in Money in / Money out: the company's own money moving to or from the team.</div>` : ""}
-        ${c._type === "advance" || c.fromAdvance ? `<div><a href="${FUND_HOME[c.tag] || "#money-spend"}">Open the advance ›</a></div>` : ""}
+        ${c._type === "advance" || c.fromAdvance ? `<div><a href="${FUND_HOME[c.tag] || "#money-spend"}">Open the float ›</a></div>` : ""}
       </div></details>`; }).join("")}</div>`).join("") : `<div class="card item muted" style="margin-top:8px">No money movements for ${esc(plabel.toLowerCase())}.</div>`}
     ${rows.length > Number(sessionStorage.getItem("flowShow") || 150) ? `<button type="button" class="btn btn-ghost wide" id="flowMore" style="margin-top:10px">Show more</button>` : ""}`}`;
 }
@@ -2680,7 +2918,7 @@ async function moneyPdf() {
   const main = rows.filter(countsInTotals);
   const inRange = (d) => d >= from && d <= to;
   const advs = (DATA.disbursements || []).filter((f) => f.status !== "declined" && (!biz || f.tag === biz) && (inRange(f.date || "") || advLeft(f).left > 0)).slice().reverse().sort((x, y) => String(x.date).localeCompare(String(y.date)));
-  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]], ["With the team (advances)", held, [160, 120, 0]]];
+  const boxes = [["Money in", tin, [31, 138, 76]], ["Money out", tout, [179, 38, 30]], ["Net", tin - tout, [16, 36, 63]], ["With the team (floats)", held, [160, 120, 0]]];
   const bw = (W - 72 - 3 * 10) / 4;
   boxes.forEach(([t, v, col], i) => {
     const x = 36 + i * (bw + 10);
@@ -2710,7 +2948,7 @@ async function moneyPdf() {
   doc.autoTable({ ...base,
     startY: 166,
     head: [["Date", "Business", "Type", "Category", "Paid to / from", "Method", "Reference", "Linked to", "In (UGX)", "Out (UGX)"]],
-    body: main.length ? main.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", String(c._type || "").replace(/^./, (x) => x.toUpperCase()) + (c.fromAdvance ? "\nfrom " + c.fromAdvance + "'s advance" : ""), catLabel(c.tag, c.category) || c.note || "", who(c), METHOD_LABEL[c.method] || c.method || "", c.reference || "", cashRef(c) || "", c.direction === "in" ? n(c.amountUgx) : "", c.direction === "out" ? n(c.amountUgx) : ""]) : [[{ content: "Nothing in this period", colSpan: 10, styles: { halign: "center", textColor: [120, 135, 155] } }]],
+    body: main.length ? main.map((c) => [day(c.date), BIZ_LABEL[c.tag] || c.tag || "", String(c._type || "").replace(/^./, (x) => x.toUpperCase()) + (c.fromAdvance ? "\nfrom " + c.fromAdvance + "'s float" : ""), catLabel(c.tag, c.category) || c.note || "", who(c), METHOD_LABEL[c.method] || c.method || "", c.reference || "", cashRef(c) || "", c.direction === "in" ? n(c.amountUgx) : "", c.direction === "out" ? n(c.amountUgx) : ""]) : [[{ content: "Nothing in this period", colSpan: 10, styles: { halign: "center", textColor: [120, 135, 155] } }]],
     foot: [["", "", "", "", "", "", "", "Total", n(tin), n(tout)]],
     headStyles: { fillColor: [16, 36, 63], textColor: 255, fontStyle: "bold" },
     columnStyles: { 0: { cellWidth: 62 }, 8: { halign: "right", cellWidth: 70 }, 9: { halign: "right", cellWidth: 70 } },
@@ -2719,9 +2957,9 @@ async function moneyPdf() {
   if (advs.length) {
     let y = doc.lastAutoTable.finalY + 34;
     if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 50; }
-    title(y, "Advances - where the money went", "what was spent is already inside Money out");
+    title(y, "Floats - where the money went", "what was spent is already inside Money out");
     const nameOf = (f) => { const r = recipientOf(f); return r ? r.name : ""; };
-    const fromName = (f) => { const o = (DATA.disbursements || []).find((x) => x.id === f.movedFrom); return o ? nameOf(o) : "another advance"; };
+    const fromName = (f) => { const o = (DATA.disbursements || []).find((x) => x.id === f.movedFrom); return o ? nameOf(o) : "another float"; };
     let tSent = 0, tSpent = 0, tBack = 0, tHeld = 0;
     const body = advs.map((f) => {
       const L = advLeft(f), amt = Number(f.amountUgx) || 0;
@@ -2828,7 +3066,7 @@ function enhanceFields(root) {
 function fixPageTitle() {
   const h1 = document.querySelector("#app h1");
   const on = document.querySelector(".admin-nav .sub a.on, .page-links a.on");
-  if (!h1 || !on) return;
+  if (!h1 || !on || h1.classList.contains("no-sub")) return;
   const biz = h1.textContent.trim();
   if (!["Fleet", "Cane", "Passion", "Money", "Home"].includes(biz)) return;
   const sub = on.childNodes[0] ? on.childNodes[0].textContent.trim() : on.textContent.trim();
@@ -3093,7 +3331,7 @@ function profilePayee(p) {
   return { name: p.accountName || p.name || "", method: p.payMethod || "mtn_momo", phone: p.payPhone || p.phone || "", bankName: p.bankName || "", bankAccount: p.bankAccount || "" };
 }
 
-// ───────────── Spend: requests → advance → confirm → allocate (all businesses) ─────────────
+// ───────────── Spend: requests → float → confirm → allocate (all businesses) ─────────────
 const FUND_FOR = {
   trucking: [["diesel", "Diesel / fuel"], ["parts", "Spare parts"], ["workshop", "Workshop & repairs"], ["tyres", "Tyres"], ["papers", "Insurance, licence & papers"], ["road", "Road fees & permits"], ["labour", "Loading / offloading labour"], ["trip", "Food & lodging on trip"], ["other", "Other"]],
   sugarcane: [["buy", "Pay cane seller"], ["cut", "Cutting labour"], ["load", "Loading labour"], ["transport", "Transport"], ["fuel", "Fuel"], ["labour", "Other labour"], ["other", "Other"]],
@@ -3106,7 +3344,7 @@ const WORKER_HOME = { trucking: "#drive-money", sugarcane: "#cane-spend", passio
 function catLabel(tag, key) {
   const hit = (FUND_FOR[tag] || []).find(([k]) => k === key) || Object.values(FUND_FOR).flat().find(([k]) => k === key);
   if (hit) return hit[1];
-  return { unaccounted: "Not accounted for", moved: "Leftover moved", load_income: "Load income", employee_pay: "Employee pay", to_driver: "Driver advance", advance_return: "Advance returned", food: "Food", toll: "Toll", fuel: "Fuel" }[key] || (key ? label(key) : "");
+  return { unaccounted: "Not accounted for", moved: "Leftover moved", load_income: "Load income", employee_pay: "Employee pay", to_driver: "Driver float", advance_return: "Float returned", food: "Food", toll: "Toll", fuel: "Fuel" }[key] || (key ? label(key) : "");
 }
 function openRequests(tag) {
   return (DATA.moneyRequests || []).filter((r) => r.tag === tag && (r.status === "open" || r.status === "partial"));
@@ -3162,7 +3400,7 @@ function advanceCard(f, admin) {
   return `<section class="card adv-card ${!admin && f.status === "sent" ? "flash" : ""}">
     <div class="adv-head">
       <div style="min-width:0">
-        <b class="adv-title">${esc(catLabel(tag, f.activity) || "Advance")}</b>
+        <b class="adv-title">${esc(catLabel(tag, f.activity) || "Float")}</b>
         <div class="muted">${admin ? `<b>${esc(who ? who.name : "—")}</b> · ` : ""}${link ? esc(link) + " · " : ""}${fmtDay(f.date)}</div>
         <div class="muted">Sent by ${via}</div>
         ${f.note ? `<div class="muted">${esc(f.note)}</div>` : ""}
@@ -3170,16 +3408,16 @@ function advanceCard(f, admin) {
       <div class="adv-right"><b class="adv-amt">${ugx(f.amountUgx)}</b><div><span class="badge ${tone}">${st}</span></div></div>
     </div>
     <div class="adv-bar"><span style="width:${pct}%"></span></div>
-    <div class="adv-nums"><span>Spent <b>${ugx(used)}</b></span><span>${f.status === "closed" ? `Returned <b>${ugx(back)}</b>` : `Left <b>${ugx(left)}</b>`}</span></div>
+    <div class="adv-flow"><div><span>Given</span><b>${ugx(f.amountUgx)}</b></div><i>→</i><div><span>Spent</span><b class="neg">${ugx(used)}</b></div><i>→</i><div><span>${f.status === "closed" ? "Returned" : "Left"}</span><b class="gold-t">${ugx(f.status === "closed" ? back : left)}</b></div></div>
     ${(f.usages || []).length ? `<div class="use-list">${f.usages.map((u) => useRow(u, tag)).join("")}</div>` : `<p class="muted" style="margin-top:8px">${f.status === "sent" ? (admin ? "Not confirmed yet" : "") : "No spending yet"}</p>`}
-    ${admin && f.status !== "closed" && f.status !== "sent" ? `<details class="settings" style="margin-top:10px"><summary>Close this advance</summary>
+    ${admin && f.status !== "closed" && f.status !== "sent" ? `<details class="settings" style="margin-top:10px"><summary>Close this float</summary>
       <form data-form="close-advance" data-id="${esc(f.id)}" style="margin-top:10px">
         <div class="grid g2">
           <label class="lbl">Cash returned (UGX)<input class="field" name="returnedUgx" inputmode="numeric" value="${left}" /></label>
           <label class="lbl">Returned by<select class="field" name="method">${["cash", "mtn_momo", "airtel_money", "bank"].map((k) => `<option value="${k}">${METHOD_LABEL[k]}</option>`).join("")}</select></label>
         </div>
         <div class="grid g2" style="margin-top:10px">${dateField("date", "Date closed")}<label class="lbl">Note<input class="field" name="note" placeholder="Optional" /></label></div>
-        <button class="btn btn-steel wide" style="margin-top:10px">Close advance</button>
+        <button class="btn btn-steel wide" style="margin-top:10px">Close float</button>
       </form></details>` : ""}
     ${admin && f.status !== "closed" && f.status !== "sent" && left > 0 ? `<details class="settings" style="margin-top:10px"><summary>Move what's left (${ugx(left)}) to someone else</summary>
       <form data-form="move-advance" data-id="${esc(f.id)}" style="margin-top:10px">
@@ -3187,11 +3425,11 @@ function advanceCard(f, admin) {
         <label class="lbl" style="margin-top:10px">What for <span class="muted">(optional)</span><input class="field" name="note" placeholder="e.g. Diesel for Busia trip" /></label>
         <button class="btn btn-primary wide" style="margin-top:10px">Move ${ugx(left)}</button>
       </form></details>` : ""}
-    ${f.movedFrom ? `<p class="muted" style="margin-top:8px">Moved from ${esc((recipientOf((DATA.disbursements || []).find((x) => x.id === f.movedFrom) || {}) || {}).name || "another advance")}</p>` : ""}
+    ${f.movedFrom ? `<p class="muted" style="margin-top:8px">Moved from ${esc((recipientOf((DATA.disbursements || []).find((x) => x.id === f.movedFrom) || {}) || {}).name || "another float")}</p>` : ""}
     ${f.status === "closed" ? `<p class="muted" style="margin-top:8px">Closed ${fmtDay(f.closedAt)}${f.closeNote ? " · " + esc(f.closeNote) : ""}</p>` : ""}
   </section>`;
 }
-// ---- Money › Advances: every advance, who has it and how it was spent ----
+// ---- Money › Advances: every float, who has it and how it was spent ----
 function viewAllAdvances() {
   const per = sessionStorage.getItem("advPer") || "month", biz = sessionStorage.getItem("advBiz") || "", st = sessionStorage.getItem("advSt") || "open", who = sessionStorage.getItem("advWho") || "";
   const [from, to, plabel] = periodRange(per);
@@ -3216,12 +3454,12 @@ function viewAllAdvances() {
   const card = ({ f, p, used, left }) => {
     const pct = f.amountUgx ? Math.min(100, Math.round((used / f.amountUgx) * 100)) : 0;
     const state = f.status === "sent" ? ["gold", "Not confirmed"] : f.status === "closed" ? ["green", "Closed"] : left > 0 ? ["blue", ugx(left) + " left"] : ["green", "All spent"];
-    const head = `<span class="avatar sm">${esc(((p && p.name) || "?").charAt(0).toUpperCase())}</span><span class="adv-h"><b>${esc(p ? p.name : "—")}</b><span class="muted">${esc(catLabel(f.tag, f.activity) || "Advance")} · ${esc(BIZ_LABEL[f.tag] || "")} · ${fmtDay(f.date)}</span><span class="adv-mini"><i style="width:${pct}%"></i></span></span><span class="adv-r"><b>${ugx(f.amountUgx)}</b><span class="badge ${state[0]}">${state[1]}</span></span>`;
+    const head = `<span class="avatar sm">${esc(((p && p.name) || "?").charAt(0).toUpperCase())}</span><span class="adv-h"><b>${esc(p ? p.name : "—")}</b><span class="muted">${esc(catLabel(f.tag, f.activity) || "Float")} · ${esc(BIZ_LABEL[f.tag] || "")} · ${fmtDay(f.date)}</span><span class="adv-mini"><i style="width:${pct}%"></i></span></span><span class="adv-r"><b>${ugx(f.amountUgx)}</b><span class="badge ${state[0]}">${state[1]}</span></span>`;
     return foldCard(head, advanceCard(f, true), f.status === "sent" ? "adv-fold waiting" : "adv-fold");
   };
   const peopleOpts = Object.entries(people).sort((x, y) => x[1].name.localeCompare(y[1].name));
   return `
-    <h1>Money · Advances</h1>
+    <h1>Money · Floats</h1>
     ${advRequestsBlock(biz)}
     <div class="flow-filters" style="margin-top:18px">
       <select class="field js-advf" data-k="advPer" aria-label="Period">${[["week", "This week"], ["month", "This month"], ["lastmonth", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["all", "All time"]].map(([k, l]) => `<option value="${k}" ${per === k ? "selected" : ""}>${l}</option>`).join("")}</select>
@@ -3238,9 +3476,9 @@ function viewAllAdvances() {
       <div class="card item"><b>What it was spent on</b>${cats.length ? cats.map(([k, v]) => `<div class="bar-line"><span>${esc(k)}</span><span class="bar"><i style="width:${Math.round((v / max) * 100)}%"></i></span><b>${ugx(v)}</b></div>`).join("") : `<p class="muted">Nothing spent ${esc(plabel.toLowerCase())}</p>`}</div>
       <div class="card item"><b>By person</b>${ppl.map(([k, e]) => `<button type="button" class="person-line" data-advset="advWho" data-v="${who === k ? "" : k}"><span><b>${esc(e.name)}</b><span class="muted"> · ${esc(e.biz)}</span></span><span class="pl-nums"><span>Holding <b>${ugx(e.held)}</b></span><span class="muted">Spent ${ugx(e.spent)}</span></span></button>`).join("") || `<p class="muted">No one</p>`}</div>
     </div>` : ""}
-    <div class="row keep" style="margin-top:16px;align-items:center"><h2 style="margin:0">${list.length} advance${list.length === 1 ? "" : "s"}</h2>
+    <div class="row keep" style="margin-top:16px;align-items:center"><h2 style="margin:0">${list.length} float${list.length === 1 ? "" : "s"}</h2>
       <div class="seg seg-sm">${[["open", "Open"], ["closed", "Closed"], ["all", "All"]].map(([k, l]) => `<button type="button" class="seg-btn ${st === k ? "on" : ""}" data-advset="advSt" data-v="${k}">${l}</button>`).join("")}</div></div>
-    <div class="list" style="margin-top:10px">${list.length ? list.map(card).join("") : `<div class="card item muted">${st === "open" ? "No open advances." : "None for " + esc(plabel.toLowerCase()) + "."}</div>`}</div>
+    <div class="list" style="margin-top:10px">${list.length ? list.map(card).join("") : `<div class="card item muted">${st === "open" ? "No open floats." : "None for " + esc(plabel.toLowerCase()) + "."}</div>`}</div>
 `;
 }
 // people a leftover can move to: drivers and the two managers (not the person holding it)
@@ -3376,7 +3614,7 @@ function viewFundsAdmin(tag) {
   const mKey = thisMonth(0);
   const spentMonth = floats.reduce((s, f) => s + (f.usages || []).filter((u) => String(u.date).startsWith(mKey)).reduce((a, u) => a + (u.amountUgx || 0), 0), 0);
   return `
-    <div class="row" style="align-items:center"><h1>${title} · Advances</h1></div>
+    <div class="row" style="align-items:center"><h1>${title} · Floats</h1></div>
     <h2 style="margin:16px 0 0">Requests ${reqs.length ? `<span class="attn-n big">${reqs.length}</span>` : ""}</h2>
     ${reqs.length ? reqs.map((r) => { const p = requesterOf(r); const link = linkText(r); const [tone, st] = reqStatusText(r); return `<details class="card req-card flash" ${reqs.length === 1 ? "open" : ""}>
       <summary>
@@ -3401,13 +3639,13 @@ function viewFundsAdmin(tag) {
       <summary><div class="avatar">＋</div><div style="flex:1"><b>Send money without a request</b></div></summary>
       <div style="margin-top:12px">${sendForm(tag)}</div>
     </details>
-    <div class="row keep" style="margin:22px 0 0;align-items:center"><h2 style="margin:0">Open advances</h2><a class="btn btn-ghost btn-sm js-alladv" data-biz="${tag}" href="#money-adv">All advances ›</a></div>
+    <div class="row keep" style="margin:22px 0 0;align-items:center"><h2 style="margin:0">Open floats</h2><a class="btn btn-ghost btn-sm js-alladv" data-biz="${tag}" href="#money-adv">All floats ›</a></div>
     <div class="grid g3" style="margin-top:10px">
       <div class="card kpi gold"><span class="eyebrow">Not yet spent</span><b>${ugx(withThem)}</b></div>
       <div class="card kpi"><span class="eyebrow">Waiting confirmation</span><b>${floats.filter((f) => f.status === "sent").length}</b></div>
       <div class="card kpi steel"><span class="eyebrow">Spent this month</span><b>${ugx(spentMonth)}</b></div>
     </div>
-    <div class="list" style="margin-top:10px">${floats.filter((f) => f.status !== "closed").length ? floats.filter((f) => f.status !== "closed").map((f) => advanceCard(f, true)).join("") : `<div class="card item muted">No open advances.</div>`}</div>`;
+    <div class="list" style="margin-top:10px">${floats.filter((f) => f.status !== "closed").length ? floats.filter((f) => f.status !== "closed").map((f) => advanceCard(f, true)).join("") : `<div class="card item muted">No open floats.</div>`}</div>`;
 }
 function bindAdvanceForms() {
   document.querySelectorAll("form[data-form=advance]").forEach((af) => {
@@ -3465,7 +3703,7 @@ function workerFundsView(tag) {
     ${(() => {
       const usable = open.filter((f) => advLeft(f).left > 0).sort((x, y) => String(x.date).localeCompare(String(y.date)));
       return `<details class="card team-row spend-card" style="margin-top:10px" ${usable.length ? "open" : ""}>
-      <summary><div class="avatar">＋</div><div style="flex:1"><b>Record spending</b><div class="muted">${usable.length ? "Advance · " + ugx(advAvailable(tag, false)) + " available" : "No advance available"}</div></div></summary>
+      <summary><div class="avatar">＋</div><div style="flex:1"><b>Record spending</b><div class="muted">${usable.length ? "Float · " + ugx(advAvailable(tag, false)) + " available" : "No float available"}</div></div></summary>
       <form data-form="worker-spend" style="margin-top:12px">
         <div class="grid g3">
           <label class="lbl">What<select class="field js-use-cat" name="category" data-fuel="${fuelKey}">${FUND_FOR[tag].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
@@ -3511,19 +3749,19 @@ function workerFundsView(tag) {
     </div>
 `;
 }
-function driverAdvanceView() { return `<h1>Advance</h1>${workerFundsView("trucking")}`; }
+function driverAdvanceView() { return `<h1>Float</h1>${workerFundsView("trucking")}`; }
 function viewCaneSpend() {
   if (DATA.me.role === "admin") return viewFundsAdmin("sugarcane");
-  return `<h1>Cane</h1>${caneTabs("cane-spend")}<h2 style="margin:16px 0 0">Advances</h2>${workerFundsView("sugarcane")}`;
+  return `<h1>Cane</h1>${caneTabs("cane-spend")}<h2 style="margin:16px 0 0">Floats</h2>${workerFundsView("sugarcane")}`;
 }
 function viewCaneAsk() { return viewCaneSpend(); }
 function viewPassionSpend() {
   if (DATA.me.role === "admin") return viewFundsAdmin("passion");
-  return `<h1>Passion</h1>${farmTabs("passion-spend")}<h2 style="margin:16px 0 0">Advances</h2>${workerFundsView("passion")}`;
+  return `<h1>Passion</h1>${farmTabs("passion-spend")}<h2 style="margin:16px 0 0">Floats</h2>${workerFundsView("passion")}`;
 }
 function viewFleetSpend() { return viewFundsAdmin("trucking"); }
 // "Pay from" select for manager forms that cost money (paying a seller, farm work)
-// Paid from: advance on hand · spending already recorded from an advance (assign it, no new money) · new money
+// Paid from: float on hand · spending already recorded from a float (assign it, no new money) · new money
 function unassignedOf(u) { return u.blockId || u.caneBuyId || u.jobId ? 0 : Math.max(0, (Number(u.amountUgx) || 0) - (Number(u.assignedUgx) || 0)); }
 function paySource(tag, opts = {}) {
   const admin = DATA.me.role === "admin";
@@ -3535,8 +3773,8 @@ function paySource(tag, opts = {}) {
   const best = spent.find((x) => match(x.u.category)) ? "use:" + spent.find((x) => match(x.u.category)).f.id + ":" + spent.find((x) => match(x.u.category)).u.id : onHand.length ? "adv:" + onHand[0].id : spent.length ? "use:" + spent[0].f.id + ":" + spent[0].u.id : "";
   const o = (v, label, left) => `<option value="${esc(v)}" data-left="${left || 0}" ${v === best ? "selected" : ""}>${label}</option>`;
   return `<label class="lbl" style="margin-top:10px">Paid from<select class="field js-paysource" name="source">
-      ${spent.length ? `<optgroup label="Already spent from an advance — no new money">${spent.map(({ f, u, free }) => o("use:" + f.id + ":" + u.id, `${esc(catLabel(tag, u.category) || "Spending")} · ${fmtDay(u.date)}${admin && holder(f) ? " · " + esc(holder(f)) : ""} · ${ugx(free)} to assign`, free)).join("")}</optgroup>` : ""}
-      ${onHand.length ? `<optgroup label="Advance on hand">${onHand.map((f) => o("adv:" + f.id, `Advance ${fmtDay(f.date)}${admin && holder(f) ? " · " + esc(holder(f)) : ""} · ${ugx(advLeft(f).left)} left`, advLeft(f).left)).join("")}</optgroup>` : ""}
+      ${spent.length ? `<optgroup label="Already spent from a float — no new money">${spent.map(({ f, u, free }) => o("use:" + f.id + ":" + u.id, `${esc(catLabel(tag, u.category) || "Spending")} · ${fmtDay(u.date)}${admin && holder(f) ? " · " + esc(holder(f)) : ""} · ${ugx(free)} to assign`, free)).join("")}</optgroup>` : ""}
+      ${onHand.length ? `<optgroup label="Float on hand">${onHand.map((f) => o("adv:" + f.id, `Float ${fmtDay(f.date)}${admin && holder(f) ? " · " + esc(holder(f)) : ""} · ${ugx(advLeft(f).left)} left`, advLeft(f).left)).join("")}</optgroup>` : ""}
       ${o("", admin ? "Office pays now (new money out)" : "Cash on hand (new money out)")}
     </select></label>
     ${opts.noPayee ? "" : `<label class="lbl" style="margin-top:10px">Paid to<input class="field" name="payeeName" placeholder="e.g. 5 workers / supplier name" /></label>`}`;
@@ -3545,14 +3783,14 @@ function bindSrcSplit(root) {
   root.querySelectorAll("select.js-src").forEach((sel) => {
     const form = sel.closest("form"), amt = form && form.querySelector(".js-src-amt"), out = sel.closest("label").nextElementSibling;
     const calc = () => { if (!out || !out.classList.contains("js-src-split")) return; const opt = sel.selectedOptions[0], left = Number(opt && opt.dataset.left) || 0, a = Number(sel.dataset.need) || Number(String(amt ? amt.value : "").replace(/[^\d.]/g, "")) || 0;
-      out.textContent = !sel.value || !a || (sel.name === "paidBy" && !left) ? (sel.name === "paidBy" && sel.value === "client" ? "No cost to Conacrew" : sel.name === "paidBy" && sel.value === "office" ? "Recorded as office money" : "") : a <= left ? `${ugx(left - a)} advance left after this` : `${ugx(left)} from the advance · ${ugx(a - left)} own cash`; };
+      out.textContent = !sel.value || !a || (sel.name === "paidBy" && !left) ? (sel.name === "paidBy" && sel.value === "client" ? "No cost to Conacrew" : sel.name === "paidBy" && sel.value === "office" ? "Recorded as office money" : "") : a <= left ? `${ugx(left - a)} float left after this` : `${ugx(left)} from the float · ${ugx(a - left)} own cash`; };
     if (amt) amt.addEventListener("input", calc); sel.addEventListener("change", calc); calc();
   });
 }
 function openEditWork(id) {
   const w = (DATA.farmWorks || []).find((x) => x.id === id); if (!w) return;
   const blocks = (DATA.blocks || []).length ? DATA.blocks.map((b) => b.id) : ["B1", "B2", "B3", "B4"];
-  const mine = Number(w.fromAdvanceUgx) || (w.floatId && w.paidFrom !== "cash" ? Number(w.costUgx) || 0 : 0); // what this record already takes from the advance
+  const mine = Number(w.fromAdvanceUgx) || (w.floatId && w.paidFrom !== "cash" ? Number(w.costUgx) || 0 : 0); // what this record already takes from the float
   const avail = advAvailable("passion", true) + mine, fromAdv = w.paidFrom && w.paidFrom !== "cash";
   openSheet({ title: "Edit " + ({ harvest: "harvest", prune: "pruning", spray: "spraying", fertilize: "fertilizing", weed: "weeding" }[w.kind] || "work"), sub: "Block " + esc(w.blockId) + " · " + fmtDay(w.date),
     body: `<div class="grid g2">
@@ -3562,7 +3800,7 @@ function openEditWork(id) {
         ${w.kind === "harvest" ? `<label class="lbl">Kg picked<input class="field" name="kg" inputmode="decimal" value="${w.kg || ""}" /></label>` : `<label class="lbl">Note<input class="field" name="note" value="${esc(w.note || "")}" /></label>`}
       </div>
       <label class="lbl" style="margin-top:10px">Paid from<select class="field js-src" name="source">
-        ${avail > 0 ? `<option value="advance" data-left="${avail}" ${fromAdv || !w.costUgx ? "selected" : ""}>Advance · ${ugx(avail)} available</option>` : ""}
+        ${avail > 0 ? `<option value="advance" data-left="${avail}" ${fromAdv || !w.costUgx ? "selected" : ""}>Float · ${ugx(avail)} available</option>` : ""}
         <option value="" data-left="0" ${!fromAdv && w.costUgx ? "selected" : ""}>${DATA.me.role === "admin" ? "Office pays now" : "Cash on hand"}</option>
       </select></label>
       <p class="muted js-src-split" style="margin:6px 0 0"></p>
@@ -3572,11 +3810,11 @@ function openEditWork(id) {
   const sh = document.getElementById("sheet");
   bindSrcSplit(sh);
   sh.querySelector(".js-delwork").onclick = async () => {
-    if (!confirm("Delete this record? Its cost goes back: advance money becomes available again and any cash line is removed.")) return;
+    if (!confirm("Delete this record? Its cost goes back: float money becomes available again and any cash line is removed.")) return;
     try { await act("delete_farm_work", { id: w.id }); closeSheet(); } catch (e) {}
   };
 }
-// One advance balance per business: "Advance · UGX X available" or cash on hand. The app works out which advance it comes from.
+// One float balance per business: "Float · UGX X available" or cash on hand. The app works out which float it comes from.
 function advAvailable(tag, useSpent) {
   const admin = DATA.me.role === "admin";
   return (DATA.disbursements || []).filter((f) => (f.tag || "trucking") === tag && f.status !== "closed").reduce((a, f) =>
@@ -3585,10 +3823,10 @@ function advAvailable(tag, useSpent) {
 function advSource(tag, opts = {}) {
   const avail = advAvailable(tag, opts.useSpent), admin = DATA.me.role === "admin";
   return `<label class="lbl" style="margin-top:10px">Paid from<select class="field js-src" name="source" ${opts.need ? `data-need="${opts.need}"` : ""}>
-      ${avail > 0 ? `<option value="advance" data-left="${avail}" selected>Advance · ${ugx(avail)} available</option>` : ""}
+      ${avail > 0 ? `<option value="advance" data-left="${avail}" selected>Float · ${ugx(avail)} available</option>` : ""}
       <option value="" data-left="0">${admin ? "Office pays now" : "Cash on hand"}</option>
     </select></label>
-    <p class="muted js-src-split" style="margin:6px 0 0">${avail > 0 ? "" : "No advance available"}</p>
+    <p class="muted js-src-split" style="margin:6px 0 0">${avail > 0 ? "" : "No float available"}</p>
     ${opts.noPayee ? "" : `<label class="lbl" style="margin-top:10px">Paid to<input class="field" name="payeeName" placeholder="e.g. 5 workers / supplier name" /></label>`}`;
 }
 function fundSelect(tag, noPayee, need) {
@@ -3710,7 +3948,7 @@ function taxCsv() {
 }
 function moneyNeedsYou() {
   const reqs = ["trucking", "sugarcane", "passion"].reduce((s, t) => s + openRequests(t).length, 0), unc = advUnconfirmed(), pay = payWaiting();
-  const items = [[reqs, "#money-adv", "gold", `${reqs} money request${reqs > 1 ? "s" : ""}`], [unc, "#money-adv", "blue", `${unc} advance${unc > 1 ? "s" : ""} not confirmed`], [pay, "#money-pay", "purple", `${pay} payment${pay > 1 ? "s" : ""} waiting`]].filter((x) => x[0]);
+  const items = [[reqs, "#money-adv", "gold", `${reqs} money request${reqs > 1 ? "s" : ""}`], [unc, "#money-adv", "blue", `${unc} float${unc > 1 ? "s" : ""} not confirmed`], [pay, "#money-pay", "purple", `${pay} payment${pay > 1 ? "s" : ""} waiting`]].filter((x) => x[0]);
   return items.length ? `<div class="needs-you">${items.map(([, h, tone, t]) => `<a class="ny-chip ${tone} js-nyadv" href="${h}">${t}<span class="chev">›</span></a>`).join("")}</div>` : "";
 }
 function viewSpend() {
@@ -3722,12 +3960,12 @@ function viewSpend() {
   const monthTotal = rows.filter((c) => String(c.date || "").startsWith(mKey)).reduce((s, c) => s + (c.amountUgx || 0), 0);
   const floats = DATA.disbursements || [];
   const pend = { trucking: openRequests("trucking").length, sugarcane: openRequests("sugarcane").length, passion: openRequests("passion").length };
-  const kind = (c) => (c.refId && floats.some((f) => f.id === c.refId)) ? "Advance · " : c.category === "employee_pay" ? "" : c.source === "cash_on_hand" ? "From cash on hand · " : "";
+  const kind = (c) => (c.refId && floats.some((f) => f.id === c.refId)) ? "Float · " : c.category === "employee_pay" ? "" : c.source === "cash_on_hand" ? "From cash on hand · " : "";
   return `
     <h1>Money</h1>
     ${moneyTabs("money-spend")}
     <div class="grid g3" style="margin-top:14px">
-      ${[["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([t, n]) => `<a class="card kpi req-link ${pend[t] ? "attn-kpi" : ""}" href="${FUND_HOME[t]}"><span class="eyebrow">${n} requests</span><b>${pend[t] ? pend[t] + " waiting" : "None"}</b><span class="muted">Open ${n} › Advances</span></a>`).join("")}
+      ${[["trucking", "Fleet"], ["sugarcane", "Cane"], ["passion", "Passion"]].map(([t, n]) => `<a class="card kpi req-link ${pend[t] ? "attn-kpi" : ""}" href="${FUND_HOME[t]}"><span class="eyebrow">${n} requests</span><b>${pend[t] ? pend[t] + " waiting" : "None"}</b><span class="muted">Open ${n} › Floats</span></a>`).join("")}
     </div>
     ${spendCard()}
     <div class="row" style="margin-top:22px;align-items:center">
@@ -4168,13 +4406,13 @@ function driverFuelView() {
       ${efrisFields()}
       <div class="thumbs use-preview"></div>
       ${(() => { const avail = advAvailable("trucking", false); return `<label class="lbl" style="margin-top:10px">Paid by<select class="field js-src" name="paidBy">
-        <option value="cash" data-left="${avail}" selected>Cash on hand${avail > 0 ? " · " + ugx(avail) + " advance" : ""}</option>
+        <option value="cash" data-left="${avail}" selected>Cash on hand${avail > 0 ? " · " + ugx(avail) + " float" : ""}</option>
         <option value="office" data-left="0">Office</option>
         <option value="client" data-left="0">Client</option>
       </select></label><p class="muted js-src-split" style="margin:6px 0 0"></p>`; })()}
       <button class="btn btn-primary wide" style="margin-top:12px">Save fuel</button>
     </form>
-    ${logs.length ? `<p class="eyebrow" style="margin-top:16px">Recent fuel</p><div class="card" style="padding:4px 14px;margin-top:8px">${logs.map((l) => `<div class="pay-line"><div><b>${l.litres || 0} L · ${esc(l.station || "Station")}</b><div class="muted">${fmtDay(l.date)}${l.odometerKm ? " · " + Number(l.odometerKm).toLocaleString() + " km" : ""}${l.paidBy === "client" ? " · client fuel" : l.paidBy === "office" ? " · office paid" : l.floatId ? " · from advance" : l.notFromAdvance ? " · cash on hand" : ""}</div></div><b class="amt">${l.paidBy === "client" ? "Client" : ugx(l.amountUgx || 0)}</b></div>`).join("")}</div>` : ""}`;
+    ${logs.length ? `<p class="eyebrow" style="margin-top:16px">Recent fuel</p><div class="card" style="padding:4px 14px;margin-top:8px">${logs.map((l) => `<div class="pay-line"><div><b>${l.litres || 0} L · ${esc(l.station || "Station")}</b><div class="muted">${fmtDay(l.date)}${l.odometerKm ? " · " + Number(l.odometerKm).toLocaleString() + " km" : ""}${l.paidBy === "client" ? " · client fuel" : l.paidBy === "office" ? " · office paid" : l.floatId ? " · from float" : l.notFromAdvance ? " · cash on hand" : ""}</div></div><b class="amt">${l.paidBy === "client" ? "Client" : ugx(l.amountUgx || 0)}</b></div>`).join("")}</div>` : ""}`;
 }
 
 // ───────────── Admin payroll ─────────────
@@ -4443,6 +4681,7 @@ function viewPassionPay() {
 function bindMoney() {
   bindDocs();
   bindFlow();
+  bindMoney2();
   bindTasks();
   bindSpend();
   bindTeam();
@@ -4756,7 +4995,7 @@ function bind() {
       } else if (kind === "pricing") {
         await act("save_pricing", fd);
       } else if (kind === "move-advance") {
-        if (!confirm("Move this leftover? It becomes a new advance for that person, who confirms receiving it.")) return;
+        if (!confirm("Move this leftover? It becomes a new float for that person, who confirms receiving it.")) return;
         await act("move_advance", { id: form.dataset.id, to: fd.to, note: fd.note });
       } else if (kind === "payinfo") {
         await act("save_payinfo", fd);
@@ -4843,11 +5082,14 @@ function bind() {
       } else if (kind === "sale") {
         try { await act("create_fruit_sale", fd); }
         catch (err) { alert(err.message); return; }
+      } else if (kind === "capital") {
+        try { await act("save_capital", fd); } catch (err) { alert(err.message); return; }
+        toast("Capital saved");
       } else if (kind === "cash") {
         await act("add_cash", fd);
       } else if (kind === "spend") {
         if (fd.tag === "trucking" && fd.activity === "to_driver") {
-          if (!fd.driverId) { alert("Choose the driver receiving the advance"); return; }
+          if (!fd.driverId) { alert("Choose the driver receiving the float"); return; }
           try { await act("send_float", { ...fd, toDriverId: fd.driverId }); } catch (err) { return; }
         } else {
           try { await act("add_cash", { ...fd, direction: "out", category: fd.activity }); } catch (err) { return; }
@@ -4894,7 +5136,7 @@ function bind() {
         const photo = file ? await compressPhoto(file) : "";
         const a = Number(String(fd.amountUgx).replace(/[^\d.]/g, "")) || 0, opt = form.querySelector(".js-src").selectedOptions[0], left = fd.source ? Number(opt && opt.dataset.left) || 0 : 0;
         try { await act("log_spend", { ...fd, photo }); } catch (err) { return; }
-        toast(!fd.source ? "Saved · cash on hand" : a > left ? `${ugx(left)} from the advance · ${ugx(a - left)} cash on hand` : `Saved · ${ugx(left - a)} left on the advance`);
+        toast(!fd.source ? "Saved · cash on hand" : a > left ? `${ugx(left)} from the float · ${ugx(a - left)} cash on hand` : `Saved · ${ugx(left - a)} left on the float`);
       } else if (kind === "float-use") {
         const file = form.querySelector(".use-photo") && form.querySelector(".use-photo").files[0];
         let photo = "";

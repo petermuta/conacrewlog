@@ -119,7 +119,7 @@ function storeBook(db) {
 }
 const hasAdmin = (db) => !!(db && (db.users || []).some((u) => u.role === "admin"));
 function pruneFleet(db) {
-  ["users", "trucks", "drivers", "jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "contractors", "sellers", "mills", "caneBuys", "caneSales", "caneExpenses", "blocks", "farmWorks", "fruitSales", "cash", "payStubs", "notifications", "moneyRequests", "receivables", "harvests", "fieldLogs", "farmInputs", "docs", "bookings", "parts"].forEach((k) => {
+  ["users", "trucks", "drivers", "jobs", "jobsTrash", "fuelLogs", "fleetTasks", "inspections", "issues", "services", "disbursements", "contractors", "sellers", "mills", "caneBuys", "caneSales", "caneExpenses", "blocks", "farmWorks", "fruitSales", "cash", "payStubs", "notifications", "moneyRequests", "receivables", "harvests", "fieldLogs", "farmInputs", "docs", "bookings", "parts", "capital"].forEach((k) => {
     if (!db[k]) db[k] = [];
   });
   if (!db.blocks.length) {
@@ -372,6 +372,7 @@ function scopedDb(db, user) {
       docs: db.docs || [],
       bookings: db.bookings || [],
       parts: db.parts || [],
+      capital: db.capital || [],
       payInfo: db.payInfo || null,
       pricing: db.pricing || null,
       taxInfo: { ...TAX_START, ...(db.taxInfo || {}) },
@@ -498,7 +499,7 @@ function scopedDb(db, user) {
 
 function roleAllowedAction(role, action) {
   const map = {
-    admin: ["review_inspection", "repair_issue", "unshop_issue", "tidy_parts", "set_client_fuel", "make_per_trip", "edit_repair", "add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
+    admin: ["review_inspection", "repair_issue", "unshop_issue", "tidy_parts", "set_client_fuel", "make_per_trip", "edit_repair", "save_capital", "delete_capital", "add_income", "set_invest", "add_trip", "undo_trip", "remove_trip", "approve_trip", "end_trips", "update_farm_work", "delete_farm_work", "update_pay", "delete_pay", "update_cane_sale", "remove_driver", "save_taxinfo", "save_client_tax", "set_efris", "save_load_costs", "quote_booking", "decline_booking", "note_booking", "booking_payment", "trash_booking", "restore_booking", "purge_booking", "seen_doc", "save_pricing", "save_payinfo", "trust_device", "untrust_device", "save_doc", "delete_doc", "review_fleet_task", "approve_device", "reject_device", "remove_device", "unlock_login", "finalize_request", "close_advance", "move_advance", "decline_advance", "save_login", "pay_worker", "save_pay_profile", "pay_stub", "create_job", "update_job", "add_contractor", "save_truck", "save_driver", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job", "restore_job", "purge_job", "log_fuel", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money", "decide_request", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense", "add_cash", "record_receipt", "send_float", "create_fleet_task", "update_fleet_task", "log_service", "report_issue", "reply_issue"],
     driver: ["add_trip", "undo_trip", "remove_trip", "end_trips", "log_spend", "read_note", "save_doc", "delete_doc", "request_advance", "submit_inspect", "request_pay", "update_job", "log_fuel", "ack_fleet_task", "complete_fleet_task", "report_issue", "ack_float", "log_float_use", "log_trip_result", "create_job", "add_contractor", "mark_job_paid", "log_scale", "log_invoice", "add_cargo_type", "trash_job"],
     cane_manager: ["log_spend", "update_cane_sale", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "create_cane_buy", "update_cane_buy", "record_mill", "pay_seller", "create_cane_sale", "log_cane_expense", "request_money"],
     passion_manager: ["update_farm_work", "delete_farm_work", "log_spend", "save_doc", "delete_doc", "request_advance", "ack_float", "log_float_use", "log_direct_spend", "request_pay", "log_harvest", "add_field_log", "log_farm_work", "create_fruit_sale", "record_sale_pay", "record_sale_expense"],
@@ -512,11 +513,11 @@ function ownsFloat(fl, user) {
   if (user.role === "driver") return fl.toDriverId === user.driverId;
   return fl.toUserId === user.id && fl.tag === TAG_OF_ROLE[user.role];
 }
-// Manager spending: from an advance (breakdown only) or from cash on hand such as sale money (counted as money out).
+// Manager spending: from a float (breakdown only) or from cash on hand such as sale money (counted as money out).
 function spendFromAdvanceOrCash(db, user, body, tag, refs) {
   if (body.floatId) {
     const fl = (db.disbursements || []).find((x) => x.id === body.floatId);
-    if (!fl || !ownsFloat(fl, user)) throw new Error("Advance not found");
+    if (!fl || !ownsFloat(fl, user)) throw new Error("Float not found");
     return { use: addFloatUse(db, fl, body, user) };
   }
   const amount = Number(body.amountUgx) || 0;
@@ -528,8 +529,8 @@ function spendFromAdvanceOrCash(db, user, body, tag, refs) {
 }
 
 // Where a work cost is paid from. Three choices, and each shilling is counted once:
-//   "adv:<floatId>"            advance still on hand  -> becomes advance spending (no new money out)
-//   "use:<floatId>:<usageId>"  spending already recorded from an advance but not yet given to a block/buy/load -> assigned only
+//   "adv:<floatId>"            float still on hand  -> becomes float spending (no new money out)
+//   "use:<floatId>:<usageId>"  spending already recorded from a float but not yet given to a block/buy/load -> assigned only
 //   ""                         cash on hand / office  -> new money out
 function unassignedOf(u) { return u.blockId || u.caneBuyId || u.jobId ? 0 : Math.max(0, (Number(u.amountUgx) || 0) - (Number(u.assignedUgx) || 0)); }
 function payFromSource(db, user, body, tag, amount, link, spend) {
@@ -537,7 +538,7 @@ function payFromSource(db, user, body, tag, amount, link, spend) {
   if (src.startsWith("use:")) {
     const [, fid, uidv] = src.split(":");
     const fl = (db.disbursements || []).find((x) => x.id === fid);
-    if (!fl || !ownsFloat(fl, user) || (fl.tag || "trucking") !== tag) throw new Error("Advance not found");
+    if (!fl || !ownsFloat(fl, user) || (fl.tag || "trucking") !== tag) throw new Error("Float not found");
     const u = (fl.usages || []).find((x) => x.id === uidv);
     if (!u) throw new Error("Spending not found");
     const free = unassignedOf(u);
@@ -548,7 +549,7 @@ function payFromSource(db, user, body, tag, amount, link, spend) {
   }
   if (src.startsWith("adv:")) {
     const fl = (db.disbursements || []).find((x) => x.id === src.slice(4));
-    if (!fl || !ownsFloat(fl, user) || (fl.tag || "trucking") !== tag) throw new Error("Advance not found");
+    if (!fl || !ownsFloat(fl, user) || (fl.tag || "trucking") !== tag) throw new Error("Float not found");
     if (fl.status === "sent" && user.role !== "admin") { fl.status = "received"; fl.receivedAt = todayStr(); }
     const use = addFloatUse(db, fl, { ...spend, amountUgx: amount, ...link }, user);
     return { floatId: fl.id, usageId: use && use.id };
@@ -556,8 +557,8 @@ function payFromSource(db, user, body, tag, amount, link, spend) {
   const done = spendFromAdvanceOrCash(db, user, { ...spend, floatId: "", amountUgx: amount }, tag, link);
   return { cashId: done.cash && done.cash.id };
 }
-// Draw a cost from the advance balance: first advance money already spent but not yet given to a block/buy/load
-// (only when useSpent), then money still on hand (oldest advance first). Returns what came from the advance;
+// Draw a cost from the float balance: first float money already spent but not yet given to a block/buy/load
+// (only when useSpent), then money still on hand (oldest float first). Returns what came from the float;
 // the caller pays any rest from cash on hand. Each shilling is used once.
 function advancePool(db, user, tag) { return (db.disbursements || []).filter((f) => (f.tag || "trucking") === tag && f.status !== "closed" && ownsFloat(f, user)); }
 function advanceAvailable(db, user, tag, useSpent) {
@@ -593,21 +594,21 @@ function drawAdvance(db, user, tag, amount, o) {
   }
   return { fromAdvance: got, rest: need, parts };
 }
-// Passion work cost: from the advance balance (spent-not-assigned first, then on hand) or cash on hand
+// Passion work cost: from the float balance (spent-not-assigned first, then on hand) or cash on hand
 function payWorkCost(db, user, rec, body) {
   Object.assign(rec, { fromAdvanceUgx: 0, fromCashUgx: 0, advParts: [], cashId: "", floatId: "", usageId: "", paidFrom: "" });
   if (!(rec.costUgx > 0)) return;
   const spend = { category: rec.kind, payeeName: body.payeeName || "Farm workers", method: body.method || "cash", payeePhone: body.payeePhone || "", note: (rec.note || rec.kind) + " · Block " + (rec.blockId || ""), photo: body.photo || "", date: rec.date };
   if (body.source === "advance") {
     const d = drawAdvance(db, user, "passion", rec.costUgx, { useSpent: true, cat: rec.kind, link: { blockId: rec.blockId, workId: rec.id }, spend });
-    const cash = d.rest > 0 ? spendFromAdvanceOrCash(db, user, { ...spend, floatId: "", amountUgx: d.rest, note: spend.note + " · advance ran out" }, "passion", { blockId: rec.blockId, refId: rec.id }).cash : null;
+    const cash = d.rest > 0 ? spendFromAdvanceOrCash(db, user, { ...spend, floatId: "", amountUgx: d.rest, note: spend.note + " · float ran out" }, "passion", { blockId: rec.blockId, refId: rec.id }).cash : null;
     Object.assign(rec, { fromAdvanceUgx: d.fromAdvance, fromCashUgx: d.rest, advParts: d.parts, cashId: cash ? cash.id : "", paidFrom: d.rest ? (d.fromAdvance ? "mixed" : "cash") : "advance" });
   } else {
     const how = payFromSource(db, user, body, "passion", rec.costUgx, { blockId: rec.blockId, refId: rec.id }, spend);
     Object.assign(rec, { floatId: how.floatId || "", usageId: how.usageId || "", cashId: how.cashId || "", paidFrom: how.assigned || how.floatId ? "advance" : "cash" });
   }
 }
-// Put back whatever a work record took: advance spending is released, assignments undone, cash lines removed
+// Put back whatever a work record took: float spending is released, assignments undone, cash lines removed
 function undoWorkCost(db, rec) {
   const fls = db.disbursements || [];
   const resettle = (fl) => { const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0); if (fl.status === "spent" && used < fl.amountUgx) fl.status = "received"; };
@@ -623,16 +624,16 @@ function undoWorkCost(db, rec) {
   }
   db.cash = (db.cash || []).filter((c) => !(c.id && c.id === rec.cashId) && !(c.refId === rec.id && c.direction === "out"));
 }
-// Spending recorded against an advance. It explains where the advance went; the money
-// already left the business when the advance was sent, so no new cash line is added.
+// Spending recorded against a float. It explains where the float went; the money
+// already left the business when the float was sent, so no new cash line is added.
 function addFloatUse(db, fl, body, user) {
-  if (fl.status === "sent") throw new Error("Confirm you received this advance first");
-  if (fl.status === "closed") throw new Error("This advance is closed");
+  if (fl.status === "sent") throw new Error("Confirm you received this float first");
+  if (fl.status === "closed") throw new Error("This float is closed");
   const amount = Number(body.amountUgx) || 0;
   if (amount <= 0) throw new Error("Enter the amount spent");
   const usedSoFar = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
   const left = fl.amountUgx - usedSoFar - (fl.returnedUgx || 0) - (fl.movedUgx || 0);
-  if (amount > left + 0.5) throw new Error("Only UGX " + left.toLocaleString("en-UG") + " left on this advance");
+  if (amount > left + 0.5) throw new Error("Only UGX " + left.toLocaleString("en-UG") + " left on this float");
   const payee = payeeFrom({ ...body, method: body.method || "cash" }, true);
   const use = {
     id: uid("fu"), amountUgx: amount, category: body.category || "other",
@@ -1272,7 +1273,7 @@ function applyAction(db, user, body) {
     }
   }
 
-  // driver fuel: Paid by cash on hand (advance first, then his own cash), office, or client
+  // driver fuel: Paid by cash on hand (float first, then his own cash), office, or client
   if (action === "log_fuel" && user.role === "driver" && body.paidBy) {
     if (body.paidBy === "cash") { body.source = advanceAvailable(db, user, "trucking", false) > 0 ? "advance" : ""; }
     else {
@@ -1290,13 +1291,13 @@ function applyAction(db, user, body) {
     const amount = Number(body.amountUgx) || 0;
     if (amount <= 0) throw new Error("Enter the amount");
     const d = drawAdvance(db, user, "trucking", amount, { useSpent: false, link: {}, spend: { ...body, category: "diesel", payeeName: body.station || "Fuel station" } });
-    if (d.rest > 0) { // advance ran out: the rest is the driver's own money, flagged like any fuel not from an advance
+    if (d.rest > 0) { // float ran out: the rest is the driver's own money, flagged like any fuel not from a float
       const share = d.rest / amount;
       db.fuelLogs.unshift({ id: uid("f"), truckId: body.truckId, driverId: user.driverId, litres: Math.round((Number(body.litres) || 0) * share * 10) / 10, amountUgx: d.rest, odometerKm: Number(body.odometerKm) || 0, station: body.station || "", date: dayOf(body), photo: body.photo || "", notFromAdvance: true, ...efrisFrom(body) });
     }
   } else if (action === "log_fuel" && user.role === "driver" && body.floatId) {
     const fl = (db.disbursements || []).find((x) => x.id === body.floatId && x.toDriverId === user.driverId);
-    if (!fl) throw new Error("Advance not found");
+    if (!fl) throw new Error("Float not found");
     addFloatUse(db, fl, { ...body, category: "diesel", payeeName: body.station || "Fuel station" }, user);
   } else if (action === "log_fuel") {
     if (user.role === "driver" && !(Number(body.amountUgx) > 0)) throw new Error("Enter the amount");
@@ -1413,8 +1414,8 @@ function applyAction(db, user, body) {
     if (done.cash) done.cash.note = "Paid seller · " + (seller ? seller.name : buy.id);
   }
 
-  // One way for staff to record spending: from an advance on hand first, anything above what is left from cash on hand.
-  // The advance part only explains the advance (no new money out); the cash part is new money out. Never both for the same shilling.
+  // One way for staff to record spending: from a float on hand first, anything above what is left from cash on hand.
+  // The float part only explains the float (no new money out); the cash part is new money out. Never both for the same shilling.
   if (action === "log_spend") {
     const tag = TAG_OF_ROLE[user.role];
     if (!tag) throw new Error("Not available");
@@ -1426,7 +1427,7 @@ function applyAction(db, user, body) {
       fromAdv = drawAdvance(db, user, tag, amount, { useSpent: false, link: refs, spend: { ...body, note: body.note || "" } }).fromAdvance;
     } else if (body.floatId) {
       const fl = (db.disbursements || []).find((x) => x.id === body.floatId);
-      if (!fl || !ownsFloat(fl, user)) throw new Error("Advance not found");
+      if (!fl || !ownsFloat(fl, user)) throw new Error("Float not found");
       if (fl.status === "sent") { fl.status = "received"; fl.receivedAt = todayStr(); } // spending it confirms it arrived
       const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
       const left = Math.max(0, fl.amountUgx - used - (fl.returnedUgx || 0) - (fl.movedUgx || 0));
@@ -1434,7 +1435,7 @@ function applyAction(db, user, body) {
       if (fromAdv > 0) addFloatUse(db, fl, { ...body, amountUgx: fromAdv, note: [body.note, fromAdv < amount ? "part of UGX " + amount.toLocaleString("en-UG") : ""].filter(Boolean).join(" · ") }, user);
     }
     const rest = amount - fromAdv;
-    if (rest > 0) spendFromAdvanceOrCash(db, user, { ...body, floatId: "", amountUgx: rest, note: [body.note, fromAdv ? "rest of UGX " + amount.toLocaleString("en-UG") + " (advance ran out)" : ""].filter(Boolean).join(" · ") }, tag, refs);
+    if (rest > 0) spendFromAdvanceOrCash(db, user, { ...body, floatId: "", amountUgx: rest, note: [body.note, fromAdv ? "rest of UGX " + amount.toLocaleString("en-UG") + " (float ran out)" : ""].filter(Boolean).join(" · ") }, tag, refs);
     return { fromAdvance: fromAdv, fromCash: rest };
   }
   // Trip-counting loads (e.g. murram): one load for the day, the driver taps +1 per trip
@@ -2125,7 +2126,7 @@ function applyAction(db, user, body) {
       old.delete(rec.id); return rec.id;
     });
     db.parts = db.parts.filter((p) => !old.has(p.id)); // parts taken off the repair
-    // money: the advance part stays, the rest is the cash row
+    // money: the float part stays, the rest is the cash row
     const fromAdv = Math.min(r.fromAdvanceUgx || 0, cost), rest = cost - fromAdv;
     let row = r.cashId && (db.cash || []).find((c) => c.id === r.cashId);
     const note = "Repair · " + issue.title + (truck ? " · " + truck.plate : "");
@@ -2133,6 +2134,7 @@ function applyAction(db, user, body) {
       if (row) Object.assign(row, { amountUgx: rest, date, payeeName: garage || row.payeeName, note });
       else { row = { id: uid("k"), date, direction: "out", amountUgx: rest, tag: "trucking", method: "cash", category: "workshop", note, truckId: issue.truckId, payeeName: garage || "Workshop", refId: issue.id }; db.cash.unshift(row); }
     } else if (row) { db.cash = db.cash.filter((c) => c !== row); row = null; }
+    r.invest = body.invest === "1"; if (row) row.invest = r.invest;
     Object.assign(r, { costUgx: cost, cashId: row ? row.id : "", garage, note: String(body.note || "").trim(), date, partIds: ids, labourUgx: 0, editedBy: user.name, editedAt: todayStr() });
     return;
   }
@@ -2143,6 +2145,33 @@ function applyAction(db, user, body) {
     db.parts = (db.parts || []).filter((p) => keep.has(p.id));
     db.cash = (db.cash || []).filter((c) => !(c.category === "workshop" && c.refId && c.refId in cashKeep && c.id !== cashKeep[c.refId]));
     return { removed: before - db.parts.length };
+  }
+  // Capital: money the owner puts into a business (the base for return on investment). Not income.
+  if (action === "save_capital") {
+    if (!db.capital) db.capital = [];
+    const amt = Math.max(0, Math.round(Number(String(body.amountUgx || "").replace(/[^\d.]/g, "")) || 0));
+    if (!amt) throw new Error("Enter the amount");
+    const tag = ["trucking", "sugarcane", "passion", "overhead"].includes(body.tag) ? body.tag : "trucking";
+    const v = { date: /^\d{4}-\d{2}-\d{2}$/.test(body.date || "") ? body.date : todayStr(), amountUgx: amt, tag, kind: body.kind === "asset" ? "asset" : "cash", method: body.method || "bank", note: String(body.note || "").trim().slice(0, 200) };
+    const old = body.id && db.capital.find((c) => c.id === body.id);
+    if (old) Object.assign(old, v, { editedBy: user.name });
+    else db.capital.unshift({ id: uid("cap"), ...v, by: user.name, byId: user.id, at: new Date().toISOString() });
+    return;
+  }
+  if (action === "delete_capital") { db.capital = (db.capital || []).filter((c) => c.id !== body.id); return; }
+  // Money in that isn't a load, cane or fruit sale (truck hire, scrap, refund…)
+  if (action === "add_income") {
+    const amt = Math.max(0, Math.round(Number(String(body.amountUgx || "").replace(/[^\d.]/g, "")) || 0));
+    if (!amt) throw new Error("Enter the amount");
+    const tag = ["trucking", "sugarcane", "passion", "overhead"].includes(body.tag) ? body.tag : "overhead";
+    const note = String(body.note || "").trim().slice(0, 200); if (!note) throw new Error("Say what the money is for");
+    db.cash.unshift({ id: uid("k"), date: /^\d{4}-\d{2}-\d{2}$/.test(body.date || "") ? body.date : todayStr(), direction: "in", amountUgx: amt, tag, category: "other_income", method: body.method || "cash", note, payeeName: String(body.from || "").trim().slice(0, 80), truckId: body.truckId || "" });
+    return;
+  }
+  // a spending line can be marked as an investment (lasts for years) instead of a running cost
+  if (action === "set_invest") {
+    const c = (db.cash || []).find((x) => x.id === body.id); if (!c) throw new Error("Not found");
+    c.invest = body.on === "1" || body.on === true; return;
   }
   if (action === "make_per_trip") { // an existing load becomes a per-trip load
     const job = db.jobs.find((j) => j.id === body.id); if (!job) throw new Error("Load not found");
@@ -2181,7 +2210,7 @@ function applyAction(db, user, body) {
     const cost = rows.length || labour ? rows.reduce((t, x) => t + x.totalUgx, 0) + labour : num(body.costUgx);
     if (!body.garage && rows.length) body.garage = [...new Set(rows.map((x) => x.fixedBy).filter(Boolean))].join(", ");
     const date = dayOf(body), truck = db.trucks.find((t) => t.id === issue.truckId);
-    const spend = { category: "workshop", payeeName: body.garage || "Workshop", method: body.method || "cash", note: "Repair · " + issue.title + (truck ? " · " + truck.plate : ""), date, truckId: issue.truckId };
+    const spend = { category: "workshop", payeeName: body.garage || "Workshop", method: body.method || "cash", note: "Repair · " + issue.title + (truck ? " · " + truck.plate : ""), date, truckId: issue.truckId , invest: body.invest === "1" };
     let fromAdv = 0, cashId = "";
     if (cost > 0) {
       if (body.source === "advance") fromAdv = drawAdvance(db, user, "trucking", cost, { useSpent: false, link: {}, spend }).fromAdvance;
@@ -2191,7 +2220,8 @@ function applyAction(db, user, body) {
     if (!db.parts) db.parts = [];
     const fault = String(issue.title || "").replace(/ · (Not OK|Needs attention)$/, "");
     const partIds = rows.map((x) => { const rec = { id: uid("pt"), ...x, date, truckId: issue.truckId, issueId: issue.id, fault, garage: body.garage || "", by: user.name, createdAt: new Date().toISOString() }; if (!rec.photo) delete rec.photo; db.parts.unshift(rec); return rec.id; });
-    issue.repair = { costUgx: cost, fromAdvanceUgx: fromAdv, cashId, garage: body.garage || "", note: body.note || "", date, by: user.name, labourUgx: labour, partIds };
+    issue.repair = { costUgx: cost, fromAdvanceUgx: fromAdv, cashId, garage: body.garage || "", note: body.note || "", date, by: user.name, labourUgx: labour, partIds, invest: body.invest === "1" };
+    if (issue.repair.invest && cashId) { const cr = db.cash.find((c) => c.id === cashId); if (cr) cr.invest = true; }
     // no driver notice: the office tells the driver another way
     return;
   }
@@ -2480,14 +2510,14 @@ function applyAction(db, user, body) {
     db.disbursements.unshift(fl);
     db.cash.unshift({
       id: uid("k"), date: fl.date, direction: "out", amountUgx: amount, tag,
-      category: fl.activity, note: "Advance to " + drv.name + (fl.note ? " · " + fl.note : ""),
+      category: fl.activity, note: "Float to " + drv.name + (fl.note ? " · " + fl.note : ""),
       truckId: fl.truckId, jobId: fl.jobId, caneBuyId: fl.caneBuyId, blockId: fl.blockId, driverId: fl.toDriverId, userId: fl.toUserId, refId: fl.id,
       payeeName: fl.payeeName, method: fl.method, payeePhone: fl.payeePhone, bankName: fl.bankName, bankAccount: fl.bankAccount, reference: fl.reference,
     });
     const how = (METHOD_NAMES[method] || method) + (fl.payeePhone ? " " + fl.payeePhone : "");
     if (tag === "trucking") db.notifications.unshift({
       id: uid("n"), toDriverId: drv.id, truckId: fl.truckId, type: "float", title: "Money sent",
-      text: "Advance UGX " + amount.toLocaleString("en-UG") + " sent by " + how + (req ? (req.status === "partial" ? " (part of your UGX " + asked.toLocaleString("en-UG") + " request, rest to follow)" : req.status === "final" ? " (final for your UGX " + asked.toLocaleString("en-UG") + " request)" : "") : "") + ". Confirm it on Advance.",
+      text: "Float UGX " + amount.toLocaleString("en-UG") + " sent by " + how + (req ? (req.status === "partial" ? " (part of your UGX " + asked.toLocaleString("en-UG") + " request, rest to follow)" : req.status === "final" ? " (final for your UGX " + asked.toLocaleString("en-UG") + " request)" : "") : "") + ". Confirm it on Float.",
       body: "UGX " + amount.toLocaleString("en-UG"), status: "unread", createdAt: new Date().toISOString(),
     });
   }
@@ -2538,7 +2568,7 @@ function applyAction(db, user, body) {
 
   if (action === "close_advance") {
     const fl = (db.disbursements || []).find((x) => x.id === body.id);
-    if (!fl) throw new Error("Advance not found");
+    if (!fl) throw new Error("Float not found");
     if (fl.status === "closed") throw new Error("Already closed");
     const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
     const left = Math.max(0, fl.amountUgx - used - (fl.movedUgx || 0));
@@ -2552,15 +2582,15 @@ function applyAction(db, user, body) {
     fl.closeNote = String(body.note || "").trim();
     if (back > 0) {
       const who = db.drivers.find((d) => d.id === fl.toDriverId) || (db.users || []).find((u) => u.id === fl.toUserId);
-      db.cash.unshift({ id: uid("k"), date: fl.closedAt, direction: "in", amountUgx: back, tag: fl.tag || "trucking", category: "advance_return", method: body.method || "cash", note: "Advance balance returned · " + (who ? who.name : ""), refId: fl.id, driverId: fl.toDriverId || "", userId: fl.toUserId || "", truckId: fl.truckId || "" });
+      db.cash.unshift({ id: uid("k"), date: fl.closedAt, direction: "in", amountUgx: back, tag: fl.tag || "trucking", category: "advance_return", method: body.method || "cash", note: "Float balance returned · " + (who ? who.name : ""), refId: fl.id, driverId: fl.toDriverId || "", userId: fl.toUserId || "", truckId: fl.truckId || "" });
     }
   }
 
-  // the leftover of one advance goes to another team member: no new money leaves the company
+  // the leftover of one float goes to another team member: no new money leaves the company
   if (action === "move_advance") {
     const fl = (db.disbursements || []).find((x) => x.id === body.id);
-    if (!fl) throw new Error("Advance not found");
-    if (fl.status === "closed") throw new Error("This advance is closed");
+    if (!fl) throw new Error("Float not found");
+    if (fl.status === "closed") throw new Error("This float is closed");
     if (fl.status === "sent") throw new Error("Wait until it's confirmed as received");
     const used = (fl.usages || []).reduce((t, u) => t + (u.amountUgx || 0), 0);
     const left = Math.max(0, fl.amountUgx - used - (fl.returnedUgx || 0) - (fl.movedUgx || 0));
@@ -2571,11 +2601,11 @@ function applyAction(db, user, body) {
     if (!d && !u) throw new Error("Choose who gets it");
     const from = db.drivers.find((x) => x.id === fl.toDriverId) || (db.users || []).find((x) => x.id === fl.toUserId);
     const now = todayStr();
-    const nf = { id: uid("fl"), tag: d ? "trucking" : u.role === "cane_manager" ? "sugarcane" : "passion", toDriverId: d ? d.id : "", toUserId: u ? u.id : "", truckId: d ? d.assignedTruckId || "" : "", amountUgx: left, activity: fl.activity || "other", method: "moved", note: String(body.note || "").trim() || "Leftover from " + (from ? from.name : "an advance"), date: now, status: "sent", usages: [], movedFrom: fl.id, by: user.name };
+    const nf = { id: uid("fl"), tag: d ? "trucking" : u.role === "cane_manager" ? "sugarcane" : "passion", toDriverId: d ? d.id : "", toUserId: u ? u.id : "", truckId: d ? d.assignedTruckId || "" : "", amountUgx: left, activity: fl.activity || "other", method: "moved", note: String(body.note || "").trim() || "Leftover from " + (from ? from.name : "a float"), date: now, status: "sent", usages: [], movedFrom: fl.id, by: user.name };
     db.disbursements.unshift(nf);
     fl.movedUgx = (fl.movedUgx || 0) + left; fl.movedTo = nf.id;
     fl.status = "closed"; fl.closedAt = now; fl.closeNote = "Leftover " + left.toLocaleString("en-UG") + " moved to " + (d ? d.name : u.name);
-    if (d) db.notifications.unshift({ id: uid("n"), toDriverId: d.id, type: "float", title: "Money sent", text: "UGX " + left.toLocaleString("en-UG") + " from " + (from ? from.name + "'s" : "an") + " advance. Confirm you have it.", status: "unread", createdAt: new Date().toISOString() });
+    if (d) db.notifications.unshift({ id: uid("n"), toDriverId: d.id, type: "float", title: "Money sent", text: "UGX " + left.toLocaleString("en-UG") + " from " + (from ? from.name + "'s" : "an") + " float. Confirm you have it.", status: "unread", createdAt: new Date().toISOString() });
   }
 
   if (action === "ack_float") {
@@ -2587,7 +2617,7 @@ function applyAction(db, user, body) {
 
   if (action === "log_float_use") {
     const fl = (db.disbursements || []).find((x) => x.id === body.id);
-    if (!fl || !ownsFloat(fl, user)) throw new Error("Advance not found");
+    if (!fl || !ownsFloat(fl, user)) throw new Error("Float not found");
     addFloatUse(db, fl, body, user);
   }
 
@@ -3056,7 +3086,12 @@ const Conacrew = {
     const user = this.user();
     if (!user) throw Object.assign(new Error("Sign in required"), { status: 401 });
     const db = this.db();
+    const seen = new Set((db.cash || []).map((c) => c.id)), seenUse = new Set((db.disbursements || []).flatMap((f) => (f.usages || []).map((u) => u.id)));
+    const seenFl = new Set((db.disbursements || []).map((f) => f.id));
     applyAction(db, user, { action, ...payload });
+    const stamp = (r) => { if (!r.by) r.by = user.name; if (!r.byId) r.byId = user.id; if (!r.at) r.at = new Date().toISOString(); };
+    (db.cash || []).forEach((c) => { if (!seen.has(c.id)) stamp(c); });
+    (db.disbursements || []).forEach((f) => { if (!seenFl.has(f.id)) stamp(f); (f.usages || []).forEach((u) => { if (!seenUse.has(u.id)) stamp(u); }); });
     this.save(db);
     return scopedDb(db, user);
   },

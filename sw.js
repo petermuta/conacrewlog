@@ -1,4 +1,4 @@
-const CACHE = "conacrew-v245";
+const CACHE = "conacrew-v246";
 const SHELL = [
   "./index.html",
   "./app.html",
